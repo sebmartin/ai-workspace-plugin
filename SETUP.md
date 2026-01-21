@@ -13,7 +13,18 @@ cd my-ai-workspace
 
 ### 2. Set up your workspace
 
-Create a separate git repo for your content and link it:
+**Option A: Simple (workspace in template repo)**
+
+Just create the workspace directory:
+
+```bash
+mkdir workspace
+mkdir workspace/threads
+```
+
+**Option B: Separate repo (advanced)**
+
+Keep your workspace in a separate git repo for better separation:
 
 ```bash
 # Create your workspace repo (wherever you want)
@@ -32,6 +43,25 @@ git push -u origin main
 cd /path/to/my-ai-workspace
 ln -s ~/my-workspace workspace
 ```
+
+**If you chose Option B (symlink)**, you need to configure Claude Code settings:
+
+Create `.claude/settings.local.json`:
+
+```bash
+cat > .claude/settings.local.json << 'EOF'
+{
+  "permissions": {
+    "additionalDirectories": [
+      "workspace",
+      "/absolute/path/to/your/workspace"
+    ]
+  }
+}
+EOF
+```
+
+Replace `/absolute/path/to/your/workspace` with your actual workspace path (e.g., `/Users/yourname/my-workspace`). This allows Claude Code's Glob tool to follow the symlink.
 
 ### 3. Start using it
 
@@ -67,7 +97,7 @@ git push
 ## Available Skills
 
 - `/threads` - Manage discussion threads
-- `/todos` - Track tasks
+- `/later` - Track tasks
 - `/architect`, `/devils-advocate`, `/product-strategist`, `/tech-advisor`, `/cost-analyzer`, `/security-reviewer` - AI personas
 
 See [README.md](README.md) for full documentation.

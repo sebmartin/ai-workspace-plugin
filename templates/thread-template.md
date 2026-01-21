@@ -1,39 +1,36 @@
 # Thread: [Thread Name]
 
 **Started**: [YYYY-MM-DD]
-**Status**: Active | Paused | Completed | Archived
+**Status**: Active
 **Last Session**: [YYYY-MM-DD]
-**Related Threads**: [Links to related threads, if any]
+**Related Threads**: None
 
 ## Quick Resume
 
 > **Purpose**: Quick context for resuming after days/weeks/months. Keep this BRIEF and CURRENT.
 
-**Current focus**: [What are you working on right now? 1 sentence.]
+**Current focus**:
 
 **Next steps**:
-- [ ] Next action 1
-- [ ] Next action 2
+- None
 
-**Recent progress**: [Last 1-2 accomplishments. High-level only.]
+**Recent progress**:
 
 ---
 
 ## Problem
 
-What problem are we solving? Why does it matter?
+
 
 ## Current State
 
-What exists today? What's the baseline?
+
 
 ## Desired State
 
-What do we want to build? What does success look like?
+
 
 ## Existing Infrastructure
-
-What do we already have that we can build on?
 
 - **Tech stack**:
 - **Systems**:
@@ -43,14 +40,11 @@ What do we already have that we can build on?
 
 ## Open Questions
 
-- [ ] Question 1?
-- [ ] Question 2?
+- None
 
 ## Resolved Questions
 
 > **Keep this high-level.** For detailed decision rationale, see decisions/ directory.
-
-- [x] Question that was answered? → [Brief answer or link to decision doc]
 
 ---
 
@@ -60,22 +54,22 @@ What do we already have that we can build on?
 > It's a landing page with links to the details.
 
 ### Sessions
-- [YYYY-MM-DD: Session topic](sessions/YYYY-MM-DD-topic.md)
+ - None
 
 ### Decisions
-- [YYYYMMDD-decision-title](decisions/YYYYMMDD-decision-title.md)
+ - None
 
 ### Attachments
-- [Reference docs, sketches, requirements](attachments/file.pdf)
+ - None
 
 ### Artifacts
-- [Generated outputs, refined diagrams, summaries](artifacts/summary-20260120.md)
+ - None
 
 ---
 
 ## Notes
 
-Any other relevant context, links, references.
+
 
 ---
 

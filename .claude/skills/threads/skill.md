@@ -9,9 +9,9 @@ When invoked, help the user manage their threads in `workspace/threads/`:
 ### Commands You Handle
 
 **List threads:**
-- Show all active threads with their status and last updated date
-- Read each thread's README.md to get current status
-- Display in a clean, scannable format
+- Show all active threads by name only (fast, no file reads)
+- Display in a clean, scannable format with numbers
+- For detailed status, use `/threads status [name]` or `/threads resume [name]`
 
 **Log a decision:**
 - Use recent session context to draft a decision document
@@ -88,17 +88,13 @@ When invoked, help the user manage their threads in `workspace/threads/`:
 ## Response Format
 
 ### For List Threads
+Simple numbered list:
 ```
-Active Threads:
-
-1. thread-name - Status: Active - Last updated: YYYY-MM-DD
-   Current focus: [from Quick Resume]
-
-2. thread-name-2 - Status: Paused - Last updated: YYYY-MM-DD
-   Current focus: [from Quick Resume]
+1. thread-name
+2. thread-name-2
 ```
 
-When listing for selection (e.g., before snapshot), use numbers so user can reply with just a number.
+Just show the directory names with numbers. No file reads, maximum speed.
 
 ### For Snapshot
 Present a concise snapshot with:
@@ -117,34 +113,14 @@ Interactively guide the user through:
 5. Confirm and show path to README.md
 
 ### For Resume
-Present context in this format:
+Keep it fast and minimal. Just show:
 ```
-Resuming: [Thread Name]
+Resumed: [Thread Name]
 
-Overview:
-[1-2 sentence snapshot of the problem/goal]
-
-Current Focus:
-[What we're working on right now - from Quick Resume]
-
-Recent Progress:
-- [Recent accomplishment 1]
-- [Recent accomplishment 2]
-
-Next Steps:
-- [ ] Next action 1
-- [ ] Next action 2
-
-Open Questions:
-- Question 1?
-- Question 2?
-
-Last Session ([date]):
-[Brief snapshot from most recent session - what was discussed, what was decided]
-
----
-Ready to continue. What would you like to work on?
+[Quick Resume section from README - paste it directly]
 ```
+
+That's it. No verbose summaries, no session log reading. The Quick Resume already has current focus, next steps, and recent progress.
 
 ## Commands to Recognize
 
@@ -161,18 +137,27 @@ Users might say:
 
 ## Implementation
 
-- Use Read tool to read thread README.md files
-- Use Glob to find all threads: `workspace/threads/*/README.md`
-- Use Glob to find session logs: `workspace/threads/{name}/sessions/*.md` (sort by date, get most recent)
+- To discover threads for **list command**: Use Glob to find thread README files (read-only, no permission prompts):
+  ```
+  Glob pattern: "**/README.md"
+  path: workspace/threads
+  ```
+  This finds all README.md files in thread directories. Filter out the top-level README.md (workspace/threads/README.md) to get only thread READMEs.
+  Extract the thread name from the path (e.g., "workspace/threads/ai-workspace-setup/README.md" → "ai-workspace-setup").
+  **Do NOT read the README files for list command** - just extract directory names for maximum speed.
+- For **other commands** that need thread details: Use Read tool to read thread README.md files
+- For session logs: Use Glob similarly with appropriate patterns
 - Use Write tool when creating new threads
-- Use Bash for mkdir when creating directory structure
-- Parse README.md sections to extract status, dates, and context
+- Use Bash for mkdir when creating directory structure (this will prompt for permission, but only when creating)
+- Parse README.md sections to extract status, dates, and context when needed
+
+**Note**: Using Glob is a read-only operation that doesn't require permission prompts (as long as the workspace directory is in additionalDirectories in .claude/settings.json).
 
 ## When README Gets Updated
 
 README.md Quick Resume section is updated when:
 1. Decision is logged (`/threads log-decision`)
-2. TODO is created/updated (via future `/todos` skill)
+2. TODO is created/updated (via `/later` skill)
 3. Snapshot is requested (`/threads snapshot`) or any artifact is generated
 4. Explicitly requested (`/threads save`)
 

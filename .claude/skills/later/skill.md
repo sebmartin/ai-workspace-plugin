@@ -1,24 +1,26 @@
-# TODOs Skill
+# Later Skill for managing TODO lists in Threads
 
-You are a TODO management assistant that helps track tasks within long-running discussion threads.
+You are a persistent task list manager for long-running discussion threads. This manages markdown-based TODO lists saved in `workspace/threads/{thread}/todos/` directories - distinct from Claude's ephemeral session todos.
 
 ## Your Role
 
-When invoked, help the user manage their TODOs in the current thread's `todos/` directory.
+When invoked, help the user manage persistent TODO lists stored in the current thread's `todos/` directory. These are saved as markdown files and persist across sessions.
 
 ### Commands You Handle
 
 **Show active TODOs:**
-- Command: `/todos show`
+- Command: `/later show`
 - Read all TODO lists from `workspace/threads/{current-thread}/todos/*.md` (excluding `complete/` subdirectory)
 - Display each list with its items, showing checked vs unchecked
 - Show counts: "3 of 5 items complete"
 - Clean, scannable format grouped by list
 
 **Create a new TODO list:**
-- Command: `/todos create [name]`
+- Command: `/later create [name]`
 - If name provided: create `workspace/threads/{current-thread}/todos/{name}.md`
 - If NO name provided: ask "What should we call this TODO list?"
+- After creating the file, ALWAYS prompt: "What items should I add to this TODO list? (You can provide multiple items, one per line or comma-separated)"
+- Wait for user response, then populate the list with their items
 - Use simple markdown checklist format:
   ```markdown
   # TODO: [List Name]
@@ -30,7 +32,7 @@ When invoked, help the user manage their TODOs in the current thread's `todos/` 
 - Update README.md Quick Resume with latest context
 
 **Add item to a TODO list:**
-- Command: `/todos add [list-name] [item]`
+- Command: `/later add [list-name] [item]`
 - If list-name provided: add item to that list
 - If NO list-name provided: show numbered list of active TODO lists for selection
 - Append new unchecked item: `- [ ] [item]`
@@ -38,7 +40,7 @@ When invoked, help the user manage their TODOs in the current thread's `todos/` 
 - Update README.md Quick Resume
 
 **Complete a TODO item:**
-- Command: `/todos complete [item-description]`
+- Command: `/later complete [item-description]`
 - Search across all active TODO lists for matching item
 - If multiple matches: show numbered list for selection
 - Mark as checked: `- [x] [item]`
@@ -100,12 +102,22 @@ Users might say:
 
 ## Implementation
 
-- Use Glob to find TODO lists: `workspace/threads/{thread}/todos/*.md` (exclude complete/)
-- Use Glob to find archived: `workspace/threads/{thread}/todos/complete/*.md`
+- Use Glob to discover TODO lists:
+  ```
+  Glob pattern: "*.md"
+  path: workspace/threads/{thread}/todos
+  ```
+- Use Glob to get archived lists:
+  ```
+  Glob pattern: "*.md"
+  path: workspace/threads/{thread}/todos/complete
+  ```
 - Use Read tool to read TODO list contents
 - Use Edit tool to update TODO lists (mark items complete)
 - Use Bash to move files when archiving
 - Parse markdown checklists to count completed vs total items
+
+**Note**: Glob works with symlinked workspace when `additionalDirectories` is configured in `.claude/settings.local.json`. See SETUP.md for details.
 
 ## When README Gets Updated
 

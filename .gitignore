@@ -1,5 +1,9 @@
 # User workspace (git submodule with private content)
+workspace
 workspace/
+
+# Claude Code local settings
+.claude/settings.local.json
 
 # OS files
 .DS_Store

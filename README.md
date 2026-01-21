@@ -33,7 +33,7 @@ ln -s /path/to/your-workspace workspace
 | Skill | Command | Purpose |
 |-------|---------|---------|
 | **Threads** | `/threads` | Create, resume, snapshot discussion threads |
-| **TODOs** | `/todos` | Track tasks within threads |
+| **TODOs** | `/later` | Track tasks within threads |
 | Architect | `/architect` | System design, scalability, technical architecture |
 | Devil's Advocate | `/devils-advocate` | Challenge ideas, find flaws |
 | Product Strategist | `/product-strategist` | User value, market fit |
@@ -50,9 +50,9 @@ ln -s /path/to/your-workspace workspace
 # Work on it - context automatically persists
 
 # Track tasks
-/todos create feature-implementation
-/todos add "Build API endpoint"
-/todos complete "Build API endpoint"
+/later create feature-implementation
+/later add "Build API endpoint"
+/later complete "Build API endpoint"
 
 # Log important decisions
 /threads log-decision
@@ -67,7 +67,7 @@ ln -s /path/to/your-workspace workspace
 ai-workspace/
 ├── .claude/skills/       # Custom AI personas
 │   ├── threads/          # Thread management
-│   ├── todos/            # TODO tracking
+│   ├── later/            # TODO tracking
 │   ├── architect/
 │   └── ...
 ├── templates/            # Reusable templates
@@ -99,9 +99,11 @@ ai-workspace/
 ## Why a Symlink?
 
 - **Separation**: Keep your private work completely separate from the public template
-- **Privacy**: Your workspace is a separate git repo - keep it private
+- **Privacy**: Your workspace is a separate repository with sensitive user data - keep it private and don't leak private data out of this directory
 - **Clean updates**: Pull template updates without affecting your workspace
-- **No complexity**: No git submodules, just a simple symlink (gitignored)
+- **Skills are symlink-aware**: All built-in skills handle symlinked workspaces automatically
+
+> **For skill developers**: See [.claude/SKILL_DEVELOPMENT_GUIDE.md](.claude/SKILL_DEVELOPMENT_GUIDE.md) for how to build skills that work with symlinked workspaces.
 
 ## Contributing
 
