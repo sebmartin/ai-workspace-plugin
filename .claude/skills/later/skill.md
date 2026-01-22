@@ -8,12 +8,11 @@ When invoked, help the user manage persistent TODO lists stored in the current t
 
 ### Commands You Handle
 
-**Show active TODOs:**
-- Command: `/later show`
-- Read all TODO lists from `workspace/threads/{current-thread}/todos/*.md` (excluding `complete/` subdirectory)
-- Display each list with its items, showing checked vs unchecked
-- Show counts: "3 of 5 items complete"
-- Clean, scannable format grouped by list
+**List active TODOs:**
+- Command: `/later list`
+- Use `mcp__later__listActiveTodos` MCP method with thread name
+- The method returns formatted output with completion counts and checkmarks
+- Let the tool result display automatically - **do not output any text response** (the tool result is already shown to the user)
 
 **Create a new TODO list:**
 - Command: `/later create [name]`
@@ -52,22 +51,8 @@ When invoked, help the user manage persistent TODO lists stored in the current t
 
 ## Response Format
 
-### For Show
-```
-Active TODOs:
-
-feature-implementation.md (3 of 5 complete):
-  ✓ Set up project structure
-  ✓ Create basic components
-  ✓ Add routing
-  ☐ Implement authentication
-  ☐ Add error handling
-
-bug-fixes.md (1 of 3 complete):
-  ✓ Fix login redirect
-  ☐ Fix memory leak in dashboard
-  ☐ Fix mobile layout issues
-```
+### For List
+Call `mcp__later__listActiveTodos` and let the tool result display automatically. **Do not output any text response** - the tool result is already shown to the user.
 
 ### For Create/Add
 Show relative path with `./` prefix and confirmation:
@@ -94,7 +79,7 @@ Update README and session log with this progress? (y/n)
 ## Commands to Recognize
 
 Users might say:
-- "Show TODOs" / "What's on my TODO list?" / "Show tasks"
+- "List TODOs" / "What's on my TODO list?" / "Show tasks"
 - "Create a TODO list" / "New TODO list for [name]"
 - "Add [item] to TODOs" / "Add task: [item]"
 - "Complete [item]" / "Mark [item] as done" / "Done with [item]"
@@ -102,22 +87,13 @@ Users might say:
 
 ## Implementation
 
-- Use Glob to discover TODO lists:
-  ```
-  Glob pattern: "*.md"
-  path: workspace/threads/{thread}/todos
-  ```
-- Use Glob to get archived lists:
-  ```
-  Glob pattern: "*.md"
-  path: workspace/threads/{thread}/todos/complete
-  ```
-- Use Read tool to read TODO list contents
+- For **list command**: Use `mcp__later__listActiveTodos` MCP method to efficiently list all active TODO lists with completion counts
+- For **other commands** that need TODO list details: Use Read tool to read TODO list contents
 - Use Edit tool to update TODO lists (mark items complete)
-- Use Bash to move files when archiving
-- Parse markdown checklists to count completed vs total items
+- Use Bash to move files when archiving to `todos/complete/`
+- Use Write tool when creating new TODO lists
 
-**Note**: Glob works with symlinked workspace when `additionalDirectories` is configured in `.claude/settings.local.json`. See SETUP.md for details.
+**Note**: MCP server methods abstract away the file operations for listing TODOs. For file modifications (create, edit, archive), use regular tools.
 
 ## When README Gets Updated
 

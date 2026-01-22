@@ -96,14 +96,25 @@ ai-workspace/
 
 **Auto-archiving** - Completed TODO lists automatically move to `todos/complete/` to keep your workspace clean.
 
+## MCP Servers: Under the Hood
+
+This workspace leverages **Model Context Protocol (MCP) servers** to make repeated operations efficient and consistent. Instead of Claude parsing natural language instructions every time you list threads or check TODO status, MCP servers provide direct procedure calls that:
+
+- **Save LLM tokens** - Executing `mcp__threads__listThreads` uses ~10 tokens vs ~500+ tokens to explain, search, parse, and format the same information
+- **Improve consistency** - Structured procedures return predictable results every time
+- **Enable stateful features** - Thread sorting by modification time, TODO completion counts, and session tracking work reliably across invocations
+- **Speed up common operations** - No need to re-explain formatting on every list/show command
+
+Think of MCP servers as the "API layer" between Claude and your workspace - they turn repetitive natural language patterns into optimized procedure calls.
+
+See `mcp-servers/` and `.mcp.json` for the `threads` and `later` servers that power `/threads` and `/later` skills.
+
 ## Why a Symlink?
 
 - **Separation**: Keep your private work completely separate from the public template
 - **Privacy**: Your workspace is a separate repository with sensitive user data - keep it private and don't leak private data out of this directory
 - **Clean updates**: Pull template updates without affecting your workspace
 - **Skills are symlink-aware**: All built-in skills handle symlinked workspaces automatically
-
-> **For skill developers**: See [.claude/SKILL_DEVELOPMENT_GUIDE.md](.claude/SKILL_DEVELOPMENT_GUIDE.md) for how to build skills that work with symlinked workspaces.
 
 ## Contributing
 

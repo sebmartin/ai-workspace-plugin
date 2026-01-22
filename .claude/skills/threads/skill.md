@@ -9,7 +9,7 @@ When invoked, help the user manage their threads in `workspace/threads/`:
 ### Commands You Handle
 
 **List threads:**
-- Show all active threads by name only (fast, no file reads)
+- Show all active threads sorted by most recent first (newest at top)
 - Display in a clean, scannable format with numbers
 - For detailed status, use `/threads status [name]` or `/threads resume [name]`
 
@@ -67,6 +67,7 @@ When invoked, help the user manage their threads in `workspace/threads/`:
 - Display next steps and open questions
 
 **Resume a thread:**
+- If "last" is provided: Automatically resume the most recently updated thread
 - If thread name is provided: Resume that thread
 - If NO thread name provided:
   1. List all threads with numbers (1, 2, 3...)
@@ -88,13 +89,7 @@ When invoked, help the user manage their threads in `workspace/threads/`:
 ## Response Format
 
 ### For List Threads
-Simple numbered list:
-```
-1. thread-name
-2. thread-name-2
-```
-
-Just show the directory names with numbers. No file reads, maximum speed.
+Call `mcp__threads__listThreads` and let the tool result display automatically. **Do not output any text response** - the tool result is already shown to the user.
 
 ### For Snapshot
 Present a concise snapshot with:
@@ -132,26 +127,21 @@ Users might say:
 - "Link to [thread-name]" / "Link this thread" / "Link" (no thread specified)
 - "Create a new thread" / "Start a new thread about [topic]"
 - "Show thread status for [name]"
-- "Resume [name] thread" / "Resume" (no thread specified) / "Continue [name]"
+- "Resume [name] thread" / "Resume" (no thread specified) / "Resume last" / "Continue [name]"
 - Just a number like "2" (when responding to a selection prompt)
 
 ## Implementation
 
-- To discover threads for **list command**: Use Glob to find thread README files (read-only, no permission prompts):
-  ```
-  Glob pattern: "**/README.md"
-  path: workspace/threads
-  ```
-  This finds all README.md files in thread directories. Filter out the top-level README.md (workspace/threads/README.md) to get only thread READMEs.
-  Extract the thread name from the path (e.g., "workspace/threads/ai-workspace-setup/README.md" → "ai-workspace-setup").
-  **Do NOT read the README files for list command** - just extract directory names for maximum speed.
-- For **other commands** that need thread details: Use Read tool to read thread README.md files
-- For session logs: Use Glob similarly with appropriate patterns
+- To discover threads for **list command**: Use `mcp__threads__listThreads` MCP method. Returns a numbered list of thread names sorted by most recent activity (newest first).
+- For **resume last**: Use `mcp__threads__getMostRecentThread` MCP method to get the most recently updated thread name, then resume it automatically.
+- For **show thread status**: Use `mcp__threads__getThreadStatus` MCP method to get the Quick Resume section directly without manually parsing README.md.
+- For **resume command**: Use `mcp__threads__getThreadStatus` to get Quick Resume section. Only read full README.md if additional context is needed beyond Quick Resume.
+- For **other commands** that need full thread details: Use Read tool to read thread README.md files
+- For session logs: Use Glob with appropriate patterns
 - Use Write tool when creating new threads
 - Use Bash for mkdir when creating directory structure (this will prompt for permission, but only when creating)
-- Parse README.md sections to extract status, dates, and context when needed
 
-**Note**: Using Glob is a read-only operation that doesn't require permission prompts (as long as the workspace directory is in additionalDirectories in .claude/settings.json).
+**Note**: MCP server methods abstract away the file operations for common thread tasks.
 
 ## When README Gets Updated
 
