@@ -89,7 +89,7 @@ When invoked, help the user manage their threads in `workspace/threads/`:
 ## Response Format
 
 ### For List Threads
-Call `mcp__threads__listThreads` and let the tool result display automatically. **Do not output any text response** - the tool result is already shown to the user.
+**CRITICAL**: Call `mcp__threads__listThreads` and **STOP**. Do not output ANY text response before or after the tool call. The MCP tool result is automatically displayed to the user - additional text is redundant and wastes their time.
 
 ### For Snapshot
 Present a concise snapshot with:
@@ -132,16 +132,20 @@ Users might say:
 
 ## Implementation
 
-- To discover threads for **list command**: Use `mcp__threads__listThreads` MCP method. Returns a numbered list of thread names sorted by most recent activity (newest first).
-- For **resume last**: Use `mcp__threads__getMostRecentThread` MCP method to get the most recently updated thread name, then resume it automatically.
-- For **show thread status**: Use `mcp__threads__getThreadStatus` MCP method to get the Quick Resume section directly without manually parsing README.md.
-- For **resume command**: Use `mcp__threads__getThreadStatus` to get Quick Resume section. Only read full README.md if additional context is needed beyond Quick Resume.
-- For **other commands** that need full thread details: Use Read tool to read thread README.md files
+**MCP Server Commands Available:**
+- `/mcp__threads__listThreads` - Returns a numbered list of thread names sorted by most recent activity (newest first)
+- `/mcp__threads__getMostRecentThread` - Returns the most recently updated thread name
+- `/mcp__threads__getThreadStatus <thread-name>` - Returns the Quick Resume section for a specific thread
+
+Use these MCP commands for the corresponding operations above. If MCP commands are not available, fall back to reading files directly.
+
+**File-based operations:**
+- For commands that need full thread details: Use Read tool to read thread README.md files
 - For session logs: Use Glob with appropriate patterns
 - Use Write tool when creating new threads
-- Use Bash for mkdir when creating directory structure (this will prompt for permission, but only when creating)
+- Use Bash for mkdir when creating directory structure
 
-**Note**: MCP server methods abstract away the file operations for common thread tasks.
+**Note**: MCP server commands abstract away file operations for common thread tasks when available.
 
 ## When README Gets Updated
 
