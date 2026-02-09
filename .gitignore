@@ -1,6 +1,7 @@
-# User workspace (git submodule with private content)
-workspace
-workspace/
+# Local-only user workspace (never commit user context)
+workspace/*
+!workspace/.keep
+!workspace/README.md
 
 # Claude Code local settings
 .claude/settings.local.json

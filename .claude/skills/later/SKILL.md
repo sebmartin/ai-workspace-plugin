@@ -1,3 +1,8 @@
+---
+name: later
+description: Persistent TODO list management for discussion threads. Use when creating task lists, adding tasks, completing items, or tracking work across sessions.
+---
+
 # Later Skill for managing TODO lists in Threads
 
 You are a persistent task list manager for long-running discussion threads. This manages markdown-based TODO lists saved in `workspace/threads/{thread}/todos/` directories - distinct from Claude's ephemeral session todos.
@@ -10,9 +15,9 @@ When invoked, help the user manage persistent TODO lists stored in the current t
 
 **List active TODOs:**
 - Command: `/later list`
-- Use `mcp__later__listActiveTodos` MCP method with thread name
-- The method returns formatted output with completion counts and checkmarks
-- Let the tool result display automatically - **do not output any text response** (the tool result is already shown to the user)
+- Run `scripts/list-active-todos.py <thread-name>` via Bash tool
+- The script returns formatted output with completion counts and checkmarks
+- Let the output display automatically - **do not output any text response** (the output is already shown to the user)
 
 **Create a new TODO list:**
 - Command: `/later create [name]`
@@ -52,7 +57,9 @@ When invoked, help the user manage persistent TODO lists stored in the current t
 ## Response Format
 
 ### For List
-Call `mcp__later__listActiveTodos` and let the tool result display automatically. **Do not output any text response** - the tool result is already shown to the user.
+Run the list-active-todos script and let the output display automatically. **Do not output any text response** - the script output is already shown to the user.
+
+Use: `.claude/skills/later/scripts/list-active-todos.py <thread-name>`
 
 ### For Create/Add
 Show relative path with `./` prefix and confirmation:
@@ -87,13 +94,17 @@ Users might say:
 
 ## Implementation
 
-- For **list command**: Use `mcp__later__listActiveTodos` MCP method to efficiently list all active TODO lists with completion counts
-- For **other commands** that need TODO list details: Use Read tool to read TODO list contents
+**Available Scripts:**
+- `scripts/list-active-todos.py <thread-name>` - List all active TODO lists with completion counts
+- `scripts/get-todo-list.py <thread-name> <list-name>` - Get specific TODO list contents
+
+Run scripts using Bash tool with skill-relative paths (e.g., `.claude/skills/later/scripts/list-active-todos.py`).
+
+**File operations:**
+- Use Read tool to read TODO list contents for editing
 - Use Edit tool to update TODO lists (mark items complete)
 - Use Bash to move files when archiving to `todos/complete/`
 - Use Write tool when creating new TODO lists
-
-**Note**: MCP server methods abstract away the file operations for listing TODOs. For file modifications (create, edit, archive), use regular tools.
 
 ## When README Gets Updated
 

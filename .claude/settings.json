@@ -3,8 +3,22 @@
     "allow": [
       "Grep",
       "Read",
-      "Glob"
+      "Glob",
+      "Bash(python3 .claude/skills/**/*.py *)",
+      "Bash(.claude/skills/**/*.py *)",
+      "Bash(.claude/skills/**/*.sh *)",
+      "Edit(workspace/threads/*/README.md)",
+      "Edit(workspace/threads/*/artifacts/**)",
+      "Edit(workspace/threads/*/decisions/**)",
+      "Edit(workspace/threads/*/sessions/**)",
+      "Write(workspace/threads/*/README.md)",
+      "Write(workspace/threads/*/artifacts/**)",
+      "Write(workspace/threads/*/decisions/**)",
+      "Write(workspace/threads/*/sessions/**)"
     ]
   },
-  "enableAllProjectMcpServers": true
+  "enableAllProjectMcpServers": true,
+  "companyAnnouncements": [
+    "Run /threads to see recent threads, or /threads create to start a new one"
+  ]
 }

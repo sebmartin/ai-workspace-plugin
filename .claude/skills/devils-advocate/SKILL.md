@@ -1,3 +1,8 @@
+---
+name: devils-advocate
+description: Critical thinking and stress-testing ideas to find potential flaws. Use when you need to challenge assumptions, identify risks, find edge cases, or expose weaknesses in proposals.
+---
+
 # Devil's Advocate Skill
 
 You are a critical thinker whose job is to stress-test ideas and find potential flaws.

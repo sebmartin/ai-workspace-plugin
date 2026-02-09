@@ -1,3 +1,8 @@
+---
+name: threads
+description: Thread management for organizing long-running discussions. Use when creating threads, listing threads, resuming work, saving context, creating snapshots, or logging decisions.
+---
+
 # Threads Skill
 
 You are a thread management assistant that helps organize and navigate long-running discussion threads.
@@ -40,6 +45,7 @@ When invoked, help the user manage their threads in `workspace/threads/`:
 - Command: `/threads save`
 - Update README.md Quick Resume section with current context
 - Update current session log
+- Run `scripts/set-last-active-thread.py <thread-name>` to mark as last active (used by `/threads resume last`)
 - Does NOT generate a snapshot (use `/threads snapshot` for that)
 
 **Link to another thread:**
@@ -74,6 +80,7 @@ When invoked, help the user manage their threads in `workspace/threads/`:
   2. Ask "Which thread would you like to resume? (Reply with a number)"
   3. Wait for user to reply with a number
   4. Then resume the selected thread
+- Run `scripts/set-last-active-thread.py <thread-name>` to mark as last active (so subsequent `/threads resume last` picks it up)
 - Build up complete context by reading:
   1. Thread's README.md (full context)
   2. Most recent session log (where we left off)
@@ -89,7 +96,9 @@ When invoked, help the user manage their threads in `workspace/threads/`:
 ## Response Format
 
 ### For List Threads
-**CRITICAL**: Call `mcp__threads__listThreads` and **STOP**. Do not output ANY text response before or after the tool call. The MCP tool result is automatically displayed to the user - additional text is redundant and wastes their time.
+**CRITICAL**: Run the list-threads script and **STOP**. Do not output ANY text response before or after. The script output is automatically displayed to the user - additional text is redundant and wastes their time.
+
+Use: `.claude/skills/threads/scripts/list-threads.py`
 
 ### For Snapshot
 Present a concise snapshot with:
@@ -132,20 +141,19 @@ Users might say:
 
 ## Implementation
 
-**MCP Server Commands Available:**
-- `/mcp__threads__listThreads` - Returns a numbered list of thread names sorted by most recent activity (newest first)
-- `/mcp__threads__getMostRecentThread` - Returns the most recently updated thread name
-- `/mcp__threads__getThreadStatus <thread-name>` - Returns the Quick Resume section for a specific thread
+**Available Scripts:**
+- `scripts/list-threads.py` - List all threads sorted by recent activity
+- `scripts/get-thread-status.py <thread-name>` - Get Quick Resume section
+- `scripts/get-most-recent-thread.py` - Get name of most recent thread
+- `scripts/set-last-active-thread.py <thread-name>` - Mark a thread as last active
 
-Use these MCP commands for the corresponding operations above. If MCP commands are not available, fall back to reading files directly.
+Run scripts using Bash tool with skill-relative paths (e.g., `.claude/skills/threads/scripts/list-threads.py`).
 
 **File-based operations:**
 - For commands that need full thread details: Use Read tool to read thread README.md files
 - For session logs: Use Glob with appropriate patterns
 - Use Write tool when creating new threads
 - Use Bash for mkdir when creating directory structure
-
-**Note**: MCP server commands abstract away file operations for common thread tasks when available.
 
 ## When README Gets Updated
 
@@ -154,6 +162,8 @@ README.md Quick Resume section is updated when:
 2. TODO is created/updated (via `/later` skill)
 3. Snapshot is requested (`/threads snapshot`) or any artifact is generated
 4. Explicitly requested (`/threads save`)
+
+When any of these operations occur, also run `scripts/set-last-active-thread.py <thread-name>` so that `/threads resume last` picks up the most recently worked-on thread.
 
 This keeps the Quick Resume current for thread resumption while staying brief and focused.
 
