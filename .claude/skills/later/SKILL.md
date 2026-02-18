@@ -23,6 +23,12 @@ When invoked, help the user manage persistent TODO lists stored in the current t
 - Command: `/later create [name]`
 - If name provided: create `workspace/threads/{current-thread}/todos/{name}.md`
 - If NO name provided: ask "What should we call this TODO list?"
+- **TODO list name requirements:**
+  - Lowercase letters (a-z), numbers (0-9), hyphens (-) only
+  - Must start and end with a letter or number
+  - No consecutive hyphens
+  - Examples: `feature-work`, `bugs-2024`, `api-tasks`
+- Validate list name before creating file
 - After creating the file, ALWAYS prompt: "What items should I add to this TODO list? (You can provide multiple items, one per line or comma-separated)"
 - Wait for user response, then populate the list with their items
 - Use simple markdown checklist format:

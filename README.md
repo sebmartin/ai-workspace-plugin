@@ -20,11 +20,10 @@ See [SETUP.md](SETUP.md) for detailed installation instructions.
 git clone <this-repo-url> my-ai-workspace
 cd my-ai-workspace
 
-# 2. Set up your private workspace repo (see SETUP.md)
-# Create/clone your workspace repo, then symlink it:
-ln -s /path/to/your-workspace workspace
+# 2. Run setup
+./setup.sh
 
-# 3. Restart Claude Code and start using it!
+# 3. Start a new thread!
 /threads create
 ```
 
@@ -43,9 +42,13 @@ ln -s /path/to/your-workspace workspace
 
 ## Workflow
 
+### Start a new thread
+
 ```bash
 # Create a new thread for your project
-/threads create
+/threads create my-new-thread
+
+# Add attachments - copy files into the thread's `attachments` directory to include into the thread context
 
 # Work on it - context automatically persists
 
@@ -59,7 +62,56 @@ ln -s /path/to/your-workspace workspace
 
 # Generate a snapshot to share
 /threads snapshot
+
+# Save persist the current thread context to disk
+/threads save
 ```
+
+**Manage threads with `/threads` commands:**
+- `/threads` - List all available threads (when starting something new)
+- `/threads resume <name>` - Switch to a different thread mid-session
+- `/threads save` - Explicitly save current progress to thread README
+- `/threads snapshot` - Generate a shareable summary
+
+## Resuming Threads
+
+Choose the right approach based on your scenario:
+
+### When Starting Claude (Recommended)
+
+**Use Claude Code's built-in session management to preserve full context:**
+
+```bash
+# Continue your last conversation (maintains full context including active thread)
+claude --continue
+
+# Or choose from previous sessions
+claude --resume
+```
+
+**Why this works best:**
+- ✅ Continues the entire conversation context, not just thread metadata
+- ✅ Preserves your active thread across sessions automatically
+- ✅ Much faster - no need to reload thread READMEs
+- ✅ Works even after multiple context window compactions
+
+### Within an Active Session
+
+**Use `/threads resume` to switch between threads mid-session:**
+
+```bash
+# Switch to a different thread while Claude is running
+/threads resume other-thread
+```
+
+**When to use:** You're already in a conversation and want to switch focus to a different thread.
+
+### Anti-Pattern to Avoid
+
+❌ **Don't:** Start a fresh Claude session, then immediately `/threads resume`
+
+This loses the conversation context from your previous work. Instead, use `claude --continue` or `claude --resume <id>` when launching Claude.
+
 
 ## Directory Structure
 
@@ -71,7 +123,7 @@ ai-workspace/
 │   ├── architect/
 │   └── ...
 ├── templates/            # Reusable templates
-├── workspace/            # Symlink to your private repo (gitignored)
+├── workspace/            # Your private workspace (gitignored)
 │   └── threads/
 │       └── {thread-name}/
 │           ├── README.md     # Thread overview
@@ -96,25 +148,35 @@ ai-workspace/
 
 **Auto-archiving** - Completed TODO lists automatically move to `todos/complete/` to keep your workspace clean.
 
-## MCP Servers: Under the Hood
+## Privacy & Security
 
-This workspace leverages **Model Context Protocol (MCP) servers** to make repeated operations efficient and consistent. Instead of Claude parsing natural language instructions every time you list threads or check TODO status, MCP servers provide direct procedure calls that:
+This template includes **automatic protection** for your private workspace:
 
-- **Save LLM tokens** - Executing `mcp__threads__listThreads` uses ~10 tokens vs ~500+ tokens to explain, search, parse, and format the same information
-- **Improve consistency** - Structured procedures return predictable results every time
-- **Enable stateful features** - Thread sorting by modification time, TODO completion counts, and session tracking work reliably across invocations
-- **Speed up common operations** - No need to re-explain formatting on every list/show command
+### Git Hooks (via pre-commit)
 
-Think of MCP servers as the "API layer" between Claude and your workspace - they turn repetitive natural language patterns into optimized procedure calls.
+Installed by `./setup.sh`, these hooks prevent:
+- ✅ Committing workspace/ files to the public template
+- ✅ Pushing workspace/ files accidentally
+- ✅ Leaking private work to public repositories
 
-See `mcp-servers/` and `.mcp.json` for the `threads` and `later` servers that power `/threads` and `/later` skills.
+### How It Works
 
-## Why a Symlink?
+**3-layer protection:**
+1. `.gitignore` excludes `workspace/*` (except .keep and README.md)
+2. Pre-commit hook blocks staging workspace/ files
+3. Pre-push hook provides final safety check
 
-- **Separation**: Keep your private work completely separate from the public template
-- **Privacy**: Your workspace is a separate repository with sensitive user data - keep it private and don't leak private data out of this directory
-- **Clean updates**: Pull template updates without affecting your workspace
-- **Skills are symlink-aware**: All built-in skills handle symlinked workspaces automatically
+**Automatic setup:**
+```bash
+./setup.sh  # Installs hooks using pre-commit framework
+```
+
+### Why Separate Workspace?
+
+- **Privacy**: The `workspace/` directory is ignored by the public template repo
+- **Clean updates**: Pull template updates without affecting your workspace contents
+- **Optional backup**: Make `workspace/` a nested private git repo for version control
+- **Separation**: Your workspace data never commits to the public template repo
 
 ## Contributing
 

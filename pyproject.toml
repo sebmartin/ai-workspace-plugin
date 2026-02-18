@@ -1,0 +1,10 @@
+[project]
+name = "ai-workspace-template"
+version = "0.1.0"
+description = "AI Workspace Template — MCP servers, git hooks, and workspace verification"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=1.0.0",
+    "pre-commit>=3.6.0",
+]

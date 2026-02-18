@@ -1,0 +1,16 @@
+# pre-commit configuration for AI Workspace Template
+# Protects workspace/ privacy by preventing commits to public template
+
+default_install_hook_types: [pre-commit, pre-push]
+fail_fast: true
+
+repos:
+  - repo: local
+    hooks:
+      - id: block-workspace-files
+        name: Protect workspace/ privacy
+        entry: hooks/check-workspace-files.sh
+        language: script
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit, pre-push]

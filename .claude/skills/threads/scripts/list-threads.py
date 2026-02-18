@@ -1,24 +1,21 @@
 #!/usr/bin/env python3
 """List all discussion threads sorted by most recent activity."""
 
-import os
 import sys
 from pathlib import Path
 
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "common"))
 
-def get_workspace_dir() -> Path:
-    """Get the workspace directory from environment or default."""
-    workspace_dir = os.environ.get("AI_WORKSPACE_DIR", "workspace")
-    return Path(workspace_dir)
+from workspace_utils import get_threads_dir, error_exit
 
 
 def list_threads():
     """List all threads sorted by most recent modification."""
-    threads_dir = get_workspace_dir() / "threads"
+    threads_dir = get_threads_dir()
 
     if not threads_dir.exists():
-        print("No threads directory found", file=sys.stderr)
-        sys.exit(1)
+        error_exit("No threads directory found")
 
     # Find all thread README files
     thread_readmes = []

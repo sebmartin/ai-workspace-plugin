@@ -45,7 +45,6 @@ When invoked, help the user manage their threads in `workspace/threads/`:
 - Command: `/threads save`
 - Update README.md Quick Resume section with current context
 - Update current session log
-- Run `scripts/set-last-active-thread.py <thread-name>` to mark as last active (used by `/threads resume last`)
 - Does NOT generate a snapshot (use `/threads snapshot` for that)
 
 **Link to another thread:**
@@ -61,7 +60,13 @@ When invoked, help the user manage their threads in `workspace/threads/`:
 - If "Related Threads" shows "None", replace it; otherwise append to the list
 
 **Create a new thread:**
-- Ask for thread name (suggest kebab-case)
+- Ask for thread name (must be kebab-case)
+- **Thread name requirements:**
+  - Lowercase letters (a-z), numbers (0-9), hyphens (-) only
+  - Must start and end with a letter or number
+  - No consecutive hyphens
+  - Examples: `my-thread`, `project-2024`, `api-v2`
+- Validate thread name before creating directory
 - Create directory structure: `workspace/threads/{name}/{sessions,decisions,attachments,artifacts}`
 - Copy template from `templates/thread-template.md` to `workspace/threads/{name}/README.md`
 - Optionally help fill in initial context (problem, current state, desired state)
@@ -73,14 +78,14 @@ When invoked, help the user manage their threads in `workspace/threads/`:
 - Display next steps and open questions
 
 **Resume a thread:**
-- If "last" is provided: Automatically resume the most recently updated thread
+- **Use case**: Switching to a different thread within an active Claude session
+- **Note**: If user is starting a new Claude session, they should use `claude --continue` or `claude --resume <id>` instead (preserves full conversation context)
 - If thread name is provided: Resume that thread
 - If NO thread name provided:
   1. List all threads with numbers (1, 2, 3...)
   2. Ask "Which thread would you like to resume? (Reply with a number)"
   3. Wait for user to reply with a number
   4. Then resume the selected thread
-- Run `scripts/set-last-active-thread.py <thread-name>` to mark as last active (so subsequent `/threads resume last` picks it up)
 - Build up complete context by reading:
   1. Thread's README.md (full context)
   2. Most recent session log (where we left off)
@@ -91,7 +96,7 @@ When invoked, help the user manage their threads in `workspace/threads/`:
   - Next steps (from Quick Resume)
   - Open questions
   - Relevant context from last session
-- End with: "Ready to continue. What would you like to work on?"
+- **CRITICAL**: End with a clear statement: "**Working on thread: [thread-name]**"
 
 ## Response Format
 
@@ -136,16 +141,15 @@ Users might say:
 - "Link to [thread-name]" / "Link this thread" / "Link" (no thread specified)
 - "Create a new thread" / "Start a new thread about [topic]"
 - "Show thread status for [name]"
-- "Resume [name] thread" / "Resume" (no thread specified) / "Resume last" / "Continue [name]"
+- "Resume [name] thread" / "Resume" (no thread specified) / "Continue [name]"
+- "What thread am I on?" / "What's the current thread?" / "Which thread is active?"
 - Just a number like "2" (when responding to a selection prompt)
 
 ## Implementation
 
 **Available Scripts:**
-- `scripts/list-threads.py` - List all threads sorted by recent activity
+- `scripts/list-threads.py` - List all threads sorted by recent activity (README.md mtime)
 - `scripts/get-thread-status.py <thread-name>` - Get Quick Resume section
-- `scripts/get-most-recent-thread.py` - Get name of most recent thread
-- `scripts/set-last-active-thread.py <thread-name>` - Mark a thread as last active
 
 Run scripts using Bash tool with skill-relative paths (e.g., `.claude/skills/threads/scripts/list-threads.py`).
 
@@ -155,6 +159,23 @@ Run scripts using Bash tool with skill-relative paths (e.g., `.claude/skills/thr
 - Use Write tool when creating new threads
 - Use Bash for mkdir when creating directory structure
 
+## Current Thread Tracking
+
+**CRITICAL**: Once a thread is set (via resume, create, etc.), it becomes the "active thread" for the session.
+
+**When setting a thread:**
+- Always output: "**Working on thread: [thread-name]**"
+- Use this exact format so it's easily searchable in conversation history
+
+**When asked "what thread am I on?" or "what's the current thread?":**
+- Search conversation history for the most recent "Working on thread: X" marker
+- If found: Report that thread name
+- If not found: Say "No active thread set. Run `/threads` to see available threads."
+
+**Context preservation across sessions:**
+- Users should use `claude --continue` or `claude --resume <id>` when starting Claude to preserve full conversation context
+- The `/threads resume` command is for switching threads within an active session, not for starting new sessions
+
 ## When README Gets Updated
 
 README.md Quick Resume section is updated when:
@@ -162,10 +183,6 @@ README.md Quick Resume section is updated when:
 2. TODO is created/updated (via `/later` skill)
 3. Snapshot is requested (`/threads snapshot`) or any artifact is generated
 4. Explicitly requested (`/threads save`)
-
-When any of these operations occur, also run `scripts/set-last-active-thread.py <thread-name>` so that `/threads resume last` picks up the most recently worked-on thread.
-
-This keeps the Quick Resume current for thread resumption while staying brief and focused.
 
 ## Context Building for Resume
 

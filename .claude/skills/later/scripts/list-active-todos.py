@@ -1,55 +1,22 @@
 #!/usr/bin/env python3
 """List all active TODO lists in a thread with completion counts."""
 
-import os
-import re
 import sys
 from pathlib import Path
 
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "common"))
 
-def get_workspace_dir() -> Path:
-    """Get the workspace directory from environment or default."""
-    workspace_dir = os.environ.get("AI_WORKSPACE_DIR", "workspace")
-    return Path(workspace_dir)
-
-
-def parse_todo_items(content: str) -> tuple[int, int]:
-    """Parse TODO items and return (completed, total) counts."""
-    completed = 0
-    total = 0
-
-    # Match both checked and unchecked items
-    for line in content.split("\n"):
-        if re.match(r'^\s*- \[[ xX]\]', line):
-            total += 1
-            if re.match(r'^\s*- \[[xX]\]', line):
-                completed += 1
-
-    return completed, total
-
-
-def format_todo_items(content: str) -> list[str]:
-    """Format TODO items for display with checkmarks."""
-    items = []
-
-    for line in content.split("\n"):
-        match = re.match(r'^\s*- \[([ xX])\]\s*(.+)', line)
-        if match:
-            status, text = match.groups()
-            symbol = "✓" if status.lower() == "x" else "☐"
-            items.append(f"  {symbol} {text.strip()}")
-
-    return items
+from workspace_utils import get_threads_dir, error_exit
+from todo_utils import parse_todo_items, format_todo_items
 
 
 def list_active_todos(thread_name: str):
     """List all active TODO lists with completion counts."""
-    threads_dir = get_workspace_dir() / "threads"
-    todos_dir = threads_dir / thread_name / "todos"
+    todos_dir = get_threads_dir() / thread_name / "todos"
 
     if not todos_dir.exists():
-        print("No todos directory found", file=sys.stderr)
-        sys.exit(1)
+        error_exit("No todos directory found")
 
     # Find all active TODO files (excluding complete/ subdirectory)
     todo_files = []

@@ -1,14 +1,14 @@
 {
   "mcpServers": {
     "threads": {
-      "command": "mcp-servers/venv/bin/python",
+      "command": ".venv/bin/python",
       "args": ["mcp-servers/threads/server.py"],
       "env": {
         "AI_WORKSPACE_DIR": "workspace"
       }
     },
     "later": {
-      "command": "mcp-servers/venv/bin/python",
+      "command": ".venv/bin/python",
       "args": ["mcp-servers/later/server.py"],
       "env": {
         "AI_WORKSPACE_DIR": "workspace"

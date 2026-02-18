@@ -1,25 +1,21 @@
 #!/usr/bin/env python3
 """Get the Quick Resume section from a thread's README."""
 
-import os
 import sys
 from pathlib import Path
 
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "common"))
 
-def get_workspace_dir() -> Path:
-    """Get the workspace directory from environment or default."""
-    workspace_dir = os.environ.get("AI_WORKSPACE_DIR", "workspace")
-    return Path(workspace_dir)
+from workspace_utils import get_threads_dir, error_exit
 
 
 def get_thread_status(thread_name: str):
     """Get the Quick Resume section from a thread's README."""
-    threads_dir = get_workspace_dir() / "threads"
-    readme_path = threads_dir / thread_name / "README.md"
+    readme_path = get_threads_dir() / thread_name / "README.md"
 
     if not readme_path.exists():
-        print(f"Thread '{thread_name}' not found", file=sys.stderr)
-        sys.exit(1)
+        error_exit(f"Thread '{thread_name}' not found")
 
     # Read the README and extract Quick Resume section
     content = readme_path.read_text()
@@ -42,8 +38,7 @@ def get_thread_status(thread_name: str):
                 quick_resume_lines.append(line)
 
     if not quick_resume_lines:
-        print(f"No Quick Resume section found in {thread_name}", file=sys.stderr)
-        sys.exit(1)
+        error_exit(f"No Quick Resume section found in {thread_name}")
     
     # Remove leading/trailing empty lines
     while quick_resume_lines and not quick_resume_lines[0].strip():

@@ -8,7 +8,7 @@ Model Context Protocol (MCP) servers for AI workspace skills. Each server provid
 ```bash
 git clone <repo>
 cd <repo>
-./mcp-servers/setup.sh
+./setup.sh
 # Restart Claude Code - that's it!
 ```
 
@@ -17,8 +17,8 @@ The repo includes `.mcp.json` with relative paths, so MCP servers work immediate
 ## Setup Details
 
 The setup script:
-1. Creates a Python virtual environment at `mcp-servers/venv/`
-2. Installs shared dependencies from `requirements.txt`
+1. Runs `uv sync` from the project root (creates `.venv/` and installs from `uv.lock`)
+2. Dependencies are declared in `pyproject.toml` at the project root
 3. MCP servers are configured in `.mcp.json` (already in repo)
 4. Uses relative paths - no manual configuration needed
 
@@ -31,7 +31,7 @@ The existing `.mcp.json` uses relative paths:
 {
   "mcpServers": {
     "threads": {
-      "command": "mcp-servers/venv/bin/python",
+      "command": ".venv/bin/python",
       "args": ["mcp-servers/threads/server.py"],
       "env": {
         "AI_WORKSPACE_DIR": "workspace"
@@ -78,20 +78,20 @@ To add a new MCP server:
 
 1. Create a new directory: `mcp-servers/new-skill/`
 2. Add `server.py` with your tools
-3. Add any new dependencies to `requirements.txt` (shared)
+3. Add any new dependencies with `uv add <package>` (at project root)
 4. Add the server to `.mcp.json` with relative paths
 5. Update this README with the new server's tools
 
 ## Troubleshooting
 
 **Server not loading:**
-- Run `./mcp-servers/setup.sh` to ensure venv exists and dependencies are installed
+- Run `./setup.sh` from the project root to ensure venv exists and dependencies are installed
 - Check `.mcp.json` syntax
 - Restart Claude Code to reload MCP servers
 
 **Import errors:**
-- Activate the venv: `source mcp-servers/venv/bin/activate`
-- Install/update dependencies: `pip install -r requirements.txt`
+- From project root run `uv sync` to ensure `.venv` is up to date
+- Or activate the venv: `source .venv/bin/activate`
 
 **Permission errors:**
 - MCP servers are auto-approved via `enableAllProjectMcpServers: true` in `.claude/settings.json`
