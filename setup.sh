@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # AI Workspace Template Setup
-# One-time setup for MCP servers, git hooks, and workspace verification
+# One-time setup for git hooks and workspace verification
 
 set -e
 
@@ -42,7 +42,7 @@ cd "$SCRIPT_DIR"
 # Create venv and install dependencies from lockfile
 echo "Syncing environment (uv sync)..."
 uv sync
-echo "✓ Virtual environment and dependencies ready (MCP + pre-commit)"
+echo "✓ Virtual environment and dependencies ready (pre-commit)"
 
 # ═══════════════════════════════════════════════════════════════
 # Step 3: Install git hooks
@@ -95,8 +95,7 @@ echo "✓ Setup Complete!"
 echo "════════════════════════════════════════════════════════════"
 echo ""
 echo "Next steps:"
-echo "  1. Restart Claude Code to load MCP servers"
-echo "  2. Run: /threads create"
+echo "  1. Run: /threads create"
 echo ""
 echo "Git hooks are now protecting workspace/ privacy!"
 echo "  - Pre-commit: blocks staging workspace/ files"

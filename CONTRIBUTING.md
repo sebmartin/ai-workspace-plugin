@@ -21,7 +21,6 @@ Thank you for contributing! This template helps developers maintain privacy whil
 ai-workspace/
 ├── .claude/skills/       # AI persona definitions (skills)
 ├── templates/            # Reusable templates
-├── mcp-servers/          # MCP server implementations
 ├── hooks/                # Git hook scripts (versioned)
 ├── tests/                # Test scripts
 ├── workspace/            # User's private content (gitignored)
@@ -29,8 +28,7 @@ ai-workspace/
 ├── setup.sh              # Main setup script
 ├── pyproject.toml        # Project metadata and dependencies
 ├── uv.lock               # Locked dependency versions
-├── .pre-commit-config.yaml  # Hook configuration
-└── .mcp.json             # MCP server configuration
+└── .pre-commit-config.yaml  # Hook configuration
 ```
 
 ## Testing Git Hooks
@@ -56,7 +54,7 @@ pre-commit run --all-files
 
 ### Python
 - **Formatting**: Black (automatic via pre-commit)
-- **MCP servers**: Follow existing patterns in `mcp-servers/`
+- **Skills**: Follow existing patterns in `.claude/skills/`
 
 ### Bash
 - **Linting**: ShellCheck compliant (automatic via pre-commit)
@@ -75,14 +73,6 @@ pre-commit run --all-files
 3. Add any supporting scripts in `scripts/` subdirectory
 4. Update README.md to list the new skill
 5. Test the skill works with `/skill-name` command
-
-## Adding New MCP Servers
-
-1. Create server in `mcp-servers/<server-name>/`
-2. Add server.py implementing MCP protocol
-3. Update `.mcp.json` to register the server
-4. Add dependencies with `uv add <package>` (updates pyproject.toml and uv.lock)
-5. Update documentation
 
 ## Pull Request Guidelines
 

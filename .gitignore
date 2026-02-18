@@ -6,6 +6,13 @@ workspace/*
 # Python virtual environment
 .venv/
 
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
 # Claude Code local settings
 .claude/settings.local.json
 
@@ -16,6 +23,7 @@ Thumbs.db
 # Editor files
 .vscode/
 .idea/
+.cursor/
 *.swp
 *.swo
 *~

@@ -26,7 +26,7 @@ cd my-ai-workspace
 
 The setup script will:
 - Create Python virtual environment with `uv`
-- Install MCP server dependencies
+- Install dependencies (pre-commit for git hooks)
 - Install pre-commit framework and git hooks
 - Verify workspace directory exists
 
@@ -64,7 +64,7 @@ Note: Replace `USER/private-workspace.git` with your actual private repository U
 ### 4. Start using it
 
 ```bash
-# Restart Claude Code to load MCP servers, then:
+# Restart Claude Code, then:
 /threads create
 ```
 
