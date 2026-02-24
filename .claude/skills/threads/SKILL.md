@@ -98,6 +98,12 @@ When invoked, help the user manage their threads in `workspace/threads/`:
   - Relevant context from last session
 - **CRITICAL**: End with a clear statement: "**Working on thread: [thread-name]**"
 
+**Open thread in Finder (macOS):**
+- Command: `/threads open [thread-name]`
+- If thread name provided: Open that specific thread's folder (`open workspace/threads/{name}`)
+- If NO thread name provided: Open the threads directory (`open workspace/threads`)
+- Confirm which folder was opened
+
 ## Response Format
 
 ### For List Threads
@@ -143,6 +149,7 @@ Users might say:
 - "Show thread status for [name]"
 - "Resume [name] thread" / "Resume" (no thread specified) / "Continue [name]"
 - "What thread am I on?" / "What's the current thread?" / "Which thread is active?"
+- "Open [thread-name] in Finder" / "Open this thread" / "Open thread folder"
 - Just a number like "2" (when responding to a selection prompt)
 
 ## Implementation

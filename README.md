@@ -5,7 +5,7 @@ A structured workspace for AI-assisted development with Claude Code. Manage long
 ## Features
 
 - **🧵 Thread-based discussions** - Organize work into self-contained threads that persist across days/weeks/months
-- **🎭 Custom AI personas** - Switch perspectives with slash commands (`/architect`, `/product-strategist`, etc.)
+- **🎭 Custom AI personas** - Get specialized perspectives from dedicated subagents (architect, product-strategist, etc.)
 - **📝 Decision tracking** - Log architectural decisions with automatic context updates
 - **✅ TODO management** - Track tasks within threads with auto-archiving
 - **📸 Snapshots** - Generate shareable summaries for teammates
@@ -27,18 +27,27 @@ cd my-ai-workspace
 /threads create
 ```
 
-## Available Skills
+## Available Skills & Agents
+
+### Skills (invoke with `/name`)
 
 | Skill | Command | Purpose |
 |-------|---------|---------|
 | **Threads** | `/threads` | Create, resume, snapshot discussion threads |
 | **TODOs** | `/later` | Track tasks within threads |
-| Architect | `/architect` | System design, scalability, technical architecture |
-| Devil's Advocate | `/devils-advocate` | Challenge ideas, find flaws |
-| Product Strategist | `/product-strategist` | User value, market fit |
-| Tech Advisor | `/tech-advisor` | Technology choices, frameworks |
-| Cost Analyzer | `/cost-analyzer` | Infrastructure costs, ROI |
-| Security Reviewer | `/security-reviewer` | Threat modeling, vulnerabilities |
+| Devil's Advocate | `/devils-advocate` | Challenge ideas, find flaws (runs inline) |
+
+### Subagents (Claude delegates automatically, or ask "use architect to...")
+
+| Agent | Purpose |
+|-------|---------|
+| Architect | System design, scalability, technical architecture |
+| Product Strategist | User value, market fit, prioritization |
+| Tech Advisor | Technology choices, frameworks, migration paths |
+| Cost Analyzer | Infrastructure costs, scaling economics, ROI |
+| Security Reviewer | Threat modeling, vulnerability identification |
+
+Subagents run in isolated context with persistent memory, so they build knowledge over time. You can also add your own private agents in `workspace/.claude/agents/`.
 
 ## Workflow
 
@@ -117,13 +126,22 @@ This loses the conversation context from your previous work. Instead, use `claud
 
 ```
 ai-workspace/
-├── .claude/skills/       # Custom AI personas
-│   ├── threads/          # Thread management
-│   ├── later/            # TODO tracking
-│   ├── architect/
-│   └── ...
+├── .claude/
+│   ├── skills/           # Slash-command skills
+│   │   ├── threads/      # Thread management
+│   │   ├── later/        # TODO tracking
+│   │   └── devils-advocate/
+│   └── agents/           # AI persona subagents
+│       ├── architect.md
+│       ├── product-strategist.md
+│       ├── tech-advisor.md
+│       ├── cost-analyzer.md
+│       └── security-reviewer.md
 ├── templates/            # Reusable templates
 ├── workspace/            # Your private workspace (gitignored)
+│   ├── .claude/          # Private skills & agents
+│   │   ├── skills/       # Private slash commands
+│   │   └── agents/       # Private persona subagents
 │   └── threads/
 │       └── {thread-name}/
 │           ├── README.md     # Thread overview

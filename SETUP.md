@@ -111,11 +111,17 @@ git pull
 
 This adds automatic git hook protection to prevent accidentally committing workspace/ files.
 
-## Available Skills
+## Available Skills & Agents
 
+**Skills** (invoke with `/name`):
 - `/threads` - Manage discussion threads
-- `/later` - Track tasks
-- `/architect`, `/devils-advocate`, `/product-strategist`, `/tech-advisor`, `/cost-analyzer`, `/security-reviewer` - AI personas
+- `/later` - Track tasks within threads
+- `/devils-advocate` - Challenge ideas, find flaws
+
+**Subagents** (ask Claude to "use architect to..." or Claude delegates automatically):
+- `architect`, `product-strategist`, `tech-advisor`, `cost-analyzer`, `security-reviewer`
+
+You can add private agents in `workspace/.claude/agents/`.
 
 See [README.md](README.md) for full documentation.
 
