@@ -23,8 +23,8 @@ A Claude Code plugin for managing long-running AI-assisted development projects 
 
 **Option 2: Local development**
 ```bash
-git clone https://github.com/sebmartin/ai-workspace ~/ai-workspace-plugin
-export CLAUDE_PLUGIN_DIR=~/ai-workspace-plugin
+git clone https://github.com/sebmartin/ai-workspace ~/ai-workspace
+export CLAUDE_PLUGIN_DIR=~/ai-workspace
 ```
 
 ### Create Your First Workspace
@@ -213,7 +213,7 @@ Installed by `./setup.sh`, these prevent:
 ### Directory Structure
 
 ```
-ai-workspace-plugin/
+ai-workspace/
 ├── .claude-plugin/
 │   └── plugin.json          # Plugin manifest
 ├── agents/                  # AI personas
