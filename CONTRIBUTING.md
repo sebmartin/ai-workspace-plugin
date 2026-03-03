@@ -58,7 +58,7 @@ pre-commit run --all-files
 
 ### Python
 - **Formatting**: Black (automatic via pre-commit)
-- **Skills**: Follow existing patterns in `.claude/skills/`
+- **Skills**: Follow existing patterns in `skills/`
 
 ### Bash
 - **Linting**: ShellCheck compliant (automatic via pre-commit)
@@ -72,11 +72,11 @@ pre-commit run --all-files
 
 ## Adding New Skills
 
-1. Create directory in `.claude/skills/<skill-name>/`
+1. Create directory in `skills/<skill-name>/`
 2. Add `SKILL.md` with skill definition
 3. Add any supporting scripts in `scripts/` subdirectory
 4. Update README.md to list the new skill
-5. Test the skill works with `/skill-name` command
+5. Test the skill works with `/ai-workspace:skill-name` command
 
 ## Pull Request Guidelines
 
