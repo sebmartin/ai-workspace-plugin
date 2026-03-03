@@ -1,6 +1,6 @@
-# Contributing to AI Workspace Template
+# Contributing to AI Workspace Plugin
 
-Thank you for contributing! This template helps developers maintain privacy while collaborating on AI-assisted projects with Claude Code.
+Thank you for contributing! This plugin helps developers organize long-running AI conversations with thread management and specialized agents.
 
 ## Development Setup
 
@@ -19,16 +19,20 @@ Thank you for contributing! This template helps developers maintain privacy whil
 
 ```
 ai-workspace/
-├── .claude/skills/       # AI persona definitions (skills)
+├── .claude-plugin/
+│   └── plugin.json       # Plugin manifest
+├── agents/               # AI persona subagents
+├── skills/               # Slash-command skills
+│   ├── common/          # Shared utilities
+│   ├── init/            # Workspace initialization
+│   └── threads/         # Thread management
 ├── templates/            # Reusable templates
-├── hooks/                # Git hook scripts (versioned)
+├── hooks/                # Git hook scripts
 ├── tests/                # Test scripts
-├── workspace/            # User's private content (gitignored)
 ├── .venv/                # Python virtual environment (gitignored)
-├── setup.sh              # Main setup script
+├── setup.sh              # Setup script for plugin repo
 ├── pyproject.toml        # Project metadata and dependencies
-├── uv.lock               # Locked dependency versions
-└── .pre-commit-config.yaml  # Hook configuration
+└── uv.lock               # Locked dependency versions
 ```
 
 ## Testing Git Hooks

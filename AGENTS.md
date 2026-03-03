@@ -28,21 +28,21 @@ Global instructions for AI assistants working in this repository.
 
 ## Repository Context
 
-This is an AI workspace template for organizing long-running discussions with thread management.
+This is an AI workspace plugin for organizing long-running discussions with thread management.
 
 **Key directories:**
-- `workspace/` - Private user content (gitignored, never commit)
-- `.claude/skills/` - Custom AI personas and capabilities
+- `skills/` - Slash-command skills (threads, init)
+- `agents/` - AI persona subagents
 - `templates/` - Reusable templates
 
 **Privacy protection:**
-- Git hooks prevent committing `workspace/` files (except .keep and README.md)
-- Always respect workspace privacy - it contains user's private work
+- This plugin helps users create workspaces with git hooks that protect privacy
+- Each initialized workspace has its own `workspace/` directory (gitignored)
 
 ## Working with Threads
 
 When asked about threads:
-1. Use `.claude/skills/threads/scripts/list-threads.py` to list available threads
+1. Use `skills/threads/scripts/list-threads.py` to list available threads
 2. Read `workspace/threads/{name}/README.md` for thread details
 3. Never assume thread content - always read the files
 

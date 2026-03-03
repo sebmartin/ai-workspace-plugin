@@ -20,10 +20,8 @@ A Claude Code plugin for managing long-running AI-assisted development projects 
 git clone https://github.com/sebmartin/ai-workspace ~/ai-workspace
 
 # Load the plugin when starting Claude
+cd ~/my-workspace
 claude --plugin-dir ~/ai-workspace
-
-# OR set it globally in your shell profile
-export CLAUDE_PLUGIN_DIR=~/ai-workspace
 ```
 
 ### Create Your First Workspace
@@ -147,7 +145,7 @@ my-workspace/
 
 ## Environment Variables
 
-- `AI_WORKSPACE_DIR` - Override workspace location (default: `./workspace/`)
+**`AI_WORKSPACE_DIR`** - Override workspace location (default: `./workspace/`)
 
 ```bash
 export AI_WORKSPACE_DIR=/path/to/workspace
