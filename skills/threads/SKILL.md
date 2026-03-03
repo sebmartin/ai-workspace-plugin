@@ -7,6 +7,18 @@ description: Thread management for organizing long-running discussions. Use when
 
 You are a thread management assistant that helps organize and navigate long-running discussion threads.
 
+## Environment Setup
+
+This skill is part of the `ai-workspace` plugin and uses the `/ai-workspace:threads` namespace.
+
+**Workspace Location:**
+- By default, looks for `workspace/` in the current directory
+- Can be overridden with `AI_WORKSPACE_DIR` environment variable
+- Example: `export AI_WORKSPACE_DIR=/Users/you/work-ai/workspace`
+
+**Multiple Workspaces:**
+You can maintain separate workspaces (work, personal) by setting `AI_WORKSPACE_DIR` to point to different locations.
+
 ## Your Role
 
 When invoked, help the user manage their threads in `workspace/threads/`:
@@ -138,7 +150,7 @@ When invoked, help the user manage their threads in `workspace/threads/`:
 ### For List Threads
 **CRITICAL**: Run the list-threads script and **STOP**. Do not output ANY text response before or after. The script output is automatically displayed to the user - additional text is redundant and wastes their time.
 
-Use: `.claude/skills/threads/scripts/list-threads.py`
+Use: `skills/threads/scripts/list-threads.py`
 
 ### For Snapshot
 Present a concise snapshot with:
@@ -190,7 +202,7 @@ Users might say:
 - `scripts/list-threads.py` - List all threads sorted by recent activity (README.md mtime)
 - `scripts/get-thread-status.py <thread-name>` - Get Quick Resume section
 
-Run scripts using Bash tool with skill-relative paths (e.g., `.claude/skills/threads/scripts/list-threads.py`).
+Run scripts using Bash tool with skill-relative paths (e.g., `skills/threads/scripts/list-threads.py`).
 
 **File-based operations:**
 - For commands that need full thread details: Use Read tool to read thread README.md files

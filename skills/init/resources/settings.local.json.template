@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(skills/threads/scripts/list-threads.py)",
+      "Bash(skills/threads/scripts/get-thread-status.py)",
+      "WebSearch",
+      "Bash(find:*)",
+      "Bash(ls:*)",
+      "Bash(mkdir:*)",
+      "Bash(mv:*)",
+      "Bash(git commit:*)",
+      "Bash(git -C ${WORKSPACE_ROOT} log --oneline -10)",
+      "Bash(git -C ${WORKSPACE_ROOT} status --short)",
+      "Bash(git -C ${WORKSPACE_ROOT} status --porcelain)",
+      "WebFetch(domain:github.com)"
+    ],
+    "additionalDirectories": [
+      "workspace"
+    ]
+  }
+}
