@@ -1,8 +1,8 @@
 {
   "name": "ai-workspace",
-  "description": "Thread-based workspace management with specialized agents for long-running AI development projects",
+  "description": "Thread-based workspace management with specialized agents for long-running AI conversations",
   "version": "1.0.0",
-  "author": "Your Name",
-  "repository": "https://github.com/yourusername/ai-workspace-plugin",
+  "author": "Sebastien Martin",
+  "repository": "https://github.com/sebmartin/ai-workspace",
   "license": "MIT"
 }

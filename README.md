@@ -17,13 +17,13 @@ A Claude Code plugin for managing long-running AI-assisted development projects 
 
 **Option 1: Direct from GitHub (coming soon)**
 ```bash
-/plugin marketplace add yourusername/ai-workspace-plugin
-/plugin install ai-workspace@yourusername-ai-workspace-plugin
+/plugin marketplace add sebmartin/ai-workspace
+/plugin install ai-workspace@sebmartin-ai-workspace
 ```
 
 **Option 2: Local development**
 ```bash
-git clone <this-repo-url> ~/ai-workspace-plugin
+git clone https://github.com/sebmartin/ai-workspace ~/ai-workspace-plugin
 export CLAUDE_PLUGIN_DIR=~/ai-workspace-plugin
 ```
 
