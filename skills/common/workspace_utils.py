@@ -30,14 +30,26 @@ def get_template_path(template_name: str) -> Path:
     return get_plugin_dir() / "templates" / template_name
 
 
-def get_workspace_dir() -> Path:
-    """Get the workspace directory (current working directory)."""
-    return Path.cwd()
+def get_workspace_dir(workspace_dir: Path = None) -> Path:
+    """Get the workspace directory.
+
+    Args:
+        workspace_dir: Optional workspace directory path. If None, uses current working directory.
+
+    Returns:
+        Path to the workspace directory
+    """
+    return workspace_dir if workspace_dir else Path.cwd()
 
 
-def ensure_settings() -> None:
-    """Ensure .claude/settings.json exists."""
-    claude_dir = Path.cwd() / ".claude"
+def ensure_settings(workspace_dir: Path = None) -> None:
+    """Ensure .claude/settings.json exists.
+
+    Args:
+        workspace_dir: Optional workspace directory path. If None, uses current working directory.
+    """
+    workspace = get_workspace_dir(workspace_dir)
+    claude_dir = workspace / ".claude"
     settings_file = claude_dir / "settings.json"
 
     if settings_file.exists():
@@ -58,23 +70,38 @@ def ensure_settings() -> None:
     print(f"✓ Created settings: {settings_file}")
 
 
-def get_threads_dir() -> Path:
-    """Get the threads directory within the workspace."""
-    workspace_dir = get_workspace_dir()
-    threads_dir = workspace_dir / "threads"
+def get_threads_dir(workspace_dir: Path = None) -> Path:
+    """Get the threads directory within the workspace.
+
+    Args:
+        workspace_dir: Optional workspace directory path. If None, uses current working directory.
+
+    Returns:
+        Path to the threads directory
+    """
+    workspace = get_workspace_dir(workspace_dir)
+    threads_dir = workspace / "threads"
 
     # Auto-create if missing
     threads_dir.mkdir(parents=True, exist_ok=True)
 
     # Auto-create settings on first use
-    ensure_settings()
+    ensure_settings(workspace_dir)
 
     return threads_dir
 
 
-def get_thread_dir(thread_name: str) -> Path:
-    """Get the directory path for a specific thread."""
-    return get_threads_dir() / thread_name
+def get_thread_dir(thread_name: str, workspace_dir: Path = None) -> Path:
+    """Get the directory path for a specific thread.
+
+    Args:
+        thread_name: Name of the thread
+        workspace_dir: Optional workspace directory path. If None, uses current working directory.
+
+    Returns:
+        Path to the thread directory
+    """
+    return get_threads_dir(workspace_dir) / thread_name
 
 
 def validate_thread_exists(thread_name: str) -> bool:

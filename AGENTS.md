@@ -187,6 +187,32 @@ Users invoke skills with `/ai-workspace:skill-name` command. When a skill is inv
 3. Claude may call Python scripts using the Bash tool
 4. Scripts use workspace_utils.py for common operations
 
+### Plugin Script Paths
+
+When invoking plugin scripts from skills, use `${CLAUDE_PLUGIN_ROOT}` environment variable and pass workspace directory as a literal path:
+
+```bash
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/threads/scripts/list-threads.py "/absolute/path/to/workspace"
+```
+
+**Why this matters:**
+- Plugin is at: `~/ai-workspace/` (or in Claude's plugin cache)
+- User workspace is at: `~/my-project/`
+- Scripts run from plugin directory but need to access user's workspace
+- Pass the current working directory path as first argument so scripts know where the workspace is
+- Use literal path (e.g., `/Users/user/my-project`), not command substitution like `$(pwd)` (avoids permission prompts)
+
+**Example:**
+```bash
+# ❌ Wrong - script can't find workspace
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/threads/scripts/list-threads.py
+# Script uses cwd (plugin dir), looks for threads in wrong place
+
+# ✅ Correct - pass workspace directory as literal path
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/threads/scripts/list-threads.py "/Users/user/my-project"
+# Script receives workspace path, finds threads at /Users/user/my-project/threads/
+```
+
 ## Verification Practices
 
 **Before referencing project resources:**
@@ -197,7 +223,7 @@ Users invoke skills with `/ai-workspace:skill-name` command. When a skill is inv
 
 **When working with threads (as a user would):**
 - Threads are in the user's workspace, not the plugin repo
-- Use `skills/threads/scripts/list-threads.py` to see available threads
+- Use `python3 ${CLAUDE_PLUGIN_ROOT}/skills/threads/scripts/list-threads.py "/path/to/workspace"` to see available threads (pass actual path)
 - Read `threads/{name}/README.md` for thread details
 - Never assume thread content - always verify
 

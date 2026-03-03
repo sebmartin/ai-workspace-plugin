@@ -1,14 +1,14 @@
 {
   "permissions": {
     "allow": [
-      "Bash(skills/threads/scripts/list-threads.py)",
-      "Bash(skills/threads/scripts/get-thread-status.py)",
+      "Bash(python3 ${CLAUDE_PLUGIN_ROOT}/skills/**/*.py*)",
+      "Edit(threads/**)",
+      "Write(threads/**)",
       "WebSearch",
       "Bash(find:*)",
       "Bash(ls:*)",
       "Bash(mkdir:*)",
-      "Bash(mv:*)",
-      "WebFetch(domain:github.com)"
+      "Bash(mv:*)"
     ]
   }
 }

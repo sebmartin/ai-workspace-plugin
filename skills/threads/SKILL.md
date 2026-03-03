@@ -149,7 +149,8 @@ When invoked, help the user manage their threads in `threads/`:
 ### For List Threads
 **CRITICAL**: Run the list-threads script and **STOP**. Do not output ANY text response before or after. The script output is automatically displayed to the user - additional text is redundant and wastes their time.
 
-Use: `skills/threads/scripts/list-threads.py`
+Run the script passing the current working directory as the first argument (use the actual path, not command substitution):
+`python3 ${CLAUDE_PLUGIN_ROOT}/skills/threads/scripts/list-threads.py "/absolute/path/to/current/directory"`
 
 ### For Snapshot
 Present a concise snapshot with:
@@ -201,7 +202,11 @@ Users might say:
 - `scripts/list-threads.py` - List all threads sorted by recent activity (README.md mtime)
 - `scripts/get-thread-status.py <thread-name>` - Get Quick Resume section
 
-Run scripts using Bash tool with skill-relative paths (e.g., `skills/threads/scripts/list-threads.py`).
+Run scripts using Bash tool with `${CLAUDE_PLUGIN_ROOT}` environment variable and pass the current working directory path as the first argument:
+- `python3 ${CLAUDE_PLUGIN_ROOT}/skills/threads/scripts/list-threads.py "/path/to/workspace"`
+- `python3 ${CLAUDE_PLUGIN_ROOT}/skills/threads/scripts/get-thread-status.py "/path/to/workspace" <thread-name>`
+
+**Important:** Pass the actual directory path (e.g., `/Users/user/my-project`), not command substitution like `$(pwd)`.
 
 **File-based operations:**
 - For commands that need full thread details: Use Read tool to read thread README.md files

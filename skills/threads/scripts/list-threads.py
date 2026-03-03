@@ -10,9 +10,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / "common"))
 from workspace_utils import get_threads_dir, error_exit
 
 
-def list_threads():
-    """List all threads sorted by most recent modification."""
-    threads_dir = get_threads_dir()
+def list_threads(workspace_dir: Path = None):
+    """List all threads sorted by most recent modification.
+
+    Args:
+        workspace_dir: Optional workspace directory path. If None, uses current working directory.
+    """
+    threads_dir = get_threads_dir(workspace_dir)
 
     if not threads_dir.exists():
         error_exit("No threads directory found")
@@ -39,4 +43,6 @@ def list_threads():
 
 
 if __name__ == "__main__":
-    list_threads()
+    # Accept workspace directory as first argument
+    workspace_dir = Path(sys.argv[1]) if len(sys.argv) > 1 else None
+    list_threads(workspace_dir)
