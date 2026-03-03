@@ -44,7 +44,12 @@ When invoked, help the user manage their threads in `workspace/threads/`:
 **Save thread context:**
 - Command: `/threads save`
 - Update README.md Quick Resume section with current context
-- Update current session log
+- Create or update the session log for this invocation:
+  1. Look for a session file in `sessions/` with today's date prefix (`YYYYMMDD-*.md`)
+  2. If none exists: create one using `templates/thread-session-template.md`, named `YYYYMMDD-kebab-summary.md`, filled with current conversation context (goal, key points, decisions, next steps)
+  3. If one exists: update it — append new discussion points, decisions, and progress since last save
+  4. Link the session file in README.md Resources > Sessions if not already listed
+- A session loosely maps to a single Claude invocation: one file per conversation, updated on each save
 - Does NOT generate a snapshot (use `/threads snapshot` for that)
 
 **Link to another thread:**
@@ -98,6 +103,30 @@ When invoked, help the user manage their threads in `workspace/threads/`:
   - Relevant context from last session
 - **CRITICAL**: End with a clear statement: "**Working on thread: [thread-name]**"
 
+**Park a topic:**
+- Command: `/threads park [topic]`
+- If topic not provided: ask "What would you like to park?"
+- Append to `**Parked**:` field in Quick Resume with today's date: `- [YYYY-MM-DD] topic`
+- If the Parked field shows `- None`, replace it with the new item
+- Otherwise append below existing items
+- Show confirmation: "Parked: [topic]"
+
+**Pop a parked topic:**
+- Command: `/threads pop`
+- Read README.md and find the first item in `**Parked**:`
+- If nothing parked (shows `- None`): say "Nothing parked."
+- Otherwise:
+  - Show the item: "Picking up: [topic]"
+  - Remove it from the Parked list (if it was the only item, replace with `- None`)
+  - Write a one-line entry to the current session log: `Picked up parked topic: [topic]`
+  - Update the README.md
+
+**List parked topics:**
+- Command: `/threads parked`
+- Read README.md and show the Parked section contents
+- If `- None`: say "Nothing parked in [thread-name]."
+- Otherwise list items with numbers for easy reference
+
 **Open thread in Finder (macOS):**
 - Command: `/threads open [thread-name]`
 - If thread name provided: Open that specific thread's folder (`open workspace/threads/{name}`)
@@ -150,6 +179,9 @@ Users might say:
 - "Resume [name] thread" / "Resume" (no thread specified) / "Continue [name]"
 - "What thread am I on?" / "What's the current thread?" / "Which thread is active?"
 - "Open [thread-name] in Finder" / "Open this thread" / "Open thread folder"
+- "Park [topic]" / "Park this" / "Save this for later" / "Come back to [topic]"
+- "Pop" / "What's next?" / "Pick up the next parked item"
+- "What's parked?" / "Show parked topics" / "List parked"
 - Just a number like "2" (when responding to a selection prompt)
 
 ## Implementation
@@ -187,7 +219,7 @@ Run scripts using Bash tool with skill-relative paths (e.g., `.claude/skills/thr
 
 README.md Quick Resume section is updated when:
 1. Decision is logged (`/threads log-decision`)
-2. TODO is created/updated (via `/later` skill)
+2. Topic is parked or popped (`/threads park` / `/threads pop`)
 3. Snapshot is requested (`/threads snapshot`) or any artifact is generated
 4. Explicitly requested (`/threads save`)
 
