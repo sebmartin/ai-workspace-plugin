@@ -2,6 +2,7 @@
 
 import os
 import re
+import shutil
 import sys
 from pathlib import Path
 
@@ -30,43 +31,45 @@ def get_template_path(template_name: str) -> Path:
 
 
 def get_workspace_dir() -> Path:
-    """
-    Get workspace directory from AI_WORKSPACE_DIR env var or cwd/workspace.
+    """Get the workspace directory (current working directory)."""
+    return Path.cwd()
 
-    Returns:
-        Path to the workspace directory
 
-    Exits if:
-        - AI_WORKSPACE_DIR is set but doesn't exist
-        - No workspace/ directory in current directory
-    """
-    workspace_dir = os.environ.get("AI_WORKSPACE_DIR")
-    if workspace_dir:
-        workspace_path = Path(workspace_dir).resolve()
-        if not workspace_path.exists():
-            error_exit(
-                f"AI_WORKSPACE_DIR points to non-existent directory: {workspace_path}\n"
-                f"Either create the directory or unset AI_WORKSPACE_DIR"
-            )
-        return workspace_path
+def ensure_settings() -> None:
+    """Ensure .claude/settings.json exists."""
+    claude_dir = Path.cwd() / ".claude"
+    settings_file = claude_dir / "settings.json"
 
-    # Fallback: workspace/ in current directory
-    cwd_workspace = Path.cwd() / "workspace"
-    if cwd_workspace.exists():
-        return cwd_workspace
+    if settings_file.exists():
+        return
 
-    error_exit(
-        "No workspace directory found.\n"
-        "Either:\n"
-        "  1. Set AI_WORKSPACE_DIR environment variable to your workspace path\n"
-        "  2. Run from a directory that contains a workspace/ subdirectory\n"
-        "  3. Initialize a new workspace with: /ai-workspace:init"
-    )
+    # Create .claude/ directory
+    claude_dir.mkdir(parents=True, exist_ok=True)
+
+    # Copy settings template from plugin
+    template_path = get_template_path("settings.json.template")
+
+    if not template_path.exists():
+        error_exit(f"Settings template not found: {template_path}")
+
+    # Copy template as-is (no variable substitution needed)
+    shutil.copy(template_path, settings_file)
+
+    print(f"✓ Created settings: {settings_file}")
 
 
 def get_threads_dir() -> Path:
-    """Get the threads directory."""
-    return get_workspace_dir() / "threads"
+    """Get the threads directory within the workspace."""
+    workspace_dir = get_workspace_dir()
+    threads_dir = workspace_dir / "threads"
+
+    # Auto-create if missing
+    threads_dir.mkdir(parents=True, exist_ok=True)
+
+    # Auto-create settings on first use
+    ensure_settings()
+
+    return threads_dir
 
 
 def get_thread_dir(thread_name: str) -> Path:

@@ -24,23 +24,19 @@ cd ~/my-workspace
 claude --plugin-dir ~/ai-workspace
 ```
 
-### Create Your First Workspace
+### Create Your First Thread
 
 ```bash
-# Create a new workspace directory
-mkdir ~/my-ai-workspace
-cd ~/my-ai-workspace
+# Navigate to your project directory
+cd ~/my-project
 
-# Initialize it
-claude
-/ai-workspace:init
-
-# Install git hooks for workspace protection
-./setup.sh
-
-# Create your first thread
-/ai-workspace:threads create my-project
+# Load the plugin and create a thread
+claude --plugin-dir ~/ai-workspace
+/ai-workspace:threads create my-first-thread
+# ✓ Created threads/my-first-thread/
 ```
+
+The `threads/` directory is created automatically on first use.
 
 ## Available Skills
 
@@ -48,7 +44,6 @@ All skills are namespaced under `ai-workspace:`:
 
 | Skill | Command | Purpose |
 |-------|---------|---------|
-| **Init** | `/ai-workspace:init` | Initialize a new workspace in current directory |
 | **Threads** | `/ai-workspace:threads` | Create, resume, snapshot discussion threads |
 
 ### Thread Commands
@@ -104,51 +99,41 @@ Share the plugin across multiple workspaces (work + personal):
 
 ```bash
 # Work workspace
-mkdir ~/work-ai && cd ~/work-ai
-claude
-/ai-workspace:init
+cd ~/work-ai
+claude --plugin-dir ~/ai-workspace
+/ai-workspace:threads create ...
 
 # Personal workspace
-mkdir ~/personal-ai && cd ~/personal-ai
-claude
-/ai-workspace:init
+cd ~/personal-ai
+claude --plugin-dir ~/ai-workspace
+/ai-workspace:threads create ...
 ```
 
 Each workspace has:
-- Own `workspace/` directory (private threads/context)
-- Own `.claude/settings.local.json` (custom permissions)
+- Own `threads/` directory (private threads/context)
+- Own `.claude/settings.json` (auto-generated on first use)
 - Shared plugin (installed once, used by both)
 
-## Workspace Structure
+## Directory Structure
 
-After running `/ai-workspace:init`, your workspace will have:
+After creating your first thread, your workspace will have:
 
 ```
-my-workspace/
-├── .claude/
-│   └── settings.local.json  # Local config (gitignored)
-├── workspace/
-│   ├── threads/             # Your discussion threads
-│   │   └── {thread-name}/
-│   │       ├── README.md    # Thread overview
-│   │       ├── sessions/    # Session logs
-│   │       ├── decisions/   # Decision docs
-│   │       ├── attachments/ # Input files
-│   │       └── artifacts/   # Generated outputs
-│   └── templates/           # Project templates
-├── hooks/                   # Git hooks for privacy
-├── .gitignore              # Protects workspace/
-├── .pre-commit-config.yaml # Pre-commit configuration
-├── setup.sh                # Git hooks installer
-└── README.md               # Workspace documentation
+my-project/
+├── threads/                 # Your discussion threads
+│   └── {thread-name}/
+│       ├── README.md        # Thread overview
+│       ├── sessions/        # Session logs
+│       ├── decisions/       # Decision docs
+│       ├── attachments/     # Input files
+│       └── artifacts/       # Generated outputs
+└── .claude/
+    └── settings.json        # Auto-generated settings
 ```
 
-## Environment Variables
-
-**`AI_WORKSPACE_DIR`** - Override workspace location (default: `./workspace/`)
-
-```bash
-export AI_WORKSPACE_DIR=/path/to/workspace
+**Optional:** Add `.gitignore` to protect thread privacy:
+```
+threads/
 ```
 
 ## Thread Workflow
@@ -192,18 +177,16 @@ claude --resume
 
 ## Privacy & Security
 
-The plugin includes automatic workspace protection:
+**Thread privacy:**
+- Threads are stored locally in `threads/` directory
+- Not committed to git by default (no .gitignore created)
+- Add `.gitignore` manually if you want git protection
 
-### Git Hooks
-Installed by `./setup.sh`, these prevent:
-- ✅ Committing workspace/ files
-- ✅ Pushing workspace/ files accidentally
-- ✅ Leaking private work
-
-### 3-Layer Protection
-1. `.gitignore` excludes `workspace/*`
-2. Pre-commit hook blocks staging workspace/ files
-3. Pre-push hook provides final safety check
+**Recommended .gitignore:**
+```
+threads/
+.claude/settings.json
+```
 
 ## Plugin Development
 
@@ -222,17 +205,9 @@ ai-workspace/
 │   └── devils-advocate.md
 ├── skills/
 │   ├── common/
-│   │   └── workspace_utils.py  # Shared utilities
-│   ├── init/                   # Workspace initialization
-│   │   ├── SKILL.md
-│   │   ├── scripts/
-│   │   │   └── init-workspace.py
-│   │   └── resources/          # Templates for new workspaces
-│   │       ├── gitignore.template
-│   │       ├── settings.local.json.template
-│   │       ├── setup.sh
-│   │       ├── pre-commit-config.yaml
-│   │       └── hooks/
+│   │   ├── workspace_utils.py  # Shared utilities
+│   │   └── resources/
+│   │       └── settings.json.template
 │   └── threads/                # Thread management
 │       ├── SKILL.md
 │       └── scripts/

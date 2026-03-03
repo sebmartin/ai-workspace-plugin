@@ -1,8 +1,3 @@
-# Local-only user workspace (never commit user context)
-workspace/*
-!workspace/.keep
-!workspace/README.md
-
 # Python virtual environment
 .venv/
 
