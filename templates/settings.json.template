@@ -8,7 +8,6 @@
       "Bash(ls:*)",
       "Bash(mkdir:*)",
       "Bash(mv:*)",
-      "Bash(git commit:*)",
       "WebFetch(domain:github.com)"
     ]
   }
