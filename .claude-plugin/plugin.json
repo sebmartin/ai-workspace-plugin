@@ -2,7 +2,10 @@
   "name": "ai-workspace",
   "description": "Thread-based workspace management with specialized agents for long-running AI conversations",
   "version": "1.0.0",
-  "author": "Sebastien Martin",
+  "author": {
+    "name": "Sebastien Martin",
+    "url": "https://github.com/sebmartin"
+  },
   "repository": "https://github.com/sebmartin/ai-workspace",
   "license": "MIT"
 }
