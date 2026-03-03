@@ -17,7 +17,7 @@ A Claude Code plugin for managing long-running AI-assisted development projects 
 
 ```bash
 # Clone the repository
-git clone https://github.com/sebmartin/ai-workspace ~/ai-workspace
+git clone https://github.com/sebmartin/ai-workspace-plugin ~/ai-workspace
 
 # Load the plugin when starting Claude
 cd ~/my-workspace
