@@ -90,24 +90,13 @@ ai-workspace-plugin/               # Plugin repository
 
 ### Testing Changes
 
+Test changes using the `--plugin-dir` flag:
 ```bash
-# Test in a temporary directory
-mkdir /tmp/test-workspace
 cd /tmp/test-workspace
 claude --plugin-dir ~/ai-workspace-plugin
-
-# Test thread creation (should auto-create structure)
-/ai-workspace:threads create test
-# Verify: ls threads/ .claude/
-
-# Test thread operations
-/ai-workspace:threads
-/ai-workspace:threads save
-/ai-workspace:threads snapshot
-
-# Clean up
-cd ~ && rm -rf /tmp/test-workspace
 ```
+
+For detailed testing procedures, see CONTRIBUTING.md.
 
 ### Common Tasks
 

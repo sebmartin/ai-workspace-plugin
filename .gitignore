@@ -3,12 +3,14 @@
 
 # Python cache and compiled files
 __pycache__/
+.mypy_cache/
+.pytest_cache/
 *.py[cod]
 *$py.class
 *.so
 .Python
 
-# Claude Code local settings
+# Claude
 .claude/settings.local.json
 
 # OS files
