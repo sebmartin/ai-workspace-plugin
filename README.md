@@ -17,11 +17,11 @@ A Claude Code plugin for managing long-running AI-assisted development projects 
 
 ```bash
 # Clone the repository
-git clone https://github.com/sebmartin/ai-workspace-plugin ~/ai-workspace
+git clone https://github.com/sebmartin/ai-workspace-plugin ~/ai-workspace-plugin
 
 # Load the plugin when starting Claude
 cd ~/my-workspace
-claude --plugin-dir ~/ai-workspace
+claude --plugin-dir ~/ai-workspace-plugin
 ```
 
 ### Create Your First Thread
@@ -31,7 +31,7 @@ claude --plugin-dir ~/ai-workspace
 cd ~/my-project
 
 # Load the plugin and create a thread
-claude --plugin-dir ~/ai-workspace
+claude --plugin-dir ~/ai-workspace-plugin
 /ai-workspace:threads create my-first-thread
 # ✓ Created threads/my-first-thread/
 ```
@@ -100,12 +100,12 @@ Share the plugin across multiple workspaces (work + personal):
 ```bash
 # Work workspace
 cd ~/work-ai
-claude --plugin-dir ~/ai-workspace
+claude --plugin-dir ~/ai-workspace-plugin
 /ai-workspace:threads create ...
 
 # Personal workspace
 cd ~/personal-ai
-claude --plugin-dir ~/ai-workspace
+claude --plugin-dir ~/ai-workspace-plugin
 /ai-workspace:threads create ...
 ```
 
@@ -193,7 +193,7 @@ threads/
 ### Directory Structure
 
 ```
-ai-workspace/
+ai-workspace-plugin/
 ├── .claude-plugin/
 │   └── plugin.json          # Plugin manifest
 ├── agents/                  # AI personas

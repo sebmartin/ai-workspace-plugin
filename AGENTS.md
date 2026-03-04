@@ -15,7 +15,7 @@ This is a Claude Code plugin that provides thread-based workspace management for
 **User workflow:**
 ```bash
 cd ~/my-project
-claude --plugin-dir ~/ai-workspace
+claude --plugin-dir ~/ai-workspace-plugin
 /ai-workspace:threads create feature-work
 ```
 
@@ -26,7 +26,7 @@ The plugin auto-creates `threads/` and `.claude/settings.json` on first use.
 ### Directory Structure
 
 ```
-ai-workspace/                      # Plugin repository
+ai-workspace-plugin/               # Plugin repository
 ├── .claude-plugin/
 │   └── plugin.json               # Plugin manifest
 ├── agents/                       # Specialized AI personas
@@ -58,7 +58,7 @@ ai-workspace/                      # Plugin repository
 ### Key Concepts
 
 **Plugin vs Workspace separation:**
-- Plugin: Installed once at `~/ai-workspace` (this repository)
+- Plugin: Installed once at `~/ai-workspace-plugin` (this repository)
 - Workspace: User's project directory (e.g., `~/my-project`)
 - The plugin creates `threads/` directory in each workspace
 - Each workspace gets its own auto-generated `.claude/settings.json`
@@ -94,7 +94,7 @@ ai-workspace/                      # Plugin repository
 # Test in a temporary directory
 mkdir /tmp/test-workspace
 cd /tmp/test-workspace
-claude --plugin-dir ~/ai-workspace
+claude --plugin-dir ~/ai-workspace-plugin
 
 # Test thread creation (should auto-create structure)
 /ai-workspace:threads create test
@@ -196,7 +196,7 @@ python3 ${CLAUDE_PLUGIN_ROOT}/skills/threads/scripts/list-threads.py "/absolute/
 ```
 
 **Why this matters:**
-- Plugin is at: `~/ai-workspace/` (or in Claude's plugin cache)
+- Plugin is at: `~/ai-workspace-plugin/` (or in Claude's plugin cache)
 - User workspace is at: `~/my-project/`
 - Scripts run from plugin directory but need to access user's workspace
 - Pass the current working directory path as first argument so scripts know where the workspace is
@@ -259,8 +259,8 @@ When working in this repository:
 ## Project-Specific Notes
 
 **Plugin installation model:**
-- Users install the plugin once (`git clone` to `~/ai-workspace`)
-- Plugin is loaded with `--plugin-dir ~/ai-workspace` flag
+- Users install the plugin once (`git clone` to `~/ai-workspace-plugin`)
+- Plugin is loaded with `--plugin-dir ~/ai-workspace-plugin` flag
 - Same plugin installation used across all user projects
 - No per-workspace plugin installation needed
 

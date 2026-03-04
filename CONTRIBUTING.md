@@ -17,7 +17,7 @@ Thank you for contributing! This plugin helps developers organize long-running A
 ## Project Structure
 
 ```
-ai-workspace/
+ai-workspace-plugin/
 ├── .claude-plugin/
 │   └── plugin.json            # Plugin manifest
 ├── agents/                    # AI persona subagents
@@ -57,18 +57,18 @@ Test your changes using the `--plugin-dir` flag:
 
 ```bash
 # Navigate to your plugin repository
-cd ~/ai-workspace
+cd ~/ai-workspace-plugin
 
 # Load the plugin in any directory
 cd ~/some-other-directory
-claude --plugin-dir ~/ai-workspace
+claude --plugin-dir ~/ai-workspace-plugin
 ```
 
 ### Testing Thread Management
 
 ```bash
 cd /tmp/test-workspace
-claude --plugin-dir ~/ai-workspace
+claude --plugin-dir ~/ai-workspace-plugin
 
 # Create first thread (auto-creates structure)
 /ai-workspace:threads create test-thread
