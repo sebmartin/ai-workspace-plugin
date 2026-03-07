@@ -100,12 +100,13 @@ Agents run automatically when Claude delegates work to them:
 
 | Agent | Purpose |
 |-------|---------|
-| **Architect** | System design, scalability, technical architecture |
-| **Security Reviewer** | Threat modeling, vulnerability identification |
-| **Product Strategist** | User value, market fit, prioritization |
-| **Tech Advisor** | Technology choices, frameworks, migration paths |
-| **Cost Analyzer** | Infrastructure costs, scaling economics, ROI |
 | **Devil's Advocate** | Critical thinking, finding flaws in proposals |
+
+For specialist agents (architect, security reviewer, product strategist, tech advisor, cost analyzer), install the `tech-expert-agents` plugin:
+
+```
+/plugin install tech-expert-agents@sebmartin
+```
 
 ## Thread Structure
 
