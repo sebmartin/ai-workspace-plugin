@@ -38,8 +38,6 @@ ai-workspace-plugin/               # Plugin repository
 ├── templates/                    # Templates for threads
 │   ├── thread-template.md
 │   ├── thread-session-template.md
-│   ├── snapshot-template.md
-│   ├── adr-template.md
 │   ├── settings.json.template
 │   └── workspace-claude.md      # CLAUDE.md template for user workspaces
 ├── tests/

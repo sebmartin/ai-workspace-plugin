@@ -114,5 +114,20 @@ def create_thread(workspace_dir: str, thread_name: str) -> str:
     return f"Created thread '{thread_name}' at {thread_dir}"
 
 
+@mcp.tool()
+def get_template(template_name: str) -> str:
+    """Return the contents of a plugin template file.
+
+    Args:
+        template_name: Filename of the template (e.g., "thread-template.md").
+    """
+    path = get_template_path(template_name)
+    if not path.exists():
+        templates_dir = get_template_path(".")
+        available = [p.name for p in templates_dir.iterdir() if p.is_file()]
+        return f"Error: Template '{template_name}' not found. Available: {', '.join(sorted(available))}"
+    return path.read_text()
+
+
 if __name__ == "__main__":
     mcp.run()

@@ -4,6 +4,7 @@
       "mcp__plugin_ai-workspace_threads__list_threads",
       "mcp__plugin_ai-workspace_threads__get_thread_status",
       "mcp__plugin_ai-workspace_threads__create_thread",
+      "mcp__plugin_ai-workspace_threads__get_template",
       "Edit(threads/**)",
       "Write(threads/**)",
       "WebSearch",

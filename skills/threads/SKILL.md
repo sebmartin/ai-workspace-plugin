@@ -57,7 +57,7 @@ When invoked, help the user manage their threads in `threads/`:
 - Update README.md Quick Resume section with current context
 - Create or update the session log for this invocation:
   1. Look for a session file in `sessions/` with today's date prefix (`YYYYMMDD-*.md`)
-  2. If none exists: create one using `templates/thread-session-template.md`, named `YYYYMMDD-kebab-summary.md`, filled with current conversation context (goal, key points, decisions, next steps)
+  2. If none exists: call `mcp__plugin_ai-workspace_threads__get_template(template_name="thread-session-template.md")` to get the template, then create `YYYYMMDD-kebab-summary.md` filled with current conversation context (goal, key points, decisions, next steps)
   3. If one exists: update it — append new discussion points, decisions, and progress since last save
   4. Link the session file in README.md Resources > Sessions if not already listed
 - A session loosely maps to a single Claude invocation: one file per conversation, updated on each save
@@ -194,6 +194,7 @@ Users might say:
 - `mcp__threads__list_threads(workspace_dir)` — List threads sorted by recent activity
 - `mcp__threads__get_thread_status(workspace_dir, thread_name)` — Get Quick Resume section
 - `mcp__threads__create_thread(workspace_dir, thread_name)` — Create thread directory structure and README
+- `mcp__threads__get_template(template_name)` — Return contents of a plugin template file
 
 Pass the current working directory as `workspace_dir` (literal path, not `$(pwd)`).
 

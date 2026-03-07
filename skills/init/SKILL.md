@@ -25,7 +25,7 @@ Check if `.claude/settings.json` exists. If not:
 mkdir -p .claude
 ```
 
-Then read `${CLAUDE_PLUGIN_ROOT}/templates/settings.json.template` and write it to `.claude/settings.json`.
+Then call `mcp__plugin_ai-workspace_threads__get_template(template_name="settings.json.template")` and write the result to `.claude/settings.json`.
 
 ### 2. Create `threads/`
 
@@ -37,7 +37,7 @@ Skip if `threads/` already exists.
 
 ### 3. Create `CLAUDE.md`
 
-Check if `CLAUDE.md` exists. If not, read `${CLAUDE_PLUGIN_ROOT}/templates/workspace-claude.md` and write it to `CLAUDE.md`.
+Check if `CLAUDE.md` exists. If not, call `mcp__plugin_ai-workspace_threads__get_template(template_name="workspace-claude.md")` and write the result to `CLAUDE.md`.
 
 ## Output
 
@@ -56,6 +56,10 @@ Skipped (already exists):
 
 Start your first thread:
   /ai-workspace:threads create my-first-thread
+
+Restart Claude for the new permissions to take effect.
 ```
 
 Use the actual absolute path of the current working directory, not a placeholder.
+
+If `.claude/settings.json` was newly created, remind the user to restart Claude so the permission allowlist takes effect.
