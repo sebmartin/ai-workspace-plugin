@@ -13,6 +13,8 @@ Install via the Claude Code marketplace:
 /plugin install ai-workspace@sebmartin
 ```
 
+Restart Claude Code after installing for the plugin to take effect.
+
 Then initialize a workspace:
 
 ```bash
