@@ -1,8 +1,10 @@
 # AI Workspace Plugin
 
-A Claude Code plugin for managing long-running conversations with Claude.
+A Claude Code plugin built around two ideas: **threads** for persisting long-running conversations across Claude sessions, and **debate** for forging stronger plans through structured agentic dialogue.
 
-**Threads** are the core concept. A thread is a persistent, topic-focused conversation (a brainstorming session, a design discussion, a research topic) that survives across multiple Claude sessions. Conversation history is stored as a set of linked Markdown files on disk rather than held in Claude's context window, where details get lost to compaction. The thread README acts as an index into session logs, decisions, and artifacts. Claude loads only what it needs, keeping the active context small without sacrificing detail over time.
+**Threads** keep your work alive across sessions. A thread is a persistent, topic-focused conversation stored as linked Markdown files on disk. Conversation history isn't held in Claude's context window where details get lost to compaction — it's written to disk and loaded selectively. Each thread has its own README, session logs, decision records, and artifacts.
+
+**Debate** helps you pressure-test a proposal before committing to it. Two agents — a proponent who stewards the idea and a skeptic who stress-tests it — run structured rounds of challenge and refinement. Neither is trying to win. Both are trying to produce a stronger plan. The result is saved as a thread artifact you can act on.
 
 ## Installation
 
@@ -24,7 +26,7 @@ cd ~/my-workspace
 
 `/ai-workspace:init` creates `threads/`, `.claude/settings.json`, and `CLAUDE.md` in your workspace directory.
 
-## Usage
+## Threads
 
 You can use explicit commands or just describe what you want in plain English. Claude understands both.
 
@@ -77,9 +79,7 @@ claude
 # or: "resume the api-redesign thread"
 ```
 
-Each thread maintains its own README, session logs, decision docs, and artifacts, all stored in `threads/` in your workspace directory.
-
-## Thread Commands
+### Thread Commands
 
 | Command | Purpose |
 |---------|---------|
@@ -93,24 +93,35 @@ Each thread maintains its own README, session logs, decision docs, and artifacts
 | `/ai-workspace:threads pop` | Resume the next parked topic |
 | `/ai-workspace:threads parked` | List parked topics |
 | `/ai-workspace:threads open <name>` | Open thread in Finder (macOS) |
-| `/ai-workspace:debate [rounds]` | Pressure-test current proposal (default: 2 rounds) |
 
-## Agents
+## Debate
 
-Agents run automatically when Claude delegates work to them:
+When you have a proposal worth pressure-testing, run a debate. The plugin invokes a **proponent** and a **skeptic** in alternating rounds. The proponent builds the strongest honest case for the idea and refines it under challenge. The skeptic counters specific assumptions, surfaces blind spots, and acknowledges when concerns are resolved. Both agents can invoke specialist agents (architect, security reviewer, etc.) to validate claims, and will pause to ask you directly when they are uncertain rather than making things up.
 
-| Agent | Purpose |
-|-------|---------|
-| **Proponent** | Stewards a proposal, builds the strongest honest case, refines under challenge |
-| **Skeptic** | Stress-tests assumptions, surfaces blind spots, acknowledges when convinced |
+The debate extracts the proposal from your current thread or conversation — no setup needed.
 
-Use `/ai-workspace:debate` to run a structured dialogue between them against the current proposal.
+```bash
+/ai-workspace:debate        # 2 rounds (default)
+/ai-workspace:debate 3      # more rounds
+```
 
-For specialist agents (architect, security reviewer, product strategist, tech advisor, cost analyzer), install the `tech-expert-agents` plugin:
+The result is saved as `threads/{name}/artifacts/debate-YYYYMMDD.md`. Requesting more rounds updates the same file rather than creating new ones.
+
+### Specialist Agents
+
+For deeper validation, install the `tech-expert-agents` plugin. Both debate agents will draw on these specialists automatically:
 
 ```
 /plugin install tech-expert-agents@sebmartin
 ```
+
+| Agent | Used for |
+|-------|---------|
+| **Architect** | System design and scalability assumptions |
+| **Security Reviewer** | Security risks and threat modeling |
+| **Tech Advisor** | Technology choice trade-offs |
+| **Cost Analyzer** | Infrastructure cost and ROI assumptions |
+| **Product Strategist** | User value and market assumptions |
 
 ## Thread Structure
 
