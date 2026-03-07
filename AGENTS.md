@@ -30,11 +30,6 @@ ai-workspace-plugin/               # Plugin repository
 ├── .claude-plugin/
 │   └── plugin.json               # Plugin manifest
 ├── agents/                       # Specialized AI personas
-│   ├── architect.md
-│   ├── security-reviewer.md
-│   ├── product-strategist.md
-│   ├── tech-advisor.md
-│   ├── cost-analyzer.md
 │   └── devils-advocate.md
 ├── skills/                       # User-invocable skills
 │   ├── common/
@@ -71,7 +66,7 @@ ai-workspace-plugin/               # Plugin repository
 **Agents:**
 - Specialized AI personas in `agents/` directory
 - Invoked automatically by Claude's Task tool when needed
-- Each agent has specific expertise (architecture, security, etc.)
+- Additional specialist agents (architect, security-reviewer, product-strategist, tech-advisor, cost-analyzer) are in the `tech-expert-agents` plugin (`/plugin install tech-expert-agents@sebmartin`)
 
 **Templates:**
 - All templates live in `templates/` directory
