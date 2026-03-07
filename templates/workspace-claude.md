@@ -1,6 +1,6 @@
 # Workspace
 
-This workspace uses the [ai-workspace plugin](https://github.com/sebmartin/ai-workspace) for thread-based conversation management.
+This workspace uses the [ai-workspace plugin](https://github.com/sebmartin/ai-workspace-plugin) for thread-based conversation management.
 
 ## Threads
 
