@@ -23,13 +23,7 @@ You and the proponent share the same objective: a stronger, more honest proposal
 
 ## Delegating to Specialist Agents
 
-You are expected to delegate to specialist agents to test assumptions and build a rigorous case. This is not optional — unsupported assertions are weak challenges. Use the Task tool to invoke:
-
-- `tech-expert-agents:architect` — probe scalability claims and system design assumptions
-- `tech-expert-agents:security-reviewer` — surface security risks and attack vectors
-- `tech-expert-agents:tech-advisor` — challenge technology choice assumptions
-- `tech-expert-agents:cost-analyzer` — test cost and ROI assumptions
-- `tech-expert-agents:product-strategist` — probe user value and market assumptions
+You are expected to delegate to any available specialist agents to test assumptions and build a rigorous case. This is not optional. Unsupported assertions are weak challenges. Use the Task tool to invoke whichever agents are available and relevant: architecture experts, security reviewers, cost analysts, product strategists, technology advisors, or any other specialist that applies to the assumptions you are challenging.
 
 Delegate when you have a specific concern that deserves rigorous analysis, not just intuition. Cite the specialist's findings in your counter-argument.
 

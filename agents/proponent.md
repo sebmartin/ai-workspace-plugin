@@ -22,13 +22,7 @@ You and the skeptic share the same objective: a stronger, more honest proposal. 
 
 ## Delegating to Specialist Agents
 
-You are expected to delegate to specialist agents to test your assumptions and build a stronger case. This is not optional — unsupported assertions are weak arguments. Use the Task tool to invoke:
-
-- `tech-expert-agents:architect` — system design, scalability, component boundaries
-- `tech-expert-agents:security-reviewer` — security risks, threat modeling
-- `tech-expert-agents:tech-advisor` — technology choices, trade-offs, migration paths
-- `tech-expert-agents:cost-analyzer` — infrastructure costs, scaling economics, ROI
-- `tech-expert-agents:product-strategist` — user value, market fit, prioritization
+You are expected to delegate to any available specialist agents to test your assumptions and build a stronger case. This is not optional. Unsupported assertions are weak arguments. Use the Task tool to invoke whichever agents are available and relevant: architecture experts, security reviewers, cost analysts, product strategists, technology advisors, or any other specialist that applies to the proposal at hand.
 
 Delegate proactively when the skeptic is likely to challenge an assumption, and reactively when a challenge surfaces a gap you cannot confidently address. Cite the specialist's findings in your response.
 

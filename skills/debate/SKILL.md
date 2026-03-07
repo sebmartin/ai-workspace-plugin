@@ -24,7 +24,16 @@ Identify the current proposal or idea from:
 
 Summarize it in 2-3 sentences: what is being proposed, what problem it solves, and what the key assumptions are.
 
-Confirm with the user before starting:
+Check whether any specialist agents are available beyond the `proponent` and `skeptic`. If none are found, warn the user before starting:
+
+```
+Note: no specialist agents are available. The debate will rely solely on the proponent
+and skeptic without external validation of assumptions, which limits its rigor.
+Consider installing specialist agents, e.g.:
+  /plugin install tech-expert-agents@sebmartin
+```
+
+Then confirm the proposal with the user before starting:
 
 ```
 I'll pressure-test the following proposal:
@@ -44,7 +53,7 @@ Each round follows this structure:
 2. **Skeptic** — given the proponent's output, counters specific assumptions, surfaces blind spots, and acknowledges concerns the proponent resolved well
 3. **Proponent** — responds to the skeptic's counters, refines the proposal
 
-Invoke each agent using the Task tool. Pass the full debate context so far so each agent builds on — not repeats — what came before.
+Invoke each agent using the Task tool. Pass the full debate context so far so each agent builds on, not repeats, what came before.
 
 Between each agent turn, briefly summarize what changed: which concerns were raised, which were resolved, which remain open.
 
@@ -60,9 +69,9 @@ If either agent needs clarification from the user (signaled by language like "I 
 
 Wait for the user's answer. Resume the debate from where it paused with the new information included in context.
 
-#### Expert Agent Invocations
+#### Specialist Agent Delegation
 
-Either agent may invoke specialist agents (`tech-expert-agents:architect`, `tech-expert-agents:security-reviewer`, `tech-expert-agents:tech-advisor`, `tech-expert-agents:cost-analyzer`, `tech-expert-agents:product-strategist`) to validate assumptions. Their findings are included in that agent's turn output and carried forward in the debate context.
+Either agent may delegate to any available specialist agents to validate assumptions. Their findings are included in that agent's turn output and carried forward in the debate context. The richer the set of available specialist agents, the more rigorous the debate.
 
 ---
 
@@ -87,7 +96,7 @@ Present the synthesis to the user before saving.
 Save to the active thread:
 
 - **First debate on this thread**: Create `threads/{thread-name}/artifacts/debate-YYYYMMDD.md`
-- **Additional rounds requested**: Update the existing debate artifact in place — do not create a new file
+- **Additional rounds requested**: Update the existing debate artifact in place. Do not create a new file.
 
 Show the relative file path (e.g. `./threads/my-thread/artifacts/debate-20260307.md`) so the user can open it directly.
 
@@ -98,7 +107,7 @@ If no active thread is set, present the synthesis inline and ask the user if the
 ## Artifact Format
 
 ```markdown
-# Debate: [Proposal Title] — [YYYY-MM-DD]
+# Debate: [Proposal Title] ([YYYY-MM-DD])
 
 ## Proposal
 
@@ -128,7 +137,7 @@ If no active thread is set, present the synthesis inline and ask the user if the
 
 ## Resolved Weaknesses
 
-- [Concern raised] — [How the proposal addressed it]
+- [Concern raised]: [How the proposal addressed it]
 
 ## Remaining Open Questions
 
