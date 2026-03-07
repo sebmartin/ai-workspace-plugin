@@ -2,9 +2,9 @@
 
 A Claude Code plugin built around two ideas: **threads** for persisting long-running conversations across Claude sessions, and **debate** for forging stronger plans through structured agentic dialogue.
 
-**Threads** keep your work alive across sessions. A thread is a persistent, topic-focused conversation stored as linked Markdown files on disk. Conversation history isn't held in Claude's context window where details get lost to compaction — it's written to disk and loaded selectively. Each thread has its own README, session logs, decision records, and artifacts.
+**Threads** keep your work alive across sessions. A thread is a persistent, topic-focused conversation stored as linked Markdown files on disk. Conversation history is written to disk and loaded selectively, not held in Claude's context window where details get lost to compaction. Each thread has its own README, session logs, decision records, and artifacts.
 
-**Debate** helps you pressure-test a proposal before committing to it. Two agents — a proponent who stewards the idea and a skeptic who stress-tests it — run structured rounds of challenge and refinement. Neither is trying to win. Both are trying to produce a stronger plan. The result is saved as a thread artifact you can act on.
+**Debate** helps you pressure-test a proposal before committing to it. Two agents run structured rounds of challenge and refinement: a proponent who stewards the idea and a skeptic who stress-tests it. Neither is trying to win. Both are trying to produce a stronger plan. The result is saved as a thread artifact you can act on.
 
 ## Installation
 
@@ -98,7 +98,7 @@ claude
 
 When you have a proposal worth pressure-testing, run a debate. The plugin invokes a **proponent** and a **skeptic** in alternating rounds. The proponent builds the strongest honest case for the idea and refines it under challenge. The skeptic counters specific assumptions, surfaces blind spots, and acknowledges when concerns are resolved. Both agents can invoke specialist agents (architect, security reviewer, etc.) to validate claims, and will pause to ask you directly when they are uncertain rather than making things up.
 
-The debate extracts the proposal from your current thread or conversation — no setup needed.
+The debate extracts the proposal from your current thread or conversation. No setup needed.
 
 ```bash
 /ai-workspace:debate        # 2 rounds (default)
@@ -140,11 +140,11 @@ my-workspace/
     └── settings.json        # Auto-generated settings
 ```
 
-- 📋 **README** — entry point for the thread; stays concise and links out to everything else
-- 💬 **sessions/** — log of each conversation, one file per session
-- ⚖️ **decisions/** — recorded decisions with context and rationale, so the "why" isn't lost over time
-- 📎 **attachments/** — files you bring into the thread (specs, screenshots, exported data)
-- ✨ **artifacts/** — files Claude generates (snapshots, reports, diagrams)
+- 📋 **README**: entry point for the thread; stays concise and links out to everything else
+- 💬 **sessions/**: log of each conversation, one file per session
+- ⚖️ **decisions/**: recorded decisions with context and rationale, so the "why" isn't lost over time
+- 📎 **attachments/**: files you bring into the thread (specs, screenshots, exported data)
+- ✨ **artifacts/**: files Claude generates (snapshots, reports, diagrams)
 
 ## Migrating from the workspace template
 
