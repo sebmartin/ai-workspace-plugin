@@ -30,7 +30,8 @@ ai-workspace-plugin/               # Plugin repository
 ├── .claude-plugin/
 │   └── plugin.json               # Plugin manifest
 ├── agents/                       # Specialized AI personas
-│   └── devils-advocate.md
+│   ├── proponent.md
+│   └── skeptic.md
 ├── skills/                       # User-invocable skills
 │   ├── common/
 │   │   └── workspace_utils.py   # Shared utilities
@@ -65,6 +66,7 @@ ai-workspace-plugin/               # Plugin repository
 
 **Agents:**
 - Specialized AI personas in `agents/` directory
+- `proponent` and `skeptic` work as a pair, orchestrated by the `/ai-workspace:debate` skill
 - Invoked automatically by Claude's Task tool when needed
 - Additional specialist agents (architect, security-reviewer, product-strategist, tech-advisor, cost-analyzer) are in the `tech-expert-agents` plugin (`/plugin install tech-expert-agents@sebmartin`)
 

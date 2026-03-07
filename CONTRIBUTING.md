@@ -22,7 +22,8 @@ ai-workspace-plugin/
 ├── .claude-plugin/
 │   └── plugin.json            # Plugin manifest
 ├── agents/                    # AI persona subagents
-│   └── devils-advocate.md
+│   ├── proponent.md
+│   └── skeptic.md
 ├── skills/
 │   ├── common/
 │   │   └── workspace_utils.py

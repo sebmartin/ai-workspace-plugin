@@ -93,6 +93,7 @@ Each thread maintains its own README, session logs, decision docs, and artifacts
 | `/ai-workspace:threads pop` | Resume the next parked topic |
 | `/ai-workspace:threads parked` | List parked topics |
 | `/ai-workspace:threads open <name>` | Open thread in Finder (macOS) |
+| `/ai-workspace:debate [rounds]` | Pressure-test current proposal (default: 2 rounds) |
 
 ## Agents
 
@@ -100,7 +101,10 @@ Agents run automatically when Claude delegates work to them:
 
 | Agent | Purpose |
 |-------|---------|
-| **Devil's Advocate** | Critical thinking, finding flaws in proposals |
+| **Proponent** | Stewards a proposal, builds the strongest honest case, refines under challenge |
+| **Skeptic** | Stress-tests assumptions, surfaces blind spots, acknowledges when convinced |
+
+Use `/ai-workspace:debate` to run a structured dialogue between them against the current proposal.
 
 For specialist agents (architect, security reviewer, product strategist, tech advisor, cost analyzer), install the `tech-expert-agents` plugin:
 

@@ -15,7 +15,7 @@ What were we trying to accomplish in this session?
 - Point 3
 
 ### Skills Used
-- [e.g., /architect, /devils-advocate, /product-strategist]
+- [e.g., /ai-workspace:debate, /ai-workspace:threads snapshot]
 
 ### Decisions Made
 - Decision 1 → [Link to ADR if created]
