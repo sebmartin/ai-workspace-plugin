@@ -41,7 +41,6 @@ ai-workspace-plugin/
 │   └── ...
 ├── tests/
 │   └── test_mcp_server.py
-├── AGENTS.md
 ├── CLAUDE.md
 ├── CONTRIBUTING.md
 ├── README.md
