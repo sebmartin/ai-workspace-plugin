@@ -1,68 +1,197 @@
-# Agent Instructions
+# AI Workspace Plugin - Agent Instructions
 
-Global instructions for AI assistants working in this repository.
+Instructions for AI assistants working in this repository.
 
-## Core Principles
+## Project Overview
 
-### Never Hallucinate
+This is a Claude Code plugin that provides thread-based workspace management for long-running AI-assisted development projects. Users install this plugin once and use it across multiple projects.
 
-**CRITICAL**: Always verify assumptions before stating them as facts.
+**Key capabilities:**
+- Thread management - Organize work into persistent discussion threads
+- Specialized agents - Architect, security-reviewer, product-strategist, etc.
+- Decision tracking - Log architectural decisions with automatic context
+- Snapshots - Generate shareable summaries
 
-- ✅ **Verify file existence** - Use Read, Glob, or Bash to check before claiming a file exists
-- ✅ **Verify thread names** - Use list-threads.py or read workspace/threads/ before naming threads
-- ✅ **Verify content** - Read actual files before describing their contents
-- ✅ **Verify commands** - Check that scripts/tools exist before referencing them
-- ✅ **Verify state** - Don't assume git status, process state, or system state - check it
+**User workflow:**
+```bash
+cd ~/my-project
+claude --plugin-dir ~/ai-workspace-plugin
+/ai-workspace:threads create feature-work
+```
 
-**When you don't know something:**
-- Say "Let me check..." and use tools to verify
-- If a file doesn't exist, say "That file doesn't exist"
-- If you're unsure, admit it - don't guess
+The plugin auto-creates `threads/` and `.claude/settings.json` on first use.
 
-**Never:**
-- ❌ Invent file paths, thread names, or content
-- ❌ Assume threads exist without checking
-- ❌ Describe file contents without reading them
-- ❌ Reference tools/scripts without verifying they exist
-- ❌ Make up decision documents, logs, or artifacts
+## Architecture
 
-## Repository Context
+### Directory Structure
 
-This is an AI workspace template for organizing long-running discussions with thread management.
+```
+ai-workspace-plugin/               # Plugin repository
+├── .claude-plugin/
+│   └── plugin.json               # Plugin manifest
+├── agents/                       # Specialized AI personas
+│   ├── architect.md
+│   ├── security-reviewer.md
+│   ├── product-strategist.md
+│   ├── tech-advisor.md
+│   ├── cost-analyzer.md
+│   └── devils-advocate.md
+├── skills/                       # User-invocable skills
+│   ├── common/
+│   │   └── workspace_utils.py   # Shared utilities
+│   └── threads/                 # Thread management skill
+│       ├── SKILL.md             # Skill definition
+│       └── scripts/
+│           └── mcp_server.py    # FastMCP server with list_threads, get_thread_status
+├── templates/                    # Templates for threads
+│   ├── thread-template.md
+│   ├── thread-session-template.md
+│   ├── snapshot-template.md
+│   ├── settings.json.template
+│   └── ...
+├── README.md                     # User documentation
+├── CONTRIBUTING.md               # Developer documentation
+└── AGENTS.md                     # This file
+```
 
-**Key directories:**
-- `workspace/` - Private user content (gitignored, never commit)
-- `.claude/skills/` - Custom AI personas and capabilities
-- `templates/` - Reusable templates
+### Key Concepts
 
-**Privacy protection:**
-- Git hooks prevent committing `workspace/` files (except .keep and README.md)
-- Always respect workspace privacy - it contains user's private work
+**Plugin vs Workspace separation:**
+- Plugin: Installed once at `~/ai-workspace-plugin` (this repository)
+- Workspace: User's project directory (e.g., `~/my-project`)
+- The plugin creates `threads/` directory in each workspace
+- Each workspace gets its own auto-generated `.claude/settings.json`
 
-## Working with Threads
+**Skills:**
+- Defined in `skills/` directory
+- Each skill has a `SKILL.md` file (interpretive instructions for Claude)
+- Supporting scripts (Python, etc.) live in `scripts/` subdirectory
+- Invoked with `/ai-workspace:skill-name` command
 
-When asked about threads:
-1. Use `.claude/skills/threads/scripts/list-threads.py` to list available threads
-2. Read `workspace/threads/{name}/README.md` for thread details
-3. Never assume thread content - always read the files
+**Agents:**
+- Specialized AI personas in `agents/` directory
+- Invoked automatically by Claude's Task tool when needed
+- Each agent has specific expertise (architecture, security, etc.)
 
-**Thread resuming:**
-- When users launch Claude: They should use `claude --continue` or `claude --resume <id>` to preserve full conversation context
-- Within a session: Use `/threads resume <name>` to switch between threads mid-conversation
-- After creating/resuming a thread: Output "**Working on thread: [thread-name]**" for clarity
+**Templates:**
+- All templates live in `templates/` directory
+- Accessed via `get_template_path()` in workspace_utils.py
+- Include thread structure, sessions, decisions, snapshots, settings
 
-## Code Quality
+## Development Workflow
 
-- Follow existing patterns in the codebase
-- Keep solutions simple - avoid over-engineering
-- Only make changes that are directly requested
-- Test changes before committing
-- Use pre-commit hooks (they protect workspace privacy)
+### Making Changes
+
+1. **Read before modifying** - Always read files before editing them
+2. **Follow existing patterns** - Match the style and structure of existing code
+3. **Test changes** - Use `--plugin-dir` flag to test locally
+4. **Keep it simple** - Avoid over-engineering, only change what's needed
+
+### Making Changes
+
+See CONTRIBUTING.md for testing procedures, common tasks, and PR guidelines.
+
+## Key Patterns
+
+### Auto-creation System
+
+The plugin uses lazy initialization:
+- `ensure_settings()` - Auto-creates `.claude/settings.json` from template
+- SKILL.md create flow handles `threads/` directory creation via Bash(mkdir:*)
+- No separate initialization step required - just start using threads
+
+### Template Access
+
+All templates use `get_template_path()` helper:
+```python
+from workspace_utils import get_template_path
+
+template_path = get_template_path("thread-template.md")
+# Returns: plugin_dir / "templates" / "thread-template.md"
+```
+
+**Never** hardcode paths to templates. Always use `get_template_path()`.
+
+### Thread Structure
+
+When creating a thread, the structure is:
+```
+threads/{thread-name}/
+├── README.md           # From templates/thread-template.md
+├── sessions/           # Session logs (one per conversation)
+├── decisions/          # ADRs (YYYYMMDD-title.md)
+├── attachments/        # Input files
+└── artifacts/          # Output files (snapshots, reports)
+```
+
+### Skill Invocation
+
+Users invoke skills with `/ai-workspace:skill-name` command. When a skill is invoked:
+1. Claude loads the skill's `SKILL.md` file
+2. Claude follows the interpretive instructions in SKILL.md
+3. Claude may call Python scripts using the Bash tool
+4. Scripts use workspace_utils.py for common operations
+
+### MCP Tool Invocation
+
+Skills use MCP tools instead of Python scripts. The threads MCP server is declared in `.claude-plugin/plugin.json` and exposes tools via the `threads` server name:
+
+```
+mcp__threads__list_threads(workspace_dir="/absolute/path/to/workspace")
+mcp__threads__get_thread_status(workspace_dir="/absolute/path/to/workspace", thread_name="my-thread")
+```
+
+**Why this matters:**
+- Plugin is at: `~/ai-workspace-plugin/` (or in Claude's plugin cache)
+- User workspace is at: `~/my-project/`
+- Pass the current working directory as `workspace_dir` (literal path, not `$(pwd)`)
+- MCP tools have typed signatures — no shell argument quoting issues
+
+## Verification Practices
+
+**Before referencing project resources:**
+- ✅ Call `mcp__threads__list_threads` to list threads before naming them
+- ✅ Use Read/Glob to verify file existence
+- ✅ Read files before describing their contents
+
+**When working with threads (as a user would):**
+- Threads are in the user's workspace, not the plugin repo
+- Use `mcp__threads__list_threads(workspace_dir="/path/to/workspace")` to see available threads
+- Read `threads/{name}/README.md` for thread details
+- Never assume thread content - always verify
 
 ## Communication Style
 
+When working in this repository:
 - Be concise and direct
 - Use technical language appropriately
 - Don't use emojis unless requested
-- Show file paths with line numbers: `file.py:123`
+- Show file paths with line numbers: `workspace_utils.py:45`
 - When making changes, explain what and why briefly
+- Focus on the change, not general commentary
+
+## Project-Specific Notes
+
+**Plugin installation model:**
+- Users install the plugin once (`git clone` to `~/ai-workspace-plugin`)
+- Plugin is loaded with `--plugin-dir ~/ai-workspace-plugin` flag
+- Same plugin installation used across all user projects
+- No per-workspace plugin installation needed
+
+**No workspace/ directory anymore:**
+- Old architecture: plugin had `workspace/` subdirectory for user content
+- New architecture: user's entire project directory IS the workspace
+- Threads live in `threads/` directly in user's project
+- This change happened to simplify separation of plugin vs. user content
+
+**No init skill:**
+- Previously: `/ai-workspace:init` skill created workspace structure
+- Now: Structure auto-created on first thread operation
+- This removed dependency on uv, pre-commit, git hooks
+- Zero-setup experience - just start using threads
+
+**Settings file:**
+- Auto-generated from `templates/settings.json.template`
+- Created at `.claude/settings.json` in user's workspace
+- Contains permission allowlist for plugin operations
+- User can customize their copy if needed

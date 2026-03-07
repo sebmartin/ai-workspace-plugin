@@ -1,0 +1,61 @@
+---
+name: init
+description: Initialize the ai-workspace plugin in the current directory. Creates threads/, .claude/settings.json, and CLAUDE.md. Safe to re-run — skips files that already exist.
+---
+
+# Init Skill
+
+Initialize the ai-workspace plugin in the current working directory.
+
+## What It Creates
+
+1. `.claude/settings.json` — permission allowlist for plugin operations
+2. `threads/` — directory where conversation threads will be stored
+3. `CLAUDE.md` — workspace instructions for Claude
+
+All steps are skipped if the file or directory already exists. Safe to re-run.
+
+## Steps
+
+### 1. Create `.claude/settings.json`
+
+Check if `.claude/settings.json` exists. If not:
+
+```bash
+mkdir -p .claude
+```
+
+Then read `${CLAUDE_PLUGIN_ROOT}/templates/settings.json.template` and write it to `.claude/settings.json`.
+
+### 2. Create `threads/`
+
+```bash
+mkdir -p threads
+```
+
+Skip if `threads/` already exists.
+
+### 3. Create `CLAUDE.md`
+
+Check if `CLAUDE.md` exists. If not, read `${CLAUDE_PLUGIN_ROOT}/templates/workspace-claude.md` and write it to `CLAUDE.md`.
+
+## Output
+
+Report what was created vs skipped:
+
+```
+Initialized ai-workspace in /path/to/workspace
+
+Created:
+  threads/
+  .claude/settings.json
+  CLAUDE.md
+
+Skipped (already exists):
+  (none)
+
+Start your first thread:
+  /ai-workspace:threads create my-first-thread
+```
+
+Use the actual absolute path of the current working directory, not a placeholder.

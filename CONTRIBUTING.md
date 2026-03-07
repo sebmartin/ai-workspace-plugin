@@ -1,63 +1,99 @@
-# Contributing to AI Workspace Template
+# Contributing to AI Workspace Plugin
 
-Thank you for contributing! This template helps developers maintain privacy while collaborating on AI-assisted projects with Claude Code.
+Thank you for contributing! This plugin helps developers organize long-running AI conversations with thread management and specialized agents.
 
 ## Development Setup
 
 1. Clone the repository
-2. Run `./setup.sh` to install dependencies and git hooks
-3. Make your changes (skills, templates, documentation)
-4. Test that hooks work correctly (see below)
-5. Submit a pull request
+2. Make your changes (skills, agents, templates, documentation)
+3. Test with `--plugin-dir` flag (see Testing below)
+4. Submit a pull request
 
 ## Prerequisites
 
-- **uv** - Python package manager ([installation](https://docs.astral.sh/uv/getting-started/installation/))
+- **Claude Code CLI** - Required to test the plugin
 - **git** - Version control
+- **uv** - Required to run the MCP server and tests (see https://docs.astral.sh/uv/getting-started/installation/)
 
 ## Project Structure
 
 ```
-ai-workspace/
-├── .claude/skills/       # AI persona definitions (skills)
-├── templates/            # Reusable templates
-├── hooks/                # Git hook scripts (versioned)
-├── tests/                # Test scripts
-├── workspace/            # User's private content (gitignored)
-├── .venv/                # Python virtual environment (gitignored)
-├── setup.sh              # Main setup script
-├── pyproject.toml        # Project metadata and dependencies
-├── uv.lock               # Locked dependency versions
-└── .pre-commit-config.yaml  # Hook configuration
+ai-workspace-plugin/
+├── .claude-plugin/
+│   └── plugin.json            # Plugin manifest
+├── agents/                    # AI persona subagents
+│   ├── architect.md
+│   ├── security-reviewer.md
+│   └── ...
+├── skills/
+│   ├── common/
+│   │   └── workspace_utils.py
+│   └── threads/
+│       ├── SKILL.md
+│       └── scripts/
+│           └── mcp_server.py
+├── templates/                 # Thread templates
+│   ├── thread-template.md
+│   ├── settings.json.template
+│   └── ...
+├── tests/
+│   └── test_mcp_server.py
+├── README.md
+├── CONTRIBUTING.md
+├── AGENTS.md
+└── LICENSE
 ```
 
-## Testing Git Hooks
+## Testing the Plugin
 
-To verify the workspace protection works:
+### Unit Tests
 
 ```bash
-# This should be BLOCKED
-echo "test" > workspace/test.txt
-git add workspace/test.txt
-git commit -m "test"  # Should fail with clear error message
+# Run unit tests
+uv run --with pytest --with mcp python3 -m pytest tests/ -v
+```
 
-# This should SUCCEED
-echo "test" > templates/new-template.md
-git add templates/new-template.md
-git commit -m "Add new template"
+### Basic Testing
 
-# Run all hooks manually
-pre-commit run --all-files
+Test your changes using the `--plugin-dir` flag:
+
+```bash
+# Navigate to your plugin repository
+cd ~/ai-workspace-plugin
+
+# Load the plugin in any directory
+cd ~/some-other-directory
+claude --plugin-dir ~/ai-workspace-plugin
+```
+
+### Testing Thread Management
+
+```bash
+cd /tmp/test-workspace
+claude --plugin-dir ~/ai-workspace-plugin
+
+# Create first thread (auto-creates structure)
+/ai-workspace:threads create test-thread
+# Verify: ls threads/       # Should show test-thread/
+# Verify: ls .claude/       # Should show settings.json
+
+# Test thread operations
+/ai-workspace:threads
+/ai-workspace:threads save
+/ai-workspace:threads snapshot
+
+# Clean up
+cd ~
+rm -rf /tmp/test-workspace
 ```
 
 ## Code Style
 
 ### Python
-- **Formatting**: Black (automatic via pre-commit)
-- **Skills**: Follow existing patterns in `.claude/skills/`
+- Follow PEP 8 style
+- **Skills**: Follow existing patterns in `skills/`
 
 ### Bash
-- **Linting**: ShellCheck compliant (automatic via pre-commit)
 - **Style**: Use `set -euo pipefail` for safety
 - **Scripts**: Must be executable (chmod +x)
 
@@ -68,69 +104,65 @@ pre-commit run --all-files
 
 ## Adding New Skills
 
-1. Create directory in `.claude/skills/<skill-name>/`
+1. Create directory in `skills/<skill-name>/`
 2. Add `SKILL.md` with skill definition
-3. Add any supporting scripts in `scripts/` subdirectory
+3. Add supporting scripts (Python, etc.) in `scripts/` subdirectory if needed
 4. Update README.md to list the new skill
-5. Test the skill works with `/skill-name` command
+5. Test the skill works with `/ai-workspace:skill-name` command
 
 ## Pull Request Guidelines
 
 - **Clear description**: Explain what changes and why
 - **Update documentation**: If behavior changes, update relevant docs
-- **Test hooks**: Verify git hooks still work correctly
 - **No workspace/ files**: PRs must not include workspace/ content
-- **Code quality**: Pre-commit hooks must pass
+- **Tests pass**: Run `uv run --with pytest --with mcp python3 -m pytest tests/ -v`
 
 ## Common Tasks
 
-### Update Python dependencies
+### Update templates
 
 ```bash
-uv add <package>    # add a dependency (updates pyproject.toml and uv.lock)
-uv sync             # install from lockfile after editing pyproject.toml
+# Edit templates in templates/
+vim templates/thread-template.md
+
+# Test by creating a workspace and using the template
+cd /tmp/test-workspace
+/ai-workspace:threads create test
 ```
 
-### Update hook scripts
+### Modify skills
 
 ```bash
-# Edit scripts in hooks/
-vim hooks/check-workspace-files.sh
+# Edit skill definition
+vim skills/threads/SKILL.md
 
-# Test changes
-pre-commit run block-workspace-files --all-files
+# Edit MCP server
+vim skills/threads/scripts/mcp_server.py
 
-# Reinstall hooks
-pre-commit install --install-hooks
-```
+# Run tests
+uv run --with pytest --with mcp python3 -m pytest tests/ -v
 
-### Run hooks manually
-
-```bash
-# Run on all files
-pre-commit run --all-files
-
-# Run specific hook
-pre-commit run block-workspace-files
-
-# Run on staged files only
-pre-commit run
+# Test the skill
+/ai-workspace:threads
 ```
 
 ## Release Checklist
 
 Before releasing a new version:
 
-- [ ] `./setup.sh` runs without errors
-- [ ] Git hooks installed and executable
-- [ ] `pre-commit run --all-files` passes
-- [ ] Can create workspace/test.txt
-- [ ] Cannot commit workspace/test.txt (blocked with clear message)
-- [ ] Can commit templates/test.txt
-- [ ] `pre-commit run --all-files` passes
-- [ ] Documentation is up to date
-- [ ] SETUP.md mentions running setup.sh
-- [ ] README.md Quick Start is accurate
+- [ ] Plugin loads with `claude --plugin-dir .`
+- [ ] Auto-creation works in clean directory:
+  - [ ] `threads/` directory created on first thread
+  - [ ] `.claude/settings.json` created automatically
+- [ ] Thread management works:
+  - [ ] `/ai-workspace:threads create` works
+  - [ ] `/ai-workspace:threads` lists threads
+  - [ ] `/ai-workspace:threads save` works
+  - [ ] `/ai-workspace:threads snapshot` works
+- [ ] Documentation is up to date:
+  - [ ] README.md Quick Start is accurate
+  - [ ] CONTRIBUTING.md reflects current structure
+  - [ ] plugin.json version bumped
 
 ## Questions?
 

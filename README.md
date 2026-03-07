@@ -1,207 +1,152 @@
-# AI Workspace Template
+# AI Workspace Plugin
 
-A structured workspace for AI-assisted development with Claude Code. Manage long-running discussions, track decisions, and maintain context across sessions.
+A Claude Code plugin for managing long-running conversations with Claude.
 
-## Features
+**Threads** are the core concept. A thread is a persistent, topic-focused conversation (a brainstorming session, a design discussion, a research topic) that survives across multiple Claude sessions. Conversation history is stored as a set of linked Markdown files on disk rather than held in Claude's context window, where details get lost to compaction. The thread README acts as an index into session logs, decisions, and artifacts. Claude loads only what it needs, keeping the active context small without sacrificing detail over time.
 
-- **🧵 Thread-based discussions** - Organize work into self-contained threads that persist across days/weeks/months
-- **🎭 Custom AI personas** - Get specialized perspectives from dedicated subagents (architect, product-strategist, etc.)
-- **📝 Decision tracking** - Log architectural decisions with automatic context updates
-- **✅ TODO management** - Track tasks within threads with auto-archiving
-- **📸 Snapshots** - Generate shareable summaries for teammates
-- **🔗 Linked threads** - Connect related discussions
+## Installation
 
-## Quick Start
+Install via the Claude Code marketplace:
 
-See [SETUP.md](SETUP.md) for detailed installation instructions.
-
-```bash
-# 1. Clone this template
-git clone <this-repo-url> my-ai-workspace
-cd my-ai-workspace
-
-# 2. Run setup
-./setup.sh
-
-# 3. Start a new thread!
-/threads create
+```
+/plugin marketplace add sebmartin/ai-marketplace
+/plugin install ai-workspace@sebmartin
 ```
 
-## Available Skills & Agents
+Restart Claude Code after installing for the plugin to take effect.
 
-### Skills (invoke with `/name`)
+Then initialize a workspace:
 
-| Skill | Command | Purpose |
-|-------|---------|---------|
-| **Threads** | `/threads` | Create, resume, snapshot discussion threads |
-| **TODOs** | `/later` | Track tasks within threads |
-| Devil's Advocate | `/devils-advocate` | Challenge ideas, find flaws (runs inline) |
+```bash
+cd ~/my-workspace
+/ai-workspace:init
+```
 
-### Subagents (Claude delegates automatically, or ask "use architect to...")
+`/ai-workspace:init` creates `threads/`, `.claude/settings.json`, and `CLAUDE.md` in your workspace directory.
+
+## Usage
+
+You can use explicit commands or just describe what you want in plain English. Claude understands both.
+
+Start a thread for a design session:
+
+```bash
+/ai-workspace:threads create api-redesign
+# or: "start a new thread called api-redesign"
+```
+
+Work with Claude, then manage context as you go:
+
+```bash
+# Log an important decision
+/ai-workspace:threads log-decision
+# or: "log this decision"
+
+# Park a follow-up to handle later
+/ai-workspace:threads park "investigate caching options"
+# or: "park caching options for later"
+
+# Save context before ending the session
+/ai-workspace:threads save
+# or: "save the thread"
+```
+
+Switch to a second thread mid-session (your first thread is preserved):
+
+```bash
+/ai-workspace:threads create auth-refactor
+# or: "create a new thread for the auth refactor"
+```
+
+Generate a shareable summary from any thread:
+
+```bash
+/ai-workspace:threads snapshot
+# or: "create a snapshot"
+```
+
+Pick it back up days later:
+
+```bash
+# Continue your last session (full context restored)
+claude --continue
+
+# Or reload a specific thread in a new context window
+claude
+/ai-workspace:threads resume api-redesign
+# or: "resume the api-redesign thread"
+```
+
+Each thread maintains its own README, session logs, decision docs, and artifacts, all stored in `threads/` in your workspace directory.
+
+## Thread Commands
+
+| Command | Purpose |
+|---------|---------|
+| `/ai-workspace:threads` | List all threads |
+| `/ai-workspace:threads create <name>` | Start a new thread |
+| `/ai-workspace:threads resume <name>` | Switch to a thread mid-session |
+| `/ai-workspace:threads save` | Update thread context |
+| `/ai-workspace:threads snapshot` | Generate a shareable summary |
+| `/ai-workspace:threads log-decision` | Record an architectural decision |
+| `/ai-workspace:threads park "<topic>"` | Park a topic for later |
+| `/ai-workspace:threads pop` | Resume the next parked topic |
+| `/ai-workspace:threads parked` | List parked topics |
+| `/ai-workspace:threads open <name>` | Open thread in Finder (macOS) |
+
+## Agents
+
+Agents run automatically when Claude delegates work to them:
 
 | Agent | Purpose |
 |-------|---------|
-| Architect | System design, scalability, technical architecture |
-| Product Strategist | User value, market fit, prioritization |
-| Tech Advisor | Technology choices, frameworks, migration paths |
-| Cost Analyzer | Infrastructure costs, scaling economics, ROI |
-| Security Reviewer | Threat modeling, vulnerability identification |
+| **Architect** | System design, scalability, technical architecture |
+| **Security Reviewer** | Threat modeling, vulnerability identification |
+| **Product Strategist** | User value, market fit, prioritization |
+| **Tech Advisor** | Technology choices, frameworks, migration paths |
+| **Cost Analyzer** | Infrastructure costs, scaling economics, ROI |
+| **Devil's Advocate** | Critical thinking, finding flaws in proposals |
 
-Subagents run in isolated context with persistent memory, so they build knowledge over time. You can also add your own private agents in `workspace/.claude/agents/`.
+## Thread Structure
 
-## Workflow
+After creating a thread, your workspace will have:
 
-### Start a new thread
+```
+my-workspace/
+├── threads/
+│   └── {thread-name}/
+│       ├── README.md        # Thread overview and current focus
+│       ├── sessions/        # Session logs
+│       ├── decisions/       # Decision docs
+│       ├── attachments/     # Input files
+│       └── artifacts/       # Generated outputs (snapshots, reports)
+└── .claude/
+    └── settings.json        # Auto-generated settings
+```
+
+## Migrating from the workspace template
+
+If you used the previous template-based version, your threads live in `workspace/threads/` inside the cloned repo. With the plugin model, your workspace is just a regular directory, not a clone of this repo.
+
+Before starting, if you don't already have a backup of your threads, now is a good time to make one. Copy `workspace/threads/` somewhere safe or push it to a private repo.
+
+**1. Create a new workspace directory and initialize it**
 
 ```bash
-# Create a new thread for your project
-/threads create my-new-thread
-
-# Add attachments - copy files into the thread's `attachments` directory to include into the thread context
-
-# Work on it - context automatically persists
-
-# Track tasks
-/later create feature-implementation
-/later add "Build API endpoint"
-/later complete "Build API endpoint"
-
-# Log important decisions
-/threads log-decision
-
-# Generate a snapshot to share
-/threads snapshot
-
-# Save persist the current thread context to disk
-/threads save
+mkdir ~/my-workspace
+cd ~/my-workspace
+/ai-workspace:init
 ```
 
-**Manage threads with `/threads` commands:**
-- `/threads` - List all available threads (when starting something new)
-- `/threads resume <name>` - Switch to a different thread mid-session
-- `/threads save` - Explicitly save current progress to thread README
-- `/threads snapshot` - Generate a shareable summary
-
-## Resuming Threads
-
-Choose the right approach based on your scenario:
-
-### When Starting Claude (Recommended)
-
-**Use Claude Code's built-in session management to preserve full context:**
+**2. Move your threads over**
 
 ```bash
-# Continue your last conversation (maintains full context including active thread)
-claude --continue
-
-# Or choose from previous sessions
-claude --resume
+mv ~/ai-workspace/workspace/threads/* ~/my-workspace/threads/
 ```
 
-**Why this works best:**
-- ✅ Continues the entire conversation context, not just thread metadata
-- ✅ Preserves your active thread across sessions automatically
-- ✅ Much faster - no need to reload thread READMEs
-- ✅ Works even after multiple context window compactions
+## Plugin Development
 
-### Within an Active Session
-
-**Use `/threads resume` to switch between threads mid-session:**
-
-```bash
-# Switch to a different thread while Claude is running
-/threads resume other-thread
-```
-
-**When to use:** You're already in a conversation and want to switch focus to a different thread.
-
-### Anti-Pattern to Avoid
-
-❌ **Don't:** Start a fresh Claude session, then immediately `/threads resume`
-
-This loses the conversation context from your previous work. Instead, use `claude --continue` or `claude --resume <id>` when launching Claude.
-
-
-## Directory Structure
-
-```
-ai-workspace/
-├── .claude/
-│   ├── skills/           # Slash-command skills
-│   │   ├── threads/      # Thread management
-│   │   ├── later/        # TODO tracking
-│   │   └── devils-advocate/
-│   └── agents/           # AI persona subagents
-│       ├── architect.md
-│       ├── product-strategist.md
-│       ├── tech-advisor.md
-│       ├── cost-analyzer.md
-│       └── security-reviewer.md
-├── templates/            # Reusable templates
-├── workspace/            # Your private workspace (gitignored)
-│   ├── .claude/          # Private skills & agents
-│   │   ├── skills/       # Private slash commands
-│   │   └── agents/       # Private persona subagents
-│   └── threads/
-│       └── {thread-name}/
-│           ├── README.md     # Thread overview
-│           ├── sessions/     # Session logs
-│           ├── decisions/    # Decision docs
-│           ├── todos/        # Task lists
-│           ├── attachments/  # Input files
-│           └── artifacts/    # Generated outputs
-├── SETUP.md
-└── README.md             # This file
-```
-
-## Key Concepts
-
-**Threads** - Self-contained discussions with their own README, sessions, decisions, and artifacts. Create one per project or major topic.
-
-**README as Landing Page** - Each thread's README stays brief (problem, current focus, next steps). Detailed content lives in subdirectories.
-
-**Snapshots vs README** - README is the living document. Snapshots are timestamped artifacts for sharing externally.
-
-**Artifacts vs Attachments** - Attachments are inputs (your sketches, references). Artifacts are outputs (generated snapshots, refined diagrams).
-
-**Auto-archiving** - Completed TODO lists automatically move to `todos/complete/` to keep your workspace clean.
-
-## Privacy & Security
-
-This template includes **automatic protection** for your private workspace:
-
-### Git Hooks (via pre-commit)
-
-Installed by `./setup.sh`, these hooks prevent:
-- ✅ Committing workspace/ files to the public template
-- ✅ Pushing workspace/ files accidentally
-- ✅ Leaking private work to public repositories
-
-### How It Works
-
-**3-layer protection:**
-1. `.gitignore` excludes `workspace/*` (except .keep and README.md)
-2. Pre-commit hook blocks staging workspace/ files
-3. Pre-push hook provides final safety check
-
-**Automatic setup:**
-```bash
-./setup.sh  # Installs hooks using pre-commit framework
-```
-
-### Why Separate Workspace?
-
-- **Privacy**: The `workspace/` directory is ignored by the public template repo
-- **Clean updates**: Pull template updates without affecting your workspace contents
-- **Optional backup**: Make `workspace/` a nested private git repo for version control
-- **Separation**: Your workspace data never commits to the public template repo
-
-## Contributing
-
-This is a template - fork it and make it your own! Contributions welcome:
-- New skills
-- Better templates
-- Workflow improvements
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development details.
 
 ## License
 

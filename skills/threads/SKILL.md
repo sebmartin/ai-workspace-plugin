@@ -7,9 +7,20 @@ description: Thread management for organizing long-running discussions. Use when
 
 You are a thread management assistant that helps organize and navigate long-running discussion threads.
 
+## Environment Setup
+
+This skill is part of the `ai-workspace` plugin and uses the `/ai-workspace:threads` namespace.
+
+**Workspace Location:**
+- Threads are stored in `threads/` directory in the current working directory
+- The `threads/` directory is auto-created on first use
+
+**Multiple Workspaces:**
+You can maintain separate workspaces (work, personal) by using the plugin in different directories.
+
 ## Your Role
 
-When invoked, help the user manage their threads in `workspace/threads/`:
+When invoked, help the user manage their threads in `threads/`:
 
 ### Commands You Handle
 
@@ -20,8 +31,8 @@ When invoked, help the user manage their threads in `workspace/threads/`:
 
 **Log a decision:**
 - Use recent session context to draft a decision document
-- Create `workspace/threads/{name}/decisions/YYYYMMDD-title.md` with decision details
-- Show relative path with `./` prefix (e.g., `./workspace/threads/foo/decisions/20260120-bar.md`) - user can cmd-click to review in editor
+- Create `threads/{name}/decisions/YYYYMMDD-title.md` with decision details
+- Show relative path with `./` prefix (e.g., `./threads/foo/decisions/20260120-bar.md`) - user can cmd-click to review in editor
 - After user confirms it's good:
   - Update README.md Quick Resume and Resources section with link to decision
   - Update current session log
@@ -37,14 +48,19 @@ When invoked, help the user manage their threads in `workspace/threads/`:
 - Read the thread's README.md, recent sessions, and decisions
 - **Important**: Also include current conversation context (unpersisted work in this session)
 - First update README.md Quick Resume with latest context
-- Generate timestamped snapshot: `workspace/threads/{name}/artifacts/snapshot-YYYYMMDD.md`
+- Generate timestamped snapshot: `threads/{name}/artifacts/snapshot-YYYYMMDD.md`
 - Show relative path for user to review in editor
 - Snapshot is an artifact (output) with date in filename for sharing externally
 
 **Save thread context:**
 - Command: `/threads save`
 - Update README.md Quick Resume section with current context
-- Update current session log
+- Create or update the session log for this invocation:
+  1. Look for a session file in `sessions/` with today's date prefix (`YYYYMMDD-*.md`)
+  2. If none exists: create one using `templates/thread-session-template.md`, named `YYYYMMDD-kebab-summary.md`, filled with current conversation context (goal, key points, decisions, next steps)
+  3. If one exists: update it — append new discussion points, decisions, and progress since last save
+  4. Link the session file in README.md Resources > Sessions if not already listed
+- A session loosely maps to a single Claude invocation: one file per conversation, updated on each save
 - Does NOT generate a snapshot (use `/threads snapshot` for that)
 
 **Link to another thread:**
@@ -60,15 +76,8 @@ When invoked, help the user manage their threads in `workspace/threads/`:
 - If "Related Threads" shows "None", replace it; otherwise append to the list
 
 **Create a new thread:**
-- Ask for thread name (must be kebab-case)
-- **Thread name requirements:**
-  - Lowercase letters (a-z), numbers (0-9), hyphens (-) only
-  - Must start and end with a letter or number
-  - No consecutive hyphens
-  - Examples: `my-thread`, `project-2024`, `api-v2`
-- Validate thread name before creating directory
-- Create directory structure: `workspace/threads/{name}/{sessions,decisions,attachments,artifacts}`
-- Copy template from `templates/thread-template.md` to `workspace/threads/{name}/README.md`
+- Ask for thread name if not provided (must be kebab-case)
+- Call `mcp__threads__create_thread(workspace_dir, thread_name)` — this handles validation, directory structure, and README creation in one step
 - Optionally help fill in initial context (problem, current state, desired state)
 - Confirm creation and show next steps
 
@@ -98,18 +107,42 @@ When invoked, help the user manage their threads in `workspace/threads/`:
   - Relevant context from last session
 - **CRITICAL**: End with a clear statement: "**Working on thread: [thread-name]**"
 
+**Park a topic:**
+- Command: `/threads park [topic]`
+- If topic not provided: ask "What would you like to park?"
+- Append to `**Parked**:` field in Quick Resume with today's date: `- [YYYY-MM-DD] topic`
+- If the Parked field shows `- None`, replace it with the new item
+- Otherwise append below existing items
+- Show confirmation: "Parked: [topic]"
+
+**Pop a parked topic:**
+- Command: `/threads pop`
+- Read README.md and find the first item in `**Parked**:`
+- If nothing parked (shows `- None`): say "Nothing parked."
+- Otherwise:
+  - Show the item: "Picking up: [topic]"
+  - Remove it from the Parked list (if it was the only item, replace with `- None`)
+  - Write a one-line entry to the current session log: `Picked up parked topic: [topic]`
+  - Update the README.md
+
+**List parked topics:**
+- Command: `/threads parked`
+- Read README.md and show the Parked section contents
+- If `- None`: say "Nothing parked in [thread-name]."
+- Otherwise list items with numbers for easy reference
+
 **Open thread in Finder (macOS):**
 - Command: `/threads open [thread-name]`
-- If thread name provided: Open that specific thread's folder (`open workspace/threads/{name}`)
-- If NO thread name provided: Open the threads directory (`open workspace/threads`)
+- If thread name provided: Open that specific thread's folder (`open threads/{name}`)
+- If NO thread name provided: Open the threads directory (`open threads`)
 - Confirm which folder was opened
 
 ## Response Format
 
 ### For List Threads
-**CRITICAL**: Run the list-threads script and **STOP**. Do not output ANY text response before or after. The script output is automatically displayed to the user - additional text is redundant and wastes their time.
+**CRITICAL**: Call the MCP tool and output the result directly. Do not add commentary.
 
-Use: `.claude/skills/threads/scripts/list-threads.py`
+Call `mcp__threads__list_threads` with the current working directory as `workspace_dir`.
 
 ### For Snapshot
 Present a concise snapshot with:
@@ -150,21 +183,29 @@ Users might say:
 - "Resume [name] thread" / "Resume" (no thread specified) / "Continue [name]"
 - "What thread am I on?" / "What's the current thread?" / "Which thread is active?"
 - "Open [thread-name] in Finder" / "Open this thread" / "Open thread folder"
+- "Park [topic]" / "Park this" / "Save this for later" / "Come back to [topic]"
+- "Pop" / "What's next?" / "Pick up the next parked item"
+- "What's parked?" / "Show parked topics" / "List parked"
 - Just a number like "2" (when responding to a selection prompt)
 
 ## Implementation
 
-**Available Scripts:**
-- `scripts/list-threads.py` - List all threads sorted by recent activity (README.md mtime)
-- `scripts/get-thread-status.py <thread-name>` - Get Quick Resume section
+**Available MCP Tools (server: `threads`):**
+- `mcp__threads__list_threads(workspace_dir)` — List threads sorted by recent activity
+- `mcp__threads__get_thread_status(workspace_dir, thread_name)` — Get Quick Resume section
+- `mcp__threads__create_thread(workspace_dir, thread_name)` — Create thread directory structure and README
 
-Run scripts using Bash tool with skill-relative paths (e.g., `.claude/skills/threads/scripts/list-threads.py`).
+Pass the current working directory as `workspace_dir` (literal path, not `$(pwd)`).
 
-**File-based operations:**
-- For commands that need full thread details: Use Read tool to read thread README.md files
-- For session logs: Use Glob with appropriate patterns
-- Use Write tool when creating new threads
-- Use Bash for mkdir when creating directory structure
+**If the MCP tools are unavailable:** Tell the user the threads MCP server failed to start. The most likely cause is `uv` not being installed. Direct them to https://docs.astral.sh/uv/getting-started/installation/ to install it, then try again.
+
+**File-based operations** (unchanged):
+- Read tool for thread README.md files
+- Glob for session log patterns
+- Write tool when creating new threads
+- Bash(mkdir:*) for directory structure
+
+**Create a new thread** — use `mcp__threads__create_thread`. Do not use Bash or Write for thread creation.
 
 ## Current Thread Tracking
 
@@ -187,7 +228,7 @@ Run scripts using Bash tool with skill-relative paths (e.g., `.claude/skills/thr
 
 README.md Quick Resume section is updated when:
 1. Decision is logged (`/threads log-decision`)
-2. TODO is created/updated (via `/later` skill)
+2. Topic is parked or popped (`/threads park` / `/threads pop`)
 3. Snapshot is requested (`/threads snapshot`) or any artifact is generated
 4. Explicitly requested (`/threads save`)
 
