@@ -138,7 +138,7 @@ mcp__threads__get_thread_status(workspace_dir="/absolute/path/to/workspace", thr
 - Don't use em dashes (—). Use a comma, period, or rewrite the sentence instead
 - Show file paths with line numbers: `workspace_utils.py:45`
 
-## Project-Specific Notes
+## Notes
 
 **Init skill:**
 - `/ai-workspace:init` creates `threads/`, `.claude/settings.json`, and `CLAUDE.md` in the user's workspace
