@@ -2,7 +2,7 @@
 
 A Claude Code plugin for managing long-running conversations with Claude.
 
-**Threads** are the core concept. A thread is a persistent, topic-focused conversation — a brainstorming session, a design discussion, a research topic — that survives across multiple Claude sessions. Conversation history is stored as a set of linked Markdown files on disk rather than held in Claude's context window, where details get lost to compaction. The thread README acts as an index into session logs, decisions, and artifacts. Claude loads only what it needs, keeping the active context small without sacrificing detail over time.
+**Threads** are the core concept. A thread is a persistent, topic-focused conversation (a brainstorming session, a design discussion, a research topic) that survives across multiple Claude sessions. Conversation history is stored as a set of linked Markdown files on disk rather than held in Claude's context window, where details get lost to compaction. The thread README acts as an index into session logs, decisions, and artifacts. Claude loads only what it needs, keeping the active context small without sacrificing detail over time.
 
 ## Installation
 
@@ -24,7 +24,7 @@ cd ~/my-workspace
 
 ## Usage
 
-You can use explicit commands or just describe what you want in plain English — Claude understands both.
+You can use explicit commands or just describe what you want in plain English. Claude understands both.
 
 Start a thread for a design session:
 
@@ -75,7 +75,7 @@ claude
 # or: "resume the api-redesign thread"
 ```
 
-Each thread maintains its own README, session logs, decision docs, and artifacts — all in `threads/` in your workspace directory.
+Each thread maintains its own README, session logs, decision docs, and artifacts, all stored in `threads/` in your workspace directory.
 
 ## Thread Commands
 
@@ -122,35 +122,27 @@ my-workspace/
     └── settings.json        # Auto-generated settings
 ```
 
-## Privacy
+## Migrating from the workspace template
 
-Threads are stored locally and not committed to git by default. To keep them private:
+If you used the previous template-based version, your threads live in `workspace/threads/` inside the cloned repo. With the plugin model, your workspace is just a regular directory, not a clone of this repo.
 
+Before starting, if you don't already have a backup of your threads, now is a good time to make one. Copy `workspace/threads/` somewhere safe or push it to a private repo.
+
+**1. Create a new workspace directory and initialize it**
+
+```bash
+mkdir ~/my-workspace
+cd ~/my-workspace
+/ai-workspace:init
 ```
-# .gitignore
-threads/
-.claude/settings.json
+
+**2. Move your threads over**
+
+```bash
+mv ~/ai-workspace/workspace/threads/* ~/my-workspace/threads/
 ```
 
 ## Plugin Development
-
-```
-ai-workspace-plugin/
-├── .claude-plugin/
-│   └── plugin.json          # Plugin manifest
-├── agents/                  # AI personas
-├── skills/
-│   ├── common/
-│   │   └── workspace_utils.py  # Shared utilities
-│   ├── init/                # Workspace init skill
-│   │   └── SKILL.md
-│   └── threads/             # Thread management
-│       ├── SKILL.md
-│       └── scripts/
-│           └── mcp_server.py   # FastMCP server
-├── templates/               # Thread templates
-└── tests/
-```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development details.
 
