@@ -1,86 +1,98 @@
 # AI Workspace Plugin
 
-A Claude Code plugin for managing long-running AI-assisted development projects with thread-based organization, specialized agents, and decision tracking.
+A Claude Code plugin for managing long-running conversations with Claude.
 
-## Features
+**Threads** are the core concept. A thread is a persistent, topic-focused conversation — a brainstorming session, a design discussion, a research topic — that survives across multiple Claude sessions. Conversation history is stored as a set of linked Markdown files on disk rather than held in Claude's context window, where details get lost to compaction. The thread README acts as an index into session logs, decisions, and artifacts. Claude loads only what it needs, keeping the active context small without sacrificing detail over time.
 
-- **🧵 Thread management** - Organize work into self-contained threads that persist across days/weeks/months
-- **🎭 Specialized agents** - Get expert perspectives from architect, security-reviewer, product-strategist, and more
-- **📝 Decision tracking** - Log architectural decisions with automatic context updates
-- **📸 Snapshots** - Generate shareable summaries for teammates
-- **🔗 Linked threads** - Connect related discussions
-- **🚀 Multi-workspace support** - Share one plugin across work and personal projects
+## Installation
 
-## Quick Start
+Install via the Claude Code marketplace:
 
-### Installation
+```
+/plugin marketplace add sebmartin/ai-marketplace
+/plugin install ai-workspace@sebmartin
+```
+
+Then initialize a workspace:
 
 ```bash
-# Clone the repository
-git clone https://github.com/sebmartin/ai-workspace-plugin ~/ai-workspace-plugin
-
-# Load the plugin when starting Claude
 cd ~/my-workspace
-claude --plugin-dir ~/ai-workspace-plugin
+/ai-workspace:init
 ```
 
-### Create Your First Thread
+`/ai-workspace:init` creates `threads/`, `.claude/settings.json`, and `CLAUDE.md` in your workspace directory.
+
+## Usage
+
+You can use explicit commands or just describe what you want in plain English — Claude understands both.
+
+Start a thread for a design session:
 
 ```bash
-# Navigate to your project directory
-cd ~/my-project
-
-# Load the plugin and create a thread
-claude --plugin-dir ~/ai-workspace-plugin
-/ai-workspace:threads create my-first-thread
-# ✓ Created threads/my-first-thread/
+/ai-workspace:threads create api-redesign
+# or: "start a new thread called api-redesign"
 ```
 
-The `threads/` directory is created automatically on first use.
-
-## Available Skills
-
-All skills are namespaced under `ai-workspace:`:
-
-| Skill | Command | Purpose |
-|-------|---------|---------|
-| **Threads** | `/ai-workspace:threads` | Create, resume, snapshot discussion threads |
-
-### Thread Commands
+Work with Claude, then manage context as you go:
 
 ```bash
-# List all threads
-/ai-workspace:threads
-
-# Create a new thread
-/ai-workspace:threads create my-thread
-
-# Resume a thread (switch mid-session)
-/ai-workspace:threads resume my-thread
-
-# Save current progress
-/ai-workspace:threads save
-
-# Create a snapshot for sharing
-/ai-workspace:threads snapshot
-
 # Log an important decision
 /ai-workspace:threads log-decision
+# or: "log this decision"
 
-# Park a topic for later
-/ai-workspace:threads park "investigate performance issue"
+# Park a follow-up to handle later
+/ai-workspace:threads park "investigate caching options"
+# or: "park caching options for later"
 
-# Pop the next parked topic
-/ai-workspace:threads pop
-
-# List parked topics
-/ai-workspace:threads parked
-
-# Open thread in Finder (macOS)
-/ai-workspace:threads open my-thread
+# Save context before ending the session
+/ai-workspace:threads save
+# or: "save the thread"
 ```
 
-## Available Agents
+Switch to a second thread mid-session (your first thread is preserved):
+
+```bash
+/ai-workspace:threads create auth-refactor
+# or: "create a new thread for the auth refactor"
+```
+
+Generate a shareable summary from any thread:
+
+```bash
+/ai-workspace:threads snapshot
+# or: "create a snapshot"
+```
+
+Pick it back up days later:
+
+```bash
+# Continue your last session (full context restored)
+claude --continue
+
+# Or reload a specific thread in a new context window
+claude
+/ai-workspace:threads resume api-redesign
+# or: "resume the api-redesign thread"
+```
+
+Each thread maintains its own README, session logs, decision docs, and artifacts — all in `threads/` in your workspace directory.
+
+## Thread Commands
+
+| Command | Purpose |
+|---------|---------|
+| `/ai-workspace:threads` | List all threads |
+| `/ai-workspace:threads create <name>` | Start a new thread |
+| `/ai-workspace:threads resume <name>` | Switch to a thread mid-session |
+| `/ai-workspace:threads save` | Update thread context |
+| `/ai-workspace:threads snapshot` | Generate a shareable summary |
+| `/ai-workspace:threads log-decision` | Record an architectural decision |
+| `/ai-workspace:threads park "<topic>"` | Park a topic for later |
+| `/ai-workspace:threads pop` | Resume the next parked topic |
+| `/ai-workspace:threads parked` | List parked topics |
+| `/ai-workspace:threads open <name>` | Open thread in Finder (macOS) |
+
+## Agents
 
 Agents run automatically when Claude delegates work to them:
 
@@ -93,138 +105,54 @@ Agents run automatically when Claude delegates work to them:
 | **Cost Analyzer** | Infrastructure costs, scaling economics, ROI |
 | **Devil's Advocate** | Critical thinking, finding flaws in proposals |
 
-## Multi-Workspace Setup
+## Thread Structure
 
-Share the plugin across multiple workspaces (work + personal):
-
-```bash
-# Work workspace
-cd ~/work-ai
-claude --plugin-dir ~/ai-workspace-plugin
-/ai-workspace:threads create ...
-
-# Personal workspace
-cd ~/personal-ai
-claude --plugin-dir ~/ai-workspace-plugin
-/ai-workspace:threads create ...
-```
-
-Each workspace has:
-- Own `threads/` directory (private threads/context)
-- Own `.claude/settings.json` (auto-generated on first use)
-- Shared plugin (installed once, used by both)
-
-## Directory Structure
-
-After creating your first thread, your workspace will have:
+After creating a thread, your workspace will have:
 
 ```
-my-project/
-├── threads/                 # Your discussion threads
+my-workspace/
+├── threads/
 │   └── {thread-name}/
-│       ├── README.md        # Thread overview
+│       ├── README.md        # Thread overview and current focus
 │       ├── sessions/        # Session logs
 │       ├── decisions/       # Decision docs
 │       ├── attachments/     # Input files
-│       └── artifacts/       # Generated outputs
+│       └── artifacts/       # Generated outputs (snapshots, reports)
 └── .claude/
     └── settings.json        # Auto-generated settings
 ```
 
-**Optional:** Add `.gitignore` to protect thread privacy:
+## Privacy
+
+Threads are stored locally and not committed to git by default. To keep them private:
+
 ```
-threads/
-```
-
-## Thread Workflow
-
-### Starting a New Thread
-
-```bash
-/ai-workspace:threads create api-redesign
-
-# Work on it - context automatically persists
-
-# Log important decisions
-/ai-workspace:threads log-decision
-
-# Park items for later
-/ai-workspace:threads park "investigate caching options"
-
-# Generate a snapshot to share
-/ai-workspace:threads snapshot
-
-# Save context
-/ai-workspace:threads save
-```
-
-### Resuming Threads
-
-**When starting Claude (recommended):**
-```bash
-# Continue your last conversation (maintains full context)
-claude --continue
-
-# Or choose from previous sessions
-claude --resume
-```
-
-**Within an active session:**
-```bash
-# Switch to a different thread
-/ai-workspace:threads resume other-thread
-```
-
-## Privacy & Security
-
-**Thread privacy:**
-- Threads are stored locally in `threads/` directory
-- Not committed to git by default (no .gitignore created)
-- Add `.gitignore` manually if you want git protection
-
-**Recommended .gitignore:**
-```
+# .gitignore
 threads/
 .claude/settings.json
 ```
 
 ## Plugin Development
 
-### Directory Structure
-
 ```
 ai-workspace-plugin/
 ├── .claude-plugin/
 │   └── plugin.json          # Plugin manifest
 ├── agents/                  # AI personas
-│   ├── architect.md
-│   ├── security-reviewer.md
-│   ├── product-strategist.md
-│   ├── tech-advisor.md
-│   ├── cost-analyzer.md
-│   └── devils-advocate.md
 ├── skills/
 │   ├── common/
 │   │   └── workspace_utils.py  # Shared utilities
-│   └── threads/                # Thread management
+│   ├── init/                # Workspace init skill
+│   │   └── SKILL.md
+│   └── threads/             # Thread management
 │       ├── SKILL.md
 │       └── scripts/
 │           └── mcp_server.py   # FastMCP server
-└── templates/               # Thread templates
-    ├── thread-template.md
-    ├── thread-session-template.md
-    ├── snapshot-template.md
-    ├── adr-template.md
-    └── feature-spec.md
+├── templates/               # Thread templates
+└── tests/
 ```
 
-## Contributing
-
-Contributions welcome! This plugin is designed to be extensible:
-- Add new skills in `skills/`
-- Add new agents in `agents/`
-- Improve templates in `templates/`
-- Enhance workspace utilities in `skills/common/`
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development details.
 
 ## License
 

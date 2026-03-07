@@ -1,11 +1,12 @@
 {
   "permissions": {
     "allow": [
-      "mcp__threads__list_threads",
-      "mcp__threads__get_thread_status",
+      "mcp__plugin_ai-workspace_threads__list_threads"
+      "mcp__plugin_ai-workspace_threads__get_thread_status"
       "Edit(threads/**)",
       "Write(threads/**)",
       "WebSearch",
+      "Glob(*)",
       "Bash(find:*)",
       "Bash(ls:*)",
       "Bash(mkdir:*)",
