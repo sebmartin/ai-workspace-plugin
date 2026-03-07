@@ -76,15 +76,8 @@ When invoked, help the user manage their threads in `threads/`:
 - If "Related Threads" shows "None", replace it; otherwise append to the list
 
 **Create a new thread:**
-- Ask for thread name (must be kebab-case)
-- **Thread name requirements:**
-  - Lowercase letters (a-z), numbers (0-9), hyphens (-) only
-  - Must start and end with a letter or number
-  - No consecutive hyphens
-  - Examples: `my-thread`, `project-2024`, `api-v2`
-- Validate thread name before creating directory
-- Create directory structure: `threads/{name}/{sessions,decisions,attachments,artifacts}`
-- Copy template from `templates/thread-template.md` to `threads/{name}/README.md`
+- Ask for thread name if not provided (must be kebab-case)
+- Call `mcp__threads__create_thread(workspace_dir, thread_name)` — this handles validation, directory structure, and README creation in one step
 - Optionally help fill in initial context (problem, current state, desired state)
 - Confirm creation and show next steps
 
@@ -200,6 +193,7 @@ Users might say:
 **Available MCP Tools (server: `threads`):**
 - `mcp__threads__list_threads(workspace_dir)` — List threads sorted by recent activity
 - `mcp__threads__get_thread_status(workspace_dir, thread_name)` — Get Quick Resume section
+- `mcp__threads__create_thread(workspace_dir, thread_name)` — Create thread directory structure and README
 
 Pass the current working directory as `workspace_dir` (literal path, not `$(pwd)`).
 
@@ -211,9 +205,7 @@ Pass the current working directory as `workspace_dir` (literal path, not `$(pwd)
 - Write tool when creating new threads
 - Bash(mkdir:*) for directory structure
 
-**Create a new thread** — after creating directories:
-- Check if `.claude/settings.json` exists in the workspace
-- If not: read `${CLAUDE_PLUGIN_ROOT}/templates/settings.json.template` and Write it to `.claude/settings.json`
+**Create a new thread** — use `mcp__threads__create_thread`. Do not use Bash or Write for thread creation.
 
 ## Current Thread Tracking
 

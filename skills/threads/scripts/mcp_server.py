@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """Threads MCP Server - Tools for managing discussion threads."""
 
+import re
 import sys
+from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "common"))
 
 from mcp.server.fastmcp import FastMCP
-from workspace_utils import get_workspace_dir
+from workspace_utils import get_template_path, get_workspace_dir, validate_thread_name
 
 mcp = FastMCP("threads")
 
@@ -75,6 +77,41 @@ def get_thread_status(workspace_dir: str, thread_name: str) -> str:
         result.pop()
 
     return "\n".join(result)
+
+
+@mcp.tool()
+def create_thread(workspace_dir: str, thread_name: str) -> str:
+    """Create a new discussion thread with the standard directory structure.
+
+    Args:
+        workspace_dir: Absolute path to the user's workspace directory.
+        thread_name: Name of the thread (kebab-case: lowercase letters, numbers, hyphens).
+    """
+    if not validate_thread_name(thread_name):
+        return (
+            f"Error: Invalid thread name '{thread_name}'. "
+            "Thread names must be kebab-case (lowercase letters, numbers, hyphens). "
+            "Examples: my-thread, api-redesign, auth-refactor"
+        )
+
+    workspace = get_workspace_dir(Path(workspace_dir))
+    thread_dir = workspace / "threads" / thread_name
+
+    if thread_dir.exists():
+        return f"Error: Thread '{thread_name}' already exists."
+
+    # Create directory structure
+    for subdir in ("sessions", "decisions", "attachments", "artifacts"):
+        (thread_dir / subdir).mkdir(parents=True, exist_ok=True)
+
+    # Write README from template, substituting placeholders
+    today = date.today().isoformat()
+    template = get_template_path("thread-template.md").read_text()
+    readme = re.sub(r"\[Thread Name\]", thread_name, template)
+    readme = re.sub(r"\[YYYY-MM-DD\]", today, readme)
+    (thread_dir / "README.md").write_text(readme)
+
+    return f"Created thread '{thread_name}' at {thread_dir}"
 
 
 if __name__ == "__main__":
