@@ -149,6 +149,34 @@ my-workspace/
 - 📎 **attachments/**: files you bring into the thread (specs, screenshots, exported data)
 - ✨ **artifacts/**: files Claude generates (snapshots, reports, diagrams)
 
+## Custom Agents and Skills
+
+You can add your own agents and skills to any workspace. Claude Code loads `.claude/` directories based on scope, so placement controls who has access.
+
+**Workspace-wide agents and skills** — available across all threads:
+
+```
+my-workspace/
+└── .claude/
+    ├── agents/
+    │   └── my-agent.md
+    └── skills/
+        └── my-skill.md
+```
+
+**Thread-scoped skills** — Claude Code automatically discovers skills from nested `.claude/skills/` directories based on the current working directory. Skills placed inside a thread folder are picked up when you're working within that directory:
+
+```
+my-workspace/
+└── threads/
+    └── {thread-name}/
+        └── .claude/
+            └── skills/
+                └── my-skill.md
+```
+
+Note: agents are only loaded from `.claude/agents/` at the workspace root (or `~/.claude/agents/` for user-level). Nested agent discovery is not yet supported.
+
 ## Migrating from the pre-plugin version
 
 If you used the previous template-based version, your threads live in `workspace/threads/` inside the cloned repo. With the plugin model, your workspace is just a regular directory, not a clone of this repo.
