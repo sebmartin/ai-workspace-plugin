@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python3 ${CLAUDE_PLUGIN_ROOT}/skills/**/*.py*)",
+      "mcp__threads__list_threads",
+      "mcp__threads__get_thread_status",
       "Edit(threads/**)",
       "Write(threads/**)",
       "WebSearch",

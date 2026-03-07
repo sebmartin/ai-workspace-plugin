@@ -42,8 +42,7 @@ ai-workspace-plugin/               # Plugin repository
 │   └── threads/                 # Thread management skill
 │       ├── SKILL.md             # Skill definition
 │       └── scripts/
-│           ├── list-threads.py
-│           └── get-thread-status.py
+│           └── mcp_server.py    # FastMCP server with list_threads, get_thread_status
 ├── templates/                    # Templates for threads
 │   ├── thread-template.md
 │   ├── thread-session-template.md
@@ -66,7 +65,7 @@ ai-workspace-plugin/               # Plugin repository
 **Skills:**
 - Defined in `skills/` directory
 - Each skill has a `SKILL.md` file (interpretive instructions for Claude)
-- Supporting Python scripts in `scripts/` subdirectory
+- Supporting scripts (Python, etc.) live in `scripts/` subdirectory
 - Invoked with `/ai-workspace:skill-name` command
 
 **Agents:**
@@ -88,61 +87,18 @@ ai-workspace-plugin/               # Plugin repository
 3. **Test changes** - Use `--plugin-dir` flag to test locally
 4. **Keep it simple** - Avoid over-engineering, only change what's needed
 
-### Testing Changes
+### Making Changes
 
-Test changes using the `--plugin-dir` flag:
-```bash
-cd /tmp/test-workspace
-claude --plugin-dir ~/ai-workspace-plugin
-```
-
-For detailed testing procedures, see CONTRIBUTING.md.
-
-### Common Tasks
-
-**Adding a new skill:**
-1. Create `skills/skill-name/` directory
-2. Add `SKILL.md` with skill definition
-3. Add scripts in `scripts/` subdirectory if needed
-4. Update README.md to document the skill
-5. Test with `/ai-workspace:skill-name`
-
-**Modifying a template:**
-1. Edit file in `templates/` directory
-2. Test by creating a workspace and using the template
-3. Verify the template renders correctly
-
-**Updating workspace utilities:**
-1. Edit `skills/common/workspace_utils.py`
-2. Ensure backward compatibility
-3. Test auto-creation behavior
-4. Run tests to verify thread operations still work
-
-**Adding a new agent:**
-1. Create `agents/agent-name.md`
-2. Follow existing agent structure (expertise, approach, output format)
-3. Document the agent in README.md
-4. Test by having Claude delegate work to it
+See CONTRIBUTING.md for testing procedures, common tasks, and PR guidelines.
 
 ## Key Patterns
 
 ### Auto-creation System
 
 The plugin uses lazy initialization:
-- `get_threads_dir()` - Auto-creates `threads/` directory on first call
 - `ensure_settings()` - Auto-creates `.claude/settings.json` from template
+- SKILL.md create flow handles `threads/` directory creation via Bash(mkdir:*)
 - No separate initialization step required - just start using threads
-
-**Implementation:**
-```python
-def get_threads_dir() -> Path:
-    """Get threads directory, auto-creating if needed."""
-    workspace_dir = get_workspace_dir()  # Returns Path.cwd()
-    threads_dir = workspace_dir / "threads"
-    threads_dir.mkdir(parents=True, exist_ok=True)
-    ensure_settings()  # Also create settings on first thread operation
-    return threads_dir
-```
 
 ### Template Access
 
@@ -176,64 +132,33 @@ Users invoke skills with `/ai-workspace:skill-name` command. When a skill is inv
 3. Claude may call Python scripts using the Bash tool
 4. Scripts use workspace_utils.py for common operations
 
-### Plugin Script Paths
+### MCP Tool Invocation
 
-When invoking plugin scripts from skills, use `${CLAUDE_PLUGIN_ROOT}` environment variable and pass workspace directory as a literal path:
+Skills use MCP tools instead of Python scripts. The threads MCP server is declared in `.claude-plugin/plugin.json` and exposes tools via the `threads` server name:
 
-```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/skills/threads/scripts/list-threads.py "/absolute/path/to/workspace"
+```
+mcp__threads__list_threads(workspace_dir="/absolute/path/to/workspace")
+mcp__threads__get_thread_status(workspace_dir="/absolute/path/to/workspace", thread_name="my-thread")
 ```
 
 **Why this matters:**
 - Plugin is at: `~/ai-workspace-plugin/` (or in Claude's plugin cache)
 - User workspace is at: `~/my-project/`
-- Scripts run from plugin directory but need to access user's workspace
-- Pass the current working directory path as first argument so scripts know where the workspace is
-- Use literal path (e.g., `/Users/user/my-project`), not command substitution like `$(pwd)` (avoids permission prompts)
-
-**Example:**
-```bash
-# ❌ Wrong - script can't find workspace
-python3 ${CLAUDE_PLUGIN_ROOT}/skills/threads/scripts/list-threads.py
-# Script uses cwd (plugin dir), looks for threads in wrong place
-
-# ✅ Correct - pass workspace directory as literal path
-python3 ${CLAUDE_PLUGIN_ROOT}/skills/threads/scripts/list-threads.py "/Users/user/my-project"
-# Script receives workspace path, finds threads at /Users/user/my-project/threads/
-```
+- Pass the current working directory as `workspace_dir` (literal path, not `$(pwd)`)
+- MCP tools have typed signatures — no shell argument quoting issues
 
 ## Verification Practices
 
 **Before referencing project resources:**
-- ✅ Use `list-threads.py` to list threads before naming them
-- ✅ Use Read/Glob/Bash to verify file existence
+- ✅ Call `mcp__threads__list_threads` to list threads before naming them
+- ✅ Use Read/Glob to verify file existence
 - ✅ Read files before describing their contents
-- ✅ Check scripts exist before referencing them
 
 **When working with threads (as a user would):**
 - Threads are in the user's workspace, not the plugin repo
-- Use `python3 ${CLAUDE_PLUGIN_ROOT}/skills/threads/scripts/list-threads.py "/path/to/workspace"` to see available threads (pass actual path)
+- Use `mcp__threads__list_threads(workspace_dir="/path/to/workspace")` to see available threads
 - Read `threads/{name}/README.md` for thread details
 - Never assume thread content - always verify
-
-## Code Conventions
-
-### Python
-- Follow PEP 8 style
-- Use type hints for function signatures
-- Keep functions focused and small
-- Use `error_exit()` for user-facing errors
-- Scripts should be executable with `#!/usr/bin/env python3`
-
-### Markdown
-- Use ATX-style headers (`#` not underlines)
-- Code blocks with language specification
-- Keep line length reasonable but not strict
-
-### Bash
-- Scripts should be executable (`chmod +x`)
-- Use `set -euo pipefail` for safety
-- Prefer Python scripts over bash for complexity
 
 ## Communication Style
 

@@ -205,14 +205,11 @@ ai-workspace-plugin/
 │   └── devils-advocate.md
 ├── skills/
 │   ├── common/
-│   │   ├── workspace_utils.py  # Shared utilities
-│   │   └── resources/
-│   │       └── settings.json.template
+│   │   └── workspace_utils.py  # Shared utilities
 │   └── threads/                # Thread management
 │       ├── SKILL.md
 │       └── scripts/
-│           ├── list-threads.py
-│           └── get-thread-status.py
+│           └── mcp_server.py   # FastMCP server
 └── templates/               # Thread templates
     ├── thread-template.md
     ├── thread-session-template.md

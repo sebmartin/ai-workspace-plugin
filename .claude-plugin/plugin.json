@@ -7,5 +7,17 @@
     "url": "https://github.com/sebmartin"
   },
   "repository": "https://github.com/sebmartin/ai-workspace-plugin",
-  "license": "MIT"
+  "license": "MIT",
+  "mcpServers": {
+    "threads": {
+      "type": "stdio",
+      "command": "uv",
+      "args": [
+        "run",
+        "--with", "mcp",
+        "python3",
+        "${CLAUDE_PLUGIN_ROOT}/skills/threads/scripts/mcp_server.py"
+      ]
+    }
+  }
 }

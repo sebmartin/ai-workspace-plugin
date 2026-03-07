@@ -1,6 +1,5 @@
 """Shared workspace utilities for thread and TODO management."""
 
-import os
 import re
 import shutil
 import sys
@@ -68,47 +67,6 @@ def ensure_settings(workspace_dir: Path = None) -> None:
     shutil.copy(template_path, settings_file)
 
     print(f"✓ Created settings: {settings_file}")
-
-
-def get_threads_dir(workspace_dir: Path = None) -> Path:
-    """Get the threads directory within the workspace.
-
-    Args:
-        workspace_dir: Optional workspace directory path. If None, uses current working directory.
-
-    Returns:
-        Path to the threads directory
-    """
-    workspace = get_workspace_dir(workspace_dir)
-    threads_dir = workspace / "threads"
-
-    # Auto-create if missing
-    threads_dir.mkdir(parents=True, exist_ok=True)
-
-    # Auto-create settings on first use
-    ensure_settings(workspace_dir)
-
-    return threads_dir
-
-
-def get_thread_dir(thread_name: str, workspace_dir: Path = None) -> Path:
-    """Get the directory path for a specific thread.
-
-    Args:
-        thread_name: Name of the thread
-        workspace_dir: Optional workspace directory path. If None, uses current working directory.
-
-    Returns:
-        Path to the thread directory
-    """
-    return get_threads_dir(workspace_dir) / thread_name
-
-
-def validate_thread_exists(thread_name: str) -> bool:
-    """Check if a thread exists (has a README.md file)."""
-    thread_dir = get_thread_dir(thread_name)
-    readme_path = thread_dir / "README.md"
-    return readme_path.exists()
 
 
 def error_exit(message: str, exit_code: int = 1) -> None:

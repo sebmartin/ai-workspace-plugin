@@ -147,10 +147,9 @@ When invoked, help the user manage their threads in `threads/`:
 ## Response Format
 
 ### For List Threads
-**CRITICAL**: Run the list-threads script and **STOP**. Do not output ANY text response before or after. The script output is automatically displayed to the user - additional text is redundant and wastes their time.
+**CRITICAL**: Call the MCP tool and output the result directly. Do not add commentary.
 
-Run the script passing the current working directory as the first argument (use the actual path, not command substitution):
-`python3 ${CLAUDE_PLUGIN_ROOT}/skills/threads/scripts/list-threads.py "/absolute/path/to/current/directory"`
+Call `mcp__threads__list_threads` with the current working directory as `workspace_dir`.
 
 ### For Snapshot
 Present a concise snapshot with:
@@ -198,21 +197,23 @@ Users might say:
 
 ## Implementation
 
-**Available Scripts:**
-- `scripts/list-threads.py` - List all threads sorted by recent activity (README.md mtime)
-- `scripts/get-thread-status.py <thread-name>` - Get Quick Resume section
+**Available MCP Tools (server: `threads`):**
+- `mcp__threads__list_threads(workspace_dir)` — List threads sorted by recent activity
+- `mcp__threads__get_thread_status(workspace_dir, thread_name)` — Get Quick Resume section
 
-Run scripts using Bash tool with `${CLAUDE_PLUGIN_ROOT}` environment variable and pass the current working directory path as the first argument:
-- `python3 ${CLAUDE_PLUGIN_ROOT}/skills/threads/scripts/list-threads.py "/path/to/workspace"`
-- `python3 ${CLAUDE_PLUGIN_ROOT}/skills/threads/scripts/get-thread-status.py "/path/to/workspace" <thread-name>`
+Pass the current working directory as `workspace_dir` (literal path, not `$(pwd)`).
 
-**Important:** Pass the actual directory path (e.g., `/Users/user/my-project`), not command substitution like `$(pwd)`.
+**If the MCP tools are unavailable:** Tell the user the threads MCP server failed to start. The most likely cause is `uv` not being installed. Direct them to https://docs.astral.sh/uv/getting-started/installation/ to install it, then try again.
 
-**File-based operations:**
-- For commands that need full thread details: Use Read tool to read thread README.md files
-- For session logs: Use Glob with appropriate patterns
-- Use Write tool when creating new threads
-- Use Bash for mkdir when creating directory structure
+**File-based operations** (unchanged):
+- Read tool for thread README.md files
+- Glob for session log patterns
+- Write tool when creating new threads
+- Bash(mkdir:*) for directory structure
+
+**Create a new thread** — after creating directories:
+- Check if `.claude/settings.json` exists in the workspace
+- If not: read `${CLAUDE_PLUGIN_ROOT}/templates/settings.json.template` and Write it to `.claude/settings.json`
 
 ## Current Thread Tracking
 

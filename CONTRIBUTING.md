@@ -13,6 +13,7 @@ Thank you for contributing! This plugin helps developers organize long-running A
 
 - **Claude Code CLI** - Required to test the plugin
 - **git** - Version control
+- **uv** - Required to run the MCP server and tests (see https://docs.astral.sh/uv/getting-started/installation/)
 
 ## Project Structure
 
@@ -23,33 +24,34 @@ ai-workspace-plugin/
 ├── agents/                    # AI persona subagents
 │   ├── architect.md
 │   ├── security-reviewer.md
-│   ├── product-strategist.md
-│   ├── tech-advisor.md
-│   ├── cost-analyzer.md
-│   └── devils-advocate.md
-├── skills/                    # Slash-command skills
-│   ├── common/               # Shared utilities
-│   │   ├── workspace_utils.py
-│   │   └── resources/
-│   │       └── settings.json.template
-│   └── threads/              # Thread management
+│   └── ...
+├── skills/
+│   ├── common/
+│   │   └── workspace_utils.py
+│   └── threads/
 │       ├── SKILL.md
 │       └── scripts/
-│           ├── list-threads.py
-│           └── get-thread-status.py
+│           └── mcp_server.py
 ├── templates/                 # Thread templates
 │   ├── thread-template.md
-│   ├── thread-session-template.md
-│   ├── snapshot-template.md
-│   ├── adr-template.md
-│   └── feature-spec.md
-├── README.md                  # Plugin documentation
-├── CONTRIBUTING.md            # This file
-├── AGENTS.md                  # Agent instructions
-└── LICENSE                    # MIT license
+│   ├── settings.json.template
+│   └── ...
+├── tests/
+│   └── test_mcp_server.py
+├── README.md
+├── CONTRIBUTING.md
+├── AGENTS.md
+└── LICENSE
 ```
 
 ## Testing the Plugin
+
+### Unit Tests
+
+```bash
+# Run unit tests
+uv run --with pytest --with mcp python3 -m pytest tests/ -v
+```
 
 ### Basic Testing
 
@@ -88,11 +90,10 @@ rm -rf /tmp/test-workspace
 ## Code Style
 
 ### Python
-- **Formatting**: Black (automatic via pre-commit)
+- Follow PEP 8 style
 - **Skills**: Follow existing patterns in `skills/`
 
 ### Bash
-- **Linting**: ShellCheck compliant (automatic via pre-commit)
 - **Style**: Use `set -euo pipefail` for safety
 - **Scripts**: Must be executable (chmod +x)
 
@@ -105,7 +106,7 @@ rm -rf /tmp/test-workspace
 
 1. Create directory in `skills/<skill-name>/`
 2. Add `SKILL.md` with skill definition
-3. Add any supporting scripts in `scripts/` subdirectory
+3. Add supporting scripts (Python, etc.) in `scripts/` subdirectory if needed
 4. Update README.md to list the new skill
 5. Test the skill works with `/ai-workspace:skill-name` command
 
@@ -113,9 +114,8 @@ rm -rf /tmp/test-workspace
 
 - **Clear description**: Explain what changes and why
 - **Update documentation**: If behavior changes, update relevant docs
-- **Test hooks**: Verify git hooks still work correctly
 - **No workspace/ files**: PRs must not include workspace/ content
-- **Code quality**: Pre-commit hooks must pass
+- **Tests pass**: Run `uv run --with pytest --with mcp python3 -m pytest tests/ -v`
 
 ## Common Tasks
 
@@ -136,8 +136,11 @@ cd /tmp/test-workspace
 # Edit skill definition
 vim skills/threads/SKILL.md
 
-# Edit supporting scripts
-vim skills/threads/scripts/list-threads.py
+# Edit MCP server
+vim skills/threads/scripts/mcp_server.py
+
+# Run tests
+uv run --with pytest --with mcp python3 -m pytest tests/ -v
 
 # Test the skill
 /ai-workspace:threads
