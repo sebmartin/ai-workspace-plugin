@@ -27,6 +27,10 @@ ai-workspace-plugin/
 ├── skills/
 │   ├── common/
 │   │   └── workspace_utils.py
+│   ├── debate/
+│   │   └── SKILL.md
+│   ├── init/
+│   │   └── SKILL.md
 │   └── threads/
 │       ├── SKILL.md
 │       └── scripts/
@@ -37,9 +41,10 @@ ai-workspace-plugin/
 │   └── ...
 ├── tests/
 │   └── test_mcp_server.py
-├── README.md
-├── CONTRIBUTING.md
 ├── AGENTS.md
+├── CLAUDE.md
+├── CONTRIBUTING.md
+├── README.md
 └── LICENSE
 ```
 
@@ -71,10 +76,14 @@ claude --plugin-dir ~/ai-workspace-plugin
 cd /tmp/test-workspace
 claude --plugin-dir ~/ai-workspace-plugin
 
-# Create first thread (auto-creates structure)
+# Initialize the workspace
+/ai-workspace:init
+# Verify: ls threads/       # Should exist
+# Verify: ls .claude/       # Should show settings.json
+
+# Create a thread
 /ai-workspace:threads create test-thread
 # Verify: ls threads/       # Should show test-thread/
-# Verify: ls .claude/       # Should show settings.json
 
 # Test thread operations
 /ai-workspace:threads
@@ -150,9 +159,9 @@ uv run --with pytest --with mcp python3 -m pytest tests/ -v
 Before releasing a new version:
 
 - [ ] Plugin loads with `claude --plugin-dir .`
-- [ ] Auto-creation works in clean directory:
-  - [ ] `threads/` directory created on first thread
-  - [ ] `.claude/settings.json` created automatically
+- [ ] Init works in a clean directory:
+  - [ ] `/ai-workspace:init` creates `threads/`, `.claude/settings.json`, and `CLAUDE.md`
+  - [ ] Re-running `/ai-workspace:init` skips existing files safely
 - [ ] Thread management works:
   - [ ] `/ai-workspace:threads create` works
   - [ ] `/ai-workspace:threads` lists threads

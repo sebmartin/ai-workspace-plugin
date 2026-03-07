@@ -27,6 +27,8 @@ ai-workspace-plugin/               # Plugin repository
 ├── skills/                       # User-invocable skills
 │   ├── common/
 │   │   └── workspace_utils.py   # Shared utilities
+│   ├── debate/                  # Debate skill
+│   │   └── SKILL.md
 │   ├── init/                    # Workspace initialization skill
 │   │   └── SKILL.md
 │   └── threads/                 # Thread management skill

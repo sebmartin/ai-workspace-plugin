@@ -6,6 +6,9 @@ A Claude Code plugin built around two ideas: **threads** for persisting long-run
 
 **Debate** helps you pressure-test a proposal before committing to it. Two agents run structured rounds of challenge and refinement: a proponent who stewards the idea and a skeptic who stress-tests it. Neither is trying to win. Both are trying to produce a stronger plan. The result is saved as a thread artifact you can act on.
 
+> [!NOTE]
+> This repo was recently refactored to support distribution as a Claude Code plugin. If you were using a prior version, follow the [migration plan](#migrating-from-the-pre-plugin-version) to move your threads over.
+
 ## Installation
 
 Install via the Claude Code marketplace:
@@ -109,7 +112,7 @@ The result is saved as `threads/{name}/artifacts/debate-YYYYMMDD.md`. Requesting
 
 ### Specialist Agents
 
-For deeper validation, install the `tech-expert-agents` plugin. Both debate agents will draw on these specialists automatically:
+The debate agents will automatically draw on any subagents available in your Claude Code environment. Install the `tech-expert-agents` plugin for a ready-made set, or bring your own.
 
 ```
 /plugin install tech-expert-agents@sebmartin
@@ -146,13 +149,22 @@ my-workspace/
 - 📎 **attachments/**: files you bring into the thread (specs, screenshots, exported data)
 - ✨ **artifacts/**: files Claude generates (snapshots, reports, diagrams)
 
-## Migrating from the workspace template
+## Migrating from the pre-plugin version
 
 If you used the previous template-based version, your threads live in `workspace/threads/` inside the cloned repo. With the plugin model, your workspace is just a regular directory, not a clone of this repo.
 
 Before starting, if you don't already have a backup of your threads, now is a good time to make one. Copy `workspace/threads/` somewhere safe or push it to a private repo.
 
-**1. Create a new workspace directory and initialize it**
+**1. Install the plugin**
+
+```
+/plugin marketplace add sebmartin/ai-marketplace
+/plugin install ai-workspace@sebmartin
+```
+
+Restart Claude Code after installing.
+
+**2. Create a new workspace directory and initialize it**
 
 ```bash
 mkdir ~/my-workspace
@@ -160,7 +172,7 @@ cd ~/my-workspace
 /ai-workspace:init
 ```
 
-**2. Move your threads over**
+**3. Move your threads over**
 
 ```bash
 mv ~/ai-workspace/workspace/threads/* ~/my-workspace/threads/

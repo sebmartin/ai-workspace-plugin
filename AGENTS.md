@@ -14,12 +14,13 @@ This is a Claude Code plugin that provides thread-based workspace management for
 
 **User workflow:**
 ```bash
+/plugin marketplace add sebmartin/ai-marketplace
+/plugin install ai-workspace@sebmartin
+
 cd ~/my-project
-claude --plugin-dir ~/ai-workspace-plugin
+/ai-workspace:init
 /ai-workspace:threads create feature-work
 ```
-
-The plugin auto-creates `threads/` and `.claude/settings.json` on first use.
 
 ## Architecture
 
@@ -35,6 +36,10 @@ ai-workspace-plugin/               # Plugin repository
 ├── skills/                       # User-invocable skills
 │   ├── common/
 │   │   └── workspace_utils.py   # Shared utilities
+│   ├── debate/                  # Debate skill
+│   │   └── SKILL.md
+│   ├── init/                    # Workspace initialization skill
+│   │   └── SKILL.md
 │   └── threads/                 # Thread management skill
 │       ├── SKILL.md             # Skill definition
 │       └── scripts/
@@ -84,18 +89,17 @@ ai-workspace-plugin/               # Plugin repository
 3. **Test changes** - Use `--plugin-dir` flag to test locally
 4. **Keep it simple** - Avoid over-engineering, only change what's needed
 
-### Making Changes
-
 See CONTRIBUTING.md for testing procedures, common tasks, and PR guidelines.
 
 ## Key Patterns
 
-### Auto-creation System
+### Workspace Initialization
 
-The plugin uses lazy initialization:
-- `ensure_settings()` - Auto-creates `.claude/settings.json` from template
-- SKILL.md create flow handles `threads/` directory creation via Bash(mkdir:*)
-- No separate initialization step required - just start using threads
+Users run `/ai-workspace:init` once per workspace. The init skill:
+- Creates `threads/` for storing thread directories
+- Creates `.claude/settings.json` from the settings template
+- Creates `CLAUDE.md` from the workspace-claude template
+- Skips any file/directory that already exists (safe to re-run)
 
 ### Template Access
 
@@ -170,22 +174,15 @@ When working in this repository:
 ## Project-Specific Notes
 
 **Plugin installation model:**
-- Users install the plugin once (`git clone` to `~/ai-workspace-plugin`)
-- Plugin is loaded with `--plugin-dir ~/ai-workspace-plugin` flag
-- Same plugin installation used across all user projects
+- Users install the plugin once via the marketplace (`/plugin install ai-workspace@sebmartin`)
+- The same plugin installation is used across all user projects
 - No per-workspace plugin installation needed
 
-**No workspace/ directory anymore:**
-- Old architecture: plugin had `workspace/` subdirectory for user content
-- New architecture: user's entire project directory IS the workspace
-- Threads live in `threads/` directly in user's project
-- This change happened to simplify separation of plugin vs. user content
-
-**No init skill:**
-- Previously: `/ai-workspace:init` skill created workspace structure
-- Now: Structure auto-created on first thread operation
-- This removed dependency on uv, pre-commit, git hooks
-- Zero-setup experience - just start using threads
+**Workspace model:**
+- Plugin: installed once, loaded automatically by Claude Code
+- Workspace: any regular directory the user wants to organize with threads
+- Run `/ai-workspace:init` once per workspace to create `threads/`, `.claude/settings.json`, and `CLAUDE.md`
+- Threads live in `threads/` directly in the user's directory
 
 **Settings file:**
 - Auto-generated from `templates/settings.json.template`
