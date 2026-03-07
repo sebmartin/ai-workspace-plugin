@@ -115,14 +115,20 @@ After creating a thread, your workspace will have:
 my-workspace/
 ├── threads/
 │   └── {thread-name}/
-│       ├── README.md        # Thread overview and current focus
-│       ├── sessions/        # Session logs
-│       ├── decisions/       # Decision docs
-│       ├── attachments/     # Input files
-│       └── artifacts/       # Generated outputs (snapshots, reports)
+│       ├── README.md        # Thread index: current focus, open questions, links to everything else
+│       ├── sessions/        # Log of each conversation session
+│       ├── decisions/       # Recorded decisions with context and rationale
+│       ├── attachments/     # Files you bring into the thread (specs, screenshots, exported data)
+│       └── artifacts/       # Files Claude generates (snapshots, reports, diagrams)
 └── .claude/
     └── settings.json        # Auto-generated settings
 ```
+
+- 📋 **README** — entry point for the thread; stays concise and links out to everything else
+- 💬 **sessions/** — log of each conversation, one file per session
+- ⚖️ **decisions/** — recorded decisions with context and rationale, so the "why" isn't lost over time
+- 📎 **attachments/** — files you bring into the thread (specs, screenshots, exported data)
+- ✨ **artifacts/** — files Claude generates (snapshots, reports, diagrams)
 
 ## Migrating from the workspace template
 
