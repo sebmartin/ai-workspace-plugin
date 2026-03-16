@@ -48,9 +48,11 @@ When invoked, help the user manage their threads in `threads/`:
 - Read the thread's README.md, recent sessions, and decisions
 - **Important**: Also include current conversation context (unpersisted work in this session)
 - First update README.md Quick Resume with latest context
-- Generate timestamped snapshot: `threads/{name}/artifacts/snapshot-YYYYMMDD.md`
+- Generate snapshot: `threads/{name}/artifacts/YYYYMMDD-snapshot-{keywords}.md`
+  - `{keywords}` = short kebab-case phrase describing what this snapshot captures (e.g., `auth-flow-design`, `mvp-scope`, `api-contract`)
+  - Example: `20260316-snapshot-auth-flow-design.md`
 - Show relative path for user to review in editor
-- Snapshot is an artifact (output) with date in filename for sharing externally
+- Snapshot is an artifact (output) for sharing externally
 
 **Save thread context:**
 - Command: `/threads save`
@@ -222,6 +224,40 @@ Pass the current working directory as `workspace_dir` (literal path, not `$(pwd)
 - Bash(mkdir:*) for directory structure
 
 **Create a new thread** — use `mcp__threads__create_thread`. Do not use Bash or Write for thread creation.
+
+## Artifact Conventions
+
+### Naming
+
+All generated files in `artifacts/` use a **date prefix** so new files sort visibly above older ones:
+
+```
+YYYYMMDD-{type}-{kebab-keywords}.md
+```
+
+- `{type}` = the kind of artifact (e.g., `snapshot`, `spec`, `analysis`, `diagram`, `comparison`)
+- `{kebab-keywords}` = short descriptive phrase in kebab-case
+- Examples:
+  - `20260316-snapshot-auth-flow-design.md`
+  - `20260310-spec-notification-system.md`
+  - `20260308-analysis-db-migration-options.md`
+
+This convention also applies to decisions/ (already uses `YYYYMMDD-kebab-title.md`) and sessions/.
+
+### Subdirectories
+
+Use subdirectories within `artifacts/` when a natural grouping emerges — typically when you're generating multiple related files. Don't force it for a single file.
+
+**When to use subdirectories:**
+- Multiple files for the same feature/topic (e.g., `artifacts/api-design/`)
+- A set of related outputs (e.g., `artifacts/competitive-analysis/`)
+- Generated assets that go together (e.g., `artifacts/diagrams/`)
+
+**When NOT to use:**
+- A single standalone artifact — just put it directly in `artifacts/`
+- Don't pre-create empty subdirectories
+
+Date-prefixed files within subdirectories follow the same naming convention.
 
 ## Current Thread Tracking
 
