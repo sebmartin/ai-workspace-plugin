@@ -3,7 +3,8 @@
 **Started**: [YYYY-MM-DD]
 **Status**: Active
 **Last Session**: [YYYY-MM-DD]
-**Related Threads**: None
+**Parent Thread**: None
+**Child Threads**: None
 
 ## Quick Resume
 

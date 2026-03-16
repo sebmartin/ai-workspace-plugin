@@ -63,17 +63,31 @@ When invoked, help the user manage their threads in `threads/`:
 - A session loosely maps to a single Claude invocation: one file per conversation, updated on each save
 - Does NOT generate a snapshot (use `/threads snapshot` for that)
 
-**Link to another thread:**
-- Command: `/threads link [thread-name]`
-- If thread name is provided: Link current thread to that thread
+**Link to parent thread:**
+- Command: `/threads link-parent [thread-name]`
+- Also recognized: "link this thread to the parent thread [name]"
+- If thread name is provided: Set that thread as parent of the current thread
 - If NO thread name provided:
   1. List all threads with numbers (1, 2, 3...)
-  2. Ask "Which thread would you like to link to? (Reply with a number)"
+  2. Ask "Which thread is the parent? (Reply with a number)"
   3. Wait for user to reply with a number
   4. Then link to the selected thread
-- Update current thread's README.md "Related Threads" field
-- Add link in format: `[Thread Name](../thread-name/README.md)`
-- If "Related Threads" shows "None", replace it; otherwise append to the list
+- **Bidirectional linking** (both updates must happen):
+  1. Update current thread's README.md "Parent Thread" field with `[Thread Name](../thread-name/README.md)`
+  2. Update parent thread's README.md "Child Threads" field — add `[Current Thread Name](../current-thread-name/README.md)`
+     - If "Child Threads" shows "None", replace it; otherwise append to the list
+- A thread can only have ONE parent. If a parent is already set, confirm with the user before replacing it.
+
+**Create a child thread:**
+- Command: `/threads create-child [thread-name]`
+- Also recognized: "create a child thread called [name]"
+- Requires an active thread (the current thread becomes the parent)
+- Creates a new thread (same as regular create, see below) AND sets up bidirectional links:
+  1. Create the new child thread with full directory structure
+  2. Set the new child's "Parent Thread" field to `[Parent Thread Name](../parent-thread-name/README.md)`
+  3. Add the new child to the current (parent) thread's "Child Threads" field — add `[Child Thread Name](../child-thread-name/README.md)`
+     - If "Child Threads" shows "None", replace it; otherwise append to the list
+- After creation, the active thread remains the parent thread (not the child)
 
 **Create a new thread:**
 - Ask for thread name if not provided (must be kebab-case)
@@ -177,7 +191,8 @@ Users might say:
 - "Create a snapshot" / "Snapshot the [name] thread" / "Snapshot" (no thread specified)
 - "Log a decision" / "Save this decision"
 - "Save" / "Save context" / "Update the README"
-- "Link to [thread-name]" / "Link this thread" / "Link" (no thread specified)
+- "Link this thread to the parent thread [name]" / "Set parent to [name]" / "Link parent [name]"
+- "Create a child thread called [name]" / "Create child [name]" / "Spawn child thread [name]"
 - "Create a new thread" / "Start a new thread about [topic]"
 - "Show thread status for [name]"
 - "Resume [name] thread" / "Resume" (no thread specified) / "Continue [name]"
