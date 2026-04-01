@@ -5,6 +5,7 @@
 **Last Session**: [YYYY-MM-DD]
 **Parent Thread**: None
 **Child Threads**: None
+**Related Threads**: None
 
 ## Quick Resume
 

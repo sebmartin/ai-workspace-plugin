@@ -91,6 +91,22 @@ When invoked, help the user manage their threads in `threads/`:
      - If "Child Threads" shows "None", replace it; otherwise append to the list
 - After creation, the active thread remains the parent thread (not the child)
 
+**Link a related thread:**
+- Command: `/threads link-related [thread-name]`
+- Also recognized: "link this thread to [name]", "add [name] as related", "these threads are related"
+- If thread name is provided: Link that thread as related to the current thread
+- If NO thread name provided:
+  1. List all threads with numbers (1, 2, 3...)
+  2. Ask "Which thread is related? (Reply with a number)"
+  3. Wait for user to reply with a number
+  4. Then link to the selected thread
+- **Bidirectional linking** (both updates must happen):
+  1. Update current thread's README.md "Related Threads" field -- add `[Thread Name](../thread-name/README.md)`
+  2. Update related thread's README.md "Related Threads" field -- add `[Current Thread Name](../current-thread-name/README.md)`
+  - If "Related Threads" shows "None", replace it; otherwise append to the list
+- Related threads are symmetric (A related to B = B related to A)
+- A thread can have multiple related threads
+
 **Create a new thread:**
 - Ask for thread name if not provided (must be kebab-case)
 - Call `mcp__threads__create_thread(workspace_dir, thread_name)` — this handles validation, directory structure, and README creation in one step
@@ -195,6 +211,7 @@ Users might say:
 - "Save" / "Save context" / "Update the README"
 - "Link this thread to the parent thread [name]" / "Set parent to [name]" / "Link parent [name]"
 - "Create a child thread called [name]" / "Create child [name]" / "Spawn child thread [name]"
+- "Link [name] as related" / "Add related thread [name]" / "These threads are related"
 - "Create a new thread" / "Start a new thread about [topic]"
 - "Show thread status for [name]"
 - "Resume [name] thread" / "Resume" (no thread specified) / "Continue [name]"
