@@ -108,6 +108,8 @@ When invoked, help the user manage their threads in `threads/`:
 - A thread can have multiple related threads
 
 **Create a new thread:**
+- Command: `/threads create [thread-name]`
+- Also recognized: "create a new thread", "start a new thread about [topic]"
 - Ask for thread name if not provided (must be kebab-case)
 - Call `mcp__threads__create_thread(workspace_dir, thread_name)` — this handles validation, directory structure, and README creation in one step
 - Optionally help fill in initial context (problem, current state, desired state)
