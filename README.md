@@ -88,6 +88,9 @@ claude
 |---------|---------|
 | `/ai-workspace:threads` | List all threads |
 | `/ai-workspace:threads create <name>` | Start a new thread |
+| `/ai-workspace:threads create-child <name>` | Create a child thread linked to the current thread |
+| `/ai-workspace:threads link-parent <name>` | Set a parent thread (bidirectional) |
+| `/ai-workspace:threads link-related <name>` | Link two threads as related (bidirectional, symmetric) |
 | `/ai-workspace:threads resume <name>` | Switch to a thread mid-session |
 | `/ai-workspace:threads save` | Update thread context |
 | `/ai-workspace:threads snapshot` | Generate a shareable summary |
@@ -95,6 +98,7 @@ claude
 | `/ai-workspace:threads park "<topic>"` | Park a topic for later |
 | `/ai-workspace:threads pop` | Resume the next parked topic |
 | `/ai-workspace:threads parked` | List parked topics |
+| `/ai-workspace:threads status <name>` | Show a thread's Quick Resume |
 | `/ai-workspace:threads open <name>` | Open thread in Finder (macOS) |
 
 ## Debate

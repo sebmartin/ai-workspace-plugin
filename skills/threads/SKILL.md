@@ -48,9 +48,11 @@ When invoked, help the user manage their threads in `threads/`:
 - Read the thread's README.md, recent sessions, and decisions
 - **Important**: Also include current conversation context (unpersisted work in this session)
 - First update README.md Quick Resume with latest context
-- Generate timestamped snapshot: `threads/{name}/artifacts/snapshot-YYYYMMDD.md`
+- Generate snapshot: `threads/{name}/artifacts/YYYYMMDD-snapshot-{keywords}.md`
+  - `{keywords}` = short kebab-case phrase describing what this snapshot captures (e.g., `auth-flow-design`, `mvp-scope`, `api-contract`)
+  - Example: `20260316-snapshot-auth-flow-design.md`
 - Show relative path for user to review in editor
-- Snapshot is an artifact (output) with date in filename for sharing externally
+- Snapshot is an artifact (output) for sharing externally
 
 **Save thread context:**
 - Command: `/threads save`
@@ -63,19 +65,51 @@ When invoked, help the user manage their threads in `threads/`:
 - A session loosely maps to a single Claude invocation: one file per conversation, updated on each save
 - Does NOT generate a snapshot (use `/threads snapshot` for that)
 
-**Link to another thread:**
-- Command: `/threads link [thread-name]`
-- If thread name is provided: Link current thread to that thread
+**Link to parent thread:**
+- Command: `/threads link-parent [thread-name]`
+- Also recognized: "link this thread to the parent thread [name]"
+- If thread name is provided: Set that thread as parent of the current thread
 - If NO thread name provided:
   1. List all threads with numbers (1, 2, 3...)
-  2. Ask "Which thread would you like to link to? (Reply with a number)"
+  2. Ask "Which thread is the parent? (Reply with a number)"
   3. Wait for user to reply with a number
   4. Then link to the selected thread
-- Update current thread's README.md "Related Threads" field
-- Add link in format: `[Thread Name](../thread-name/README.md)`
-- If "Related Threads" shows "None", replace it; otherwise append to the list
+- **Bidirectional linking** (both updates must happen):
+  1. Update current thread's README.md "Parent Thread" field with `[Thread Name](../thread-name/README.md)`
+  2. Update parent thread's README.md "Child Threads" field — add `[Current Thread Name](../current-thread-name/README.md)`
+     - If "Child Threads" shows "None", replace it; otherwise append to the list
+- A thread can only have ONE parent. If a parent is already set, confirm with the user before replacing it.
+
+**Create a child thread:**
+- Command: `/threads create-child [thread-name]`
+- Also recognized: "create a child thread called [name]"
+- Requires an active thread (the current thread becomes the parent)
+- Creates a new thread (same as regular create, see below) AND sets up bidirectional links:
+  1. Create the new child thread with full directory structure
+  2. Set the new child's "Parent Thread" field to `[Parent Thread Name](../parent-thread-name/README.md)`
+  3. Add the new child to the current (parent) thread's "Child Threads" field — add `[Child Thread Name](../child-thread-name/README.md)`
+     - If "Child Threads" shows "None", replace it; otherwise append to the list
+- After creation, the active thread remains the parent thread (not the child)
+
+**Link a related thread:**
+- Command: `/threads link-related [thread-name]`
+- Also recognized: "link this thread to [name]", "add [name] as related", "these threads are related"
+- If thread name is provided: Link that thread as related to the current thread
+- If NO thread name provided:
+  1. List all threads with numbers (1, 2, 3...)
+  2. Ask "Which thread is related? (Reply with a number)"
+  3. Wait for user to reply with a number
+  4. Then link to the selected thread
+- **Bidirectional linking** (both updates must happen):
+  1. Update current thread's README.md "Related Threads" field -- add `[Thread Name](../thread-name/README.md)`
+  2. Update related thread's README.md "Related Threads" field -- add `[Current Thread Name](../current-thread-name/README.md)`
+  - If "Related Threads" shows "None", replace it; otherwise append to the list
+- Related threads are symmetric (A related to B = B related to A)
+- A thread can have multiple related threads
 
 **Create a new thread:**
+- Command: `/threads create [thread-name]`
+- Also recognized: "create a new thread", "start a new thread about [topic]"
 - Ask for thread name if not provided (must be kebab-case)
 - Call `mcp__threads__create_thread(workspace_dir, thread_name)` — this handles validation, directory structure, and README creation in one step
 - Optionally help fill in initial context (problem, current state, desired state)
@@ -177,7 +211,9 @@ Users might say:
 - "Create a snapshot" / "Snapshot the [name] thread" / "Snapshot" (no thread specified)
 - "Log a decision" / "Save this decision"
 - "Save" / "Save context" / "Update the README"
-- "Link to [thread-name]" / "Link this thread" / "Link" (no thread specified)
+- "Link this thread to the parent thread [name]" / "Set parent to [name]" / "Link parent [name]"
+- "Create a child thread called [name]" / "Create child [name]" / "Spawn child thread [name]"
+- "Link [name] as related" / "Add related thread [name]" / "These threads are related"
 - "Create a new thread" / "Start a new thread about [topic]"
 - "Show thread status for [name]"
 - "Resume [name] thread" / "Resume" (no thread specified) / "Continue [name]"
@@ -207,6 +243,40 @@ Pass the current working directory as `workspace_dir` (literal path, not `$(pwd)
 - Bash(mkdir:*) for directory structure
 
 **Create a new thread** — use `mcp__threads__create_thread`. Do not use Bash or Write for thread creation.
+
+## Artifact Conventions
+
+### Naming
+
+All generated files in `artifacts/` use a **date prefix** so new files sort visibly above older ones:
+
+```
+YYYYMMDD-{type}-{kebab-keywords}.md
+```
+
+- `{type}` = the kind of artifact (e.g., `snapshot`, `spec`, `analysis`, `diagram`, `comparison`)
+- `{kebab-keywords}` = short descriptive phrase in kebab-case
+- Examples:
+  - `20260316-snapshot-auth-flow-design.md`
+  - `20260310-spec-notification-system.md`
+  - `20260308-analysis-db-migration-options.md`
+
+This convention also applies to decisions/ (already uses `YYYYMMDD-kebab-title.md`) and sessions/.
+
+### Subdirectories
+
+Use subdirectories within `artifacts/` when a natural grouping emerges — typically when you're generating multiple related files. Don't force it for a single file.
+
+**When to use subdirectories:**
+- Multiple files for the same feature/topic (e.g., `artifacts/api-design/`)
+- A set of related outputs (e.g., `artifacts/competitive-analysis/`)
+- Generated assets that go together (e.g., `artifacts/diagrams/`)
+
+**When NOT to use:**
+- A single standalone artifact — just put it directly in `artifacts/`
+- Don't pre-create empty subdirectories
+
+Date-prefixed files within subdirectories follow the same naming convention.
 
 ## Current Thread Tracking
 
