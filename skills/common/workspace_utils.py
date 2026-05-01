@@ -1,5 +1,7 @@
 """Shared workspace utilities for thread and TODO management."""
 
+import json
+import os
 import re
 import shutil
 import sys
@@ -27,6 +29,40 @@ def get_template_path(template_name: str) -> Path:
         Path to the template file in the plugin's templates/ directory
     """
     return get_plugin_dir() / "templates" / template_name
+
+
+def get_plugin_data_dir() -> Path:
+    """Get the plugin's persistent data directory.
+
+    Uses PLUGIN_DATA_DIR env var (set by Claude Code via ${CLAUDE_PLUGIN_DATA}),
+    falls back to ~/.claude/plugins/data/ai-workspace/.
+    """
+    env_dir = os.environ.get("PLUGIN_DATA_DIR")
+    if env_dir:
+        return Path(env_dir)
+    return Path.home() / ".claude" / "plugins" / "data" / "ai-workspace"
+
+
+def read_config() -> dict:
+    """Read plugin config from the persistent data directory.
+
+    Returns empty dict if config file doesn't exist.
+    """
+    config_path = get_plugin_data_dir() / "config.json"
+    if not config_path.exists():
+        return {}
+    return json.loads(config_path.read_text())
+
+
+def write_config(config: dict) -> None:
+    """Write plugin config to the persistent data directory.
+
+    Creates the data directory if it doesn't exist.
+    """
+    data_dir = get_plugin_data_dir()
+    data_dir.mkdir(parents=True, exist_ok=True)
+    config_path = data_dir / "config.json"
+    config_path.write_text(json.dumps(config, indent=2) + "\n")
 
 
 def get_workspace_dir(workspace_dir: Path = None) -> Path:
