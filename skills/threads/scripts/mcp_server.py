@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Threads MCP Server - Tools for managing discussion threads."""
 
+import json
 import re
 import sys
 from datetime import date
@@ -9,7 +10,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "common"))
 
 from mcp.server.fastmcp import FastMCP
-from workspace_utils import get_template_path, get_workspace_dir, validate_thread_name
+from workspace_utils import (
+    get_template_path,
+    get_workspace_dir,
+    read_config,
+    validate_thread_name,
+    write_config,
+)
 
 mcp = FastMCP("threads")
 
@@ -127,6 +134,64 @@ def get_template(template_name: str) -> str:
         available = [p.name for p in templates_dir.iterdir() if p.is_file()]
         return f"Error: Template '{template_name}' not found. Available: {', '.join(sorted(available))}"
     return path.read_text()
+
+
+@mcp.tool()
+def resolve_workspace(cwd: str) -> str:
+    """Resolve which workspace directory to use for thread operations.
+
+    Checks for a local threads/ directory first, then falls back to the
+    configured default workspace.
+
+    Args:
+        cwd: The current working directory (absolute path).
+    """
+    cwd_path = Path(cwd)
+
+    # Priority 1: local threads/ directory
+    if (cwd_path / "threads").is_dir():
+        return json.dumps({"workspace_dir": cwd, "source": "local"})
+
+    # Priority 2: configured default workspace
+    config = read_config()
+    default_workspace = config.get("default_workspace")
+    if default_workspace:
+        default_path = Path(default_workspace)
+        if (default_path / "threads").is_dir():
+            return json.dumps(
+                {"workspace_dir": default_workspace, "source": "config"}
+            )
+
+    # No workspace found
+    return json.dumps({"workspace_dir": None, "source": "none"})
+
+
+@mcp.tool()
+def set_default_workspace(workspace_path: str) -> str:
+    """Set the default workspace directory for thread operations.
+
+    This is used when running /threads from outside a workspace directory.
+    The path is persisted in the plugin's global config.
+
+    Args:
+        workspace_path: Absolute path to a directory containing a threads/ folder.
+    """
+    ws_path = Path(workspace_path)
+
+    if not ws_path.is_dir():
+        return f"Error: Directory '{workspace_path}' does not exist."
+
+    if not (ws_path / "threads").is_dir():
+        return (
+            f"Error: No threads/ directory found in '{workspace_path}'. "
+            "The workspace must contain a threads/ directory."
+        )
+
+    config = read_config()
+    config["default_workspace"] = str(ws_path.resolve())
+    write_config(config)
+
+    return f"Default workspace set to '{ws_path.resolve()}'."
 
 
 if __name__ == "__main__":

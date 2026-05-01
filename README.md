@@ -31,13 +31,17 @@ cd ~/my-workspace
 
 ## Threads
 
-You can use explicit commands or just describe what you want in plain English. Claude understands both.
+A thread is a persistent, topic-focused workspace stored as linked Markdown files on disk. Instead of relying on Claude's context window (where details get lost to compaction), threads write conversation history, decisions, and artifacts to disk so they can be loaded selectively across sessions.
+
+You don't need to memorize commands. You can use slash commands, or just tell Claude what you want in plain English. Claude knows which skill to invoke.
 
 Start a thread for a design session:
 
-```bash
+```
 /ai-workspace:threads create api-redesign
-# or: "start a new thread called api-redesign"
+```
+```
+> start a new thread called api-redesign
 ```
 
 Work with Claude, then manage context as you go:
@@ -56,11 +60,10 @@ Work with Claude, then manage context as you go:
 # or: "save the thread"
 ```
 
-Switch to a second thread mid-session (your first thread is preserved):
+Switch to a different thread mid-session (your first thread is preserved):
 
-```bash
-/ai-workspace:threads create auth-refactor
-# or: "create a new thread for the auth refactor"
+```
+> resume the auth-refactor thread
 ```
 
 Generate a shareable summary from any thread:
@@ -72,15 +75,11 @@ Generate a shareable summary from any thread:
 
 Pick it back up days later:
 
-```bash
-# Continue your last session (full context restored)
-claude --continue
-
-# Or reload a specific thread in a new context window
-claude
-/ai-workspace:threads resume api-redesign
-# or: "resume the api-redesign thread"
 ```
+> resume the api-redesign thread
+```
+
+Starting a fresh Claude session and resuming the thread gives you a clean context window with only the thread's state loaded in. This is often better than `claude --continue`, which restores the full prior conversation including stale context, failed attempts, and tangents that are no longer relevant. Threads capture the important parts (decisions, progress, next steps) and leave the noise behind.
 
 ### Thread Commands
 
@@ -100,6 +99,37 @@ claude
 | `/ai-workspace:threads parked` | List parked topics |
 | `/ai-workspace:threads status <name>` | Show a thread's Quick Resume |
 | `/ai-workspace:threads open <name>` | Open thread in Finder (macOS) |
+| `/ai-workspace:threads set-workspace <path>` | Set default workspace for cross-directory access |
+
+## Two Ways to Work
+
+You can run Claude Code from your workspace directory, or from any other repo. Both give you full access to your threads, but they suit different kinds of work.
+
+### From the workspace: thinking and planning
+
+Run Claude from your workspace when the work isn't tied to a single repo. Brainstorming, high-level architecture, multi-repo planning, career threads, research -- anything where the conversation is the primary output.
+
+```bash
+cd ~/my-workspace
+claude
+> resume the platform-architecture thread
+```
+
+Claude has direct access to all your threads, session logs, and artifacts. This is the natural home for open-ended thinking.
+
+### From a repo: executing with thread context
+
+Run Claude from a project repo when you're writing code but want the context of a thread. Maybe you planned an API redesign in a thread and now you're implementing it, or you captured decisions in a thread and need them while refactoring.
+
+```bash
+cd ~/my-project
+claude
+> resume the api-redesign thread
+# → (Using threads from /Users/you/my-workspace)
+# Claude now has the thread context AND your repo's code
+```
+
+The plugin automatically resolves your workspace. If the current directory has its own `threads/` folder, it uses that. Otherwise it falls back to your configured default. The first time you use threads from outside your workspace, the plugin will ask where your workspace is and remember it. You can change it later with `/ai-workspace:threads set-workspace <path>`.
 
 ## Debate
 
@@ -147,17 +177,11 @@ my-workspace/
     └── settings.json        # Auto-generated settings
 ```
 
-- 📋 **README**: entry point for the thread; stays concise and links out to everything else
-- 💬 **sessions/**: log of each conversation, one file per session
-- ⚖️ **decisions/**: recorded decisions with context and rationale, so the "why" isn't lost over time
-- 📎 **attachments/**: files you bring into the thread (specs, screenshots, exported data)
-- ✨ **artifacts/**: files Claude generates (snapshots, reports, diagrams)
-
 ## Custom Agents and Skills
 
 You can add your own agents and skills to any workspace. Claude Code loads `.claude/` directories based on scope, so placement controls who has access.
 
-**Workspace-wide agents and skills** — available across all threads:
+**Workspace-wide agents and skills**, available across all threads:
 
 ```
 my-workspace/
@@ -168,7 +192,7 @@ my-workspace/
         └── my-skill.md
 ```
 
-**Thread-scoped skills** — Claude Code automatically discovers skills from nested `.claude/skills/` directories based on the current working directory. Skills placed inside a thread folder are picked up when you're working within that directory:
+**Thread-scoped skills.** Claude Code automatically discovers skills from nested `.claude/skills/` directories based on the current working directory. Skills placed inside a thread folder are picked up when you're working within that directory:
 
 ```
 my-workspace/

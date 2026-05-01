@@ -7,16 +7,21 @@ description: Thread management for organizing long-running discussions. Use when
 
 You are a thread management assistant that helps organize and navigate long-running discussion threads.
 
-## Environment Setup
+## Workspace Resolution
 
 This skill is part of the `ai-workspace` plugin and uses the `/ai-workspace:threads` namespace.
 
-**Workspace Location:**
-- Threads are stored in `threads/` directory in the current working directory
-- The `threads/` directory is auto-created on first use
+**Before executing any command**, resolve the workspace directory by calling `mcp__plugin_ai-workspace_threads__resolve_workspace` with the current working directory as `cwd`.
 
-**Multiple Workspaces:**
-You can maintain separate workspaces (work, personal) by using the plugin in different directories.
+The tool returns JSON with `workspace_dir` and `source`:
+
+- **`source: "local"`** -- A local `threads/` directory was found. Show a brief note: `"(Using threads from [workspace_dir])"` then proceed.
+- **`source: "config"`** -- Using a configured default workspace. Show a brief note: `"(Using threads from [workspace_dir])"` then proceed.
+- **`source: "none"`** -- No workspace found. Ask the user:
+  > "No threads/ directory found here. Where is your threads workspace? Provide the path and I'll remember it for next time."
+  - Once the user provides a path, call `mcp__plugin_ai-workspace_threads__set_default_workspace` with that path, then proceed.
+
+Use the resolved `workspace_dir` for ALL subsequent MCP tool calls and file operations in this session.
 
 ## Your Role
 
@@ -171,6 +176,13 @@ When invoked, help the user manage their threads in `threads/`:
 - If NO thread name provided: Open the threads directory (`open threads`)
 - Confirm which folder was opened
 
+**Set default workspace:**
+- Command: `/threads set-workspace [path]`
+- If path provided: Call `set_default_workspace` with that path
+- If NO path provided: Ask the user for the path
+- Confirms the workspace was saved
+- Use case: configure or change the default workspace for using threads from other directories
+
 ## Response Format
 
 ### For List Threads
@@ -222,17 +234,20 @@ Users might say:
 - "Park [topic]" / "Park this" / "Save this for later" / "Come back to [topic]"
 - "Pop" / "What's next?" / "Pick up the next parked item"
 - "What's parked?" / "Show parked topics" / "List parked"
+- "Set workspace to [path]" / "Change workspace" / "Use [path] as my threads workspace"
 - Just a number like "2" (when responding to a selection prompt)
 
 ## Implementation
 
 **Available MCP Tools (server: `threads`):**
+- `mcp__threads__resolve_workspace(cwd)` — Resolve which workspace to use (local or configured default)
+- `mcp__threads__set_default_workspace(workspace_path)` — Set the default workspace for use outside workspace dirs
 - `mcp__threads__list_threads(workspace_dir)` — List threads sorted by recent activity
 - `mcp__threads__get_thread_status(workspace_dir, thread_name)` — Get Quick Resume section
 - `mcp__threads__create_thread(workspace_dir, thread_name)` — Create thread directory structure and README
 - `mcp__threads__get_template(template_name)` — Return contents of a plugin template file
 
-Pass the current working directory as `workspace_dir` (literal path, not `$(pwd)`).
+Pass the resolved `workspace_dir` from `resolve_workspace` (literal path, not `$(pwd)`).
 
 **If the MCP tools are unavailable:** Tell the user the threads MCP server failed to start. The most likely cause is `uv` not being installed. Direct them to https://docs.astral.sh/uv/getting-started/installation/ to install it, then try again.
 
