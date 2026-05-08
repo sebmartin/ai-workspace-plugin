@@ -22,9 +22,9 @@ cd ~/my-workspace
 
 Threads work for anything you'd want to revisit across sessions, not just code.
 
-- [Planning and executing an architectural change](./docs/examples/architectural-change/): planning across sessions, execution across repos
-- [Tracking accomplishments for promo and weekly sync](./docs/examples/career-growth/): custom skills, attachments, cross-thread context
-- [Planning a cottage build](./docs/examples/cottage-build/): bylaw expert from PDFs, decision logging, draft emails
+- [Planning and executing an architectural change](./docs/examples/architectural-change/README.md): planning across sessions, execution across repos
+- [Tracking accomplishments for promo and weekly sync](./docs/examples/career-growth/README.md): custom skills, attachments, cross-thread context
+- [Planning a cottage build](./docs/examples/cottage-build/README.md): bylaw expert from PDFs, decision logging, draft emails
 
 ## How threads work
 
@@ -60,7 +60,7 @@ A good habit is to save the thread at a natural stopping point, then start a fre
 
 ## Debate
 
-When you have a proposal worth stress-testing, run a debate. A proponent makes the strongest honest case for the idea and refines it under pressure. A skeptic challenges specific assumptions, surfaces blind spots, and backs off when concerns are addressed. The result is saved as a thread artifact. See it used in the [architectural change example](./docs/examples/architectural-change/).
+When you have a proposal worth stress-testing, run a debate. A proponent makes the strongest honest case for the idea and refines it under pressure. A skeptic challenges specific assumptions, surfaces blind spots, and backs off when concerns are addressed. The result is saved as a thread artifact. See it used in the [architectural change example](./docs/examples/architectural-change/README.md).
 
 ```bash
 /ai-workspace:debate        # 2 rounds (default)
@@ -87,7 +87,7 @@ Install the [`tech-expert-agents`](https://github.com/sebmartin/ai-marketplace/t
 
 ## Custom Skills
 
-Skills placed inside a thread directory are discovered by Claude Code when you're working in that context. The [career-growth example](./docs/examples/career-growth/) shows a skill that fetches activity from GitHub, Jira, and Slack. The [cottage-build example](./docs/examples/cottage-build/) shows one built from PDF attachments that answers bylaw questions automatically.
+Skills placed inside a thread directory are discovered by Claude Code when you're working in that context. The [career-growth example](./docs/examples/career-growth/README.md) shows a skill that fetches activity from GitHub, Jira, and Slack. The [cottage-build example](./docs/examples/cottage-build/README.md) shows one built from PDF attachments that answers bylaw questions automatically.
 
 ```
 threads/{thread-name}/.claude/skills/my-skill.md
