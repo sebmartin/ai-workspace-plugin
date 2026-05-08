@@ -71,7 +71,7 @@ Both agents can call in specialist agents to validate claims, and will ask you d
 
 ### Specialist Agents
 
-Install the `tech-expert-agents` plugin for a ready-made set:
+Install the [`tech-expert-agents`](https://github.com/sebmartin/ai-marketplace#tech-expert-agents) plugin for a ready-made set:
 
 ```
 /plugin install tech-expert-agents@sebmartin
