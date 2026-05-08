@@ -56,7 +56,7 @@ Thread files are organized as a hierarchy of linked Markdown documents. When res
 
 ### Start fresh, pick up where you left off
 
-A good habit is to save the thread at a natural stopping point, then start a fresh Claude session to resume the thread from a clean context window. The new session loads only what the thread has captured and leaves behind the cruft that accumulates in long conversations: failed attempts, tangents, superseded ideas. The important things are saved. Everything else is gone. This keeps token usage down and the context window clean.
+A good habit is to save the thread at a natural stopping point, then start a fresh Claude session. Resume the thread and ask "where were we?" Claude reads the thread summary and the last session log, giving you a clean starting point without the cruft that accumulates in long conversations: failed attempts, tangents, superseded ideas. The important things are saved. Everything else is gone. This keeps token usage down and the context window clean.
 
 ## Debate
 
