@@ -1,0 +1,1 @@
+If the user wants to create, resume, list, or otherwise work with threads, invoke the `ai-workspace:threads` skill via the Skill tool. Do not use Bash (`ls`, `find`, `cat`, `tree`) to inspect the `threads/` directory — the skill and its MCP tools are the canonical interface.
