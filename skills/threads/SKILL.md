@@ -39,7 +39,7 @@ When invoked, help the user manage their threads in `threads/`:
 - Create `threads/{name}/decisions/YYYYMMDD-title.md` with decision details
 - Show relative path with `./` prefix (e.g., `./threads/foo/decisions/20260120-bar.md`) - user can cmd-click to review in editor
 - After user confirms it's good:
-  - Update README.md Quick Resume and Resources section with link to decision
+  - Update README.md Quick Resume and Resources > Decisions section with link to decision -- include a one-line description of what was decided
   - Update current session log
 - Decision filename format: `YYYYMMDD-kebab-case-title.md`
 
@@ -58,6 +58,7 @@ When invoked, help the user manage their threads in `threads/`:
   - Example: `20260316-snapshot-auth-flow-design.md`
 - Show relative path for user to review in editor
 - Snapshot is an artifact (output) for sharing externally
+- Follow the **Registration** rule: add to session log and README immediately
 
 **Save thread context:**
 - Command: `/threads save`
@@ -292,6 +293,24 @@ Use subdirectories within `artifacts/` when a natural grouping emerges — typic
 - Don't pre-create empty subdirectories
 
 Date-prefixed files within subdirectories follow the same naming convention.
+
+### Registration (REQUIRED)
+
+**Every time you create an artifact, you MUST immediately:**
+
+1. Add it to the session log under `### Created Artifacts` (create the section if missing)
+2. Add it to the thread's README.md under `### Artifacts` in the Resources section (create the section if missing)
+
+Both updates happen as part of artifact creation -- not later, not on save. Do not wait for the user to ask.
+
+Format for README entry:
+```
+ - [Artifact Title](./artifacts/YYYYMMDD-filename.md) -- one-line description of what it contains
+```
+
+The description is **required** -- never add a bare link.
+
+This rule applies to ALL artifacts: snapshots, proposals, analyses, diagrams, specs, and any other file written to `artifacts/`.
 
 ## Current Thread Tracking
 
