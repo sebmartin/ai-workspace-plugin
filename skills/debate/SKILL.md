@@ -10,8 +10,10 @@ Pressure-test the current proposal by running a structured dialogue between a `p
 ## Invocation
 
 ```
-/ai-workspace:debate        # 2 rounds (default)
-/ai-workspace:debate 3      # custom number of rounds
+/ai-workspace:debate        # 2 rounds (default, Claude Code)
+/ai-workspace:debate 3      # custom number of rounds (Claude Code)
+/debate                     # 2 rounds (default, Codex CLI)
+/debate 3                   # custom number of rounds (Codex CLI)
 ```
 
 ## Steps
@@ -29,8 +31,12 @@ Check whether any specialist agents are available beyond the `proponent` and `sk
 ```
 Note: no specialist agents are available. The debate will rely solely on the proponent
 and skeptic without external validation of assumptions, which limits its rigor.
-Consider installing specialist agents, e.g.:
+
+On Claude Code, install the specialist agents pack:
   /plugin install tech-expert-agents@sebmartin
+
+On Codex CLI, specialist subagents are not yet distributed as a plugin.
+You can install them manually by placing .toml agent files in ~/.codex/agents/.
 ```
 
 Then confirm the proposal with the user before starting:
@@ -53,7 +59,12 @@ Each round follows this structure:
 2. **Skeptic** — given the proponent's output, counters specific assumptions, surfaces blind spots, and acknowledges concerns the proponent resolved well
 3. **Proponent** — responds to the skeptic's counters, refines the proposal
 
-Invoke each agent using the Task tool. Pass the full debate context so far so each agent builds on, not repeats, what came before.
+Invoke each agent as a subagent so they run in isolated context. The exact mechanism depends on the CLI:
+
+- **Claude Code**: use the `Task` tool with `subagent_type: "proponent"` or `subagent_type: "skeptic"`. Multiple subagents can run in parallel.
+- **Codex CLI**: ask Codex to spawn the `proponent` or `skeptic` subagent by name (Codex spawns subagents on explicit request). Requires the agent `.toml` files to be present in `~/.codex/agents/` — the `init` skill installs these.
+
+In either case, pass the full debate context so far so each agent builds on, not repeats, what came before.
 
 Between each agent turn, briefly summarize what changed: which concerns were raised, which were resolved, which remain open.
 
@@ -71,7 +82,7 @@ Wait for the user's answer. Resume the debate from where it paused with the new 
 
 #### Specialist Agent Delegation
 
-Either agent may delegate to any available specialist agents to validate assumptions. Their findings are included in that agent's turn output and carried forward in the debate context. The richer the set of available specialist agents, the more rigorous the debate.
+Either agent may delegate to any available specialist agents (architect, security reviewer, cost analyst, etc.) to validate assumptions. On Claude Code these are invoked via the Task tool; on Codex CLI they are spawned by name from `~/.codex/agents/`. Their findings are included in that agent's turn output and carried forward in the debate context. The richer the set of available specialist agents, the more rigorous the debate.
 
 ---
 

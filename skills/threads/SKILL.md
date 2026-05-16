@@ -9,7 +9,7 @@ You are a thread management assistant that helps organize and navigate long-runn
 
 ## Workspace Resolution
 
-This skill is part of the `ai-workspace` plugin and uses the `/ai-workspace:threads` namespace.
+This skill is part of the `ai-workspace` plugin. On Claude Code it is invoked via the `/ai-workspace:threads` slash command. On Codex CLI it is invoked via `/threads` or natural language.
 
 **Before executing any command**, resolve the workspace directory by calling `mcp__plugin_ai-workspace_threads__resolve_workspace` with the current working directory as `cwd`.
 
@@ -68,7 +68,7 @@ When invoked, help the user manage their threads in `threads/`:
   2. If none exists: call `mcp__plugin_ai-workspace_threads__get_template(template_name="thread-session-template.md")` to get the template, then create `YYYYMMDD-kebab-summary.md` filled with current conversation context (goal, key points, decisions, next steps)
   3. If one exists: update it — append new discussion points, decisions, and progress since last save
   4. Link the session file in README.md Resources > Sessions if not already listed
-- A session loosely maps to a single Claude invocation: one file per conversation, updated on each save
+- A session loosely maps to a single CLI invocation: one file per conversation, updated on each save
 - Does NOT generate a snapshot (use `/threads snapshot` for that)
 
 **Link to parent thread:**
@@ -127,8 +127,8 @@ When invoked, help the user manage their threads in `threads/`:
 - Display next steps and open questions
 
 **Resume a thread:**
-- **Use case**: Switching to a different thread within an active Claude session
-- **Note**: If user is starting a new Claude session, they should use `claude --continue` or `claude --resume <id>` instead (preserves full conversation context)
+- **Use case**: Switching to a different thread within an active CLI session
+- **Note**: If the user is starting a new session and their CLI supports session resume (e.g., `claude --continue` / `claude --resume <id>`), that preserves full conversation context. Use `/threads resume` when switching threads within an active session or when no native session resume is available.
 - If thread name is provided: Resume that thread
 - If NO thread name provided:
   1. List all threads with numbers (1, 2, 3...)
@@ -257,14 +257,19 @@ Interactively guide the user through:
 5. Confirm and show path to README.md
 
 ### For Resume
-Keep it fast and minimal. Just show:
+Keep it fast and minimal. Show:
 ```
 Resumed: [Thread Name]
 
 [Quick Resume section from README - paste it directly]
+
+## Locked Decisions
+[One line per decision log: "**[title]** ([status]): [summary]"]
 ```
 
-That's it. No verbose summaries, no session log reading. The Quick Resume already has current focus, next steps, and recent progress.
+No verbose summaries, no session log reading. The Quick Resume has current focus and next steps. The Locked Decisions keep key specs in context throughout the conversation — without them, Claude forgets locked-in choices and re-litigates settled decisions.
+
+**Decision log summaries**: Read the frontmatter of every file in `threads/{name}/decisions/`. If a log is missing YAML frontmatter entirely, or has frontmatter but no `summary:` field, automatically read the log, infer a one-sentence summary of WHAT was decided (no rationale), and add the `summary:` field to the frontmatter. Do this silently before completing the resume. Use the decision log template at `templates/decision-template.md` as the format reference.
 
 ## Commands to Recognize
 
@@ -385,8 +390,8 @@ This rule applies to ALL artifacts: snapshots, proposals, analyses, diagrams, sp
 - If not found: Say "No active thread set. Run `/threads` to see available threads."
 
 **Context preservation across sessions:**
-- Users should use `claude --continue` or `claude --resume <id>` when starting Claude to preserve full conversation context
-- The `/threads resume` command is for switching threads within an active session, not for starting new sessions
+- If the user's CLI supports session resume (e.g., `claude --continue` / `claude --resume <id>` for Claude Code), prefer that when re-entering work, since it keeps full conversation context.
+- The `/threads resume` command is for switching threads within an active session or when starting a fresh session without native resume.
 
 ## When README Gets Updated
 
