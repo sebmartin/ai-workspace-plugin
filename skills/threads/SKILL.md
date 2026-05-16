@@ -117,7 +117,7 @@ When invoked, help the user manage their threads in `threads/`:
 - Command: `/threads create [thread-name]`
 - Also recognized: "create a new thread", "start a new thread about [topic]"
 - Ask for thread name if not provided (must be kebab-case)
-- Call `mcp__threads__create_thread(workspace_dir, thread_name)` — this handles validation, directory structure, and README creation in one step
+- Call `mcp__plugin_ai-workspace_threads__create_thread(workspace_dir, thread_name)` — this handles validation, directory structure, and README creation in one step
 - Optionally help fill in initial context (problem, current state, desired state)
 - Confirm creation and show next steps
 
@@ -238,7 +238,7 @@ When invoked, help the user manage their threads in `threads/`:
 ### For List Threads
 **CRITICAL**: Call the MCP tool and output the result directly. Do not add commentary.
 
-Call `mcp__threads__list_threads` with the current working directory as `workspace_dir`.
+Call `mcp__plugin_ai-workspace_threads__list_threads` with the current working directory as `workspace_dir`.
 
 ### For Snapshot
 Present a concise snapshot with:
@@ -299,18 +299,18 @@ Users might say:
 
 ## Implementation
 
-**Available MCP Tools (server: `threads`):**
-- `mcp__threads__resolve_workspace(cwd)` — Resolve which workspace to use (local or configured default)
-- `mcp__threads__set_default_workspace(workspace_path)` — Set the default workspace for use outside workspace dirs
-- `mcp__threads__list_threads(workspace_dir)` — List threads sorted by recent activity
-- `mcp__threads__get_thread_status(workspace_dir, thread_name)` — Get Quick Resume section
-- `mcp__threads__create_thread(workspace_dir, thread_name)` — Create thread directory structure and README
-- `mcp__threads__get_template(template_name)` — Return contents of a plugin template file
-- `mcp__threads__archive_thread(workspace_dir, thread_name, summary, keywords, body)` — Compress a thread, write a search-friendly summary, delete the original
-- `mcp__threads__restore_thread(workspace_dir, archive_base)` — Restore an archived thread; deletes the archive on success
-- `mcp__threads__list_archived_threads(workspace_dir)` — List archived threads with dates and inline keywords
-- `mcp__threads__inspect_archive(workspace_dir, archive_base)` — Extract an archive into `archive/tmp/` without restoring (non-destructive peek)
-- `mcp__threads__purge_archive_tmp(workspace_dir)` — Wipe `archive/tmp/` after inspection
+**Available MCP Tools (server: `threads`, exposed under the plugin's vendor-prefixed bridge):**
+- `mcp__plugin_ai-workspace_threads__resolve_workspace(cwd)` — Resolve which workspace to use (local or configured default)
+- `mcp__plugin_ai-workspace_threads__set_default_workspace(workspace_path)` — Set the default workspace for use outside workspace dirs
+- `mcp__plugin_ai-workspace_threads__list_threads(workspace_dir)` — List threads sorted by recent activity
+- `mcp__plugin_ai-workspace_threads__get_thread_status(workspace_dir, thread_name)` — Get Quick Resume section
+- `mcp__plugin_ai-workspace_threads__create_thread(workspace_dir, thread_name)` — Create thread directory structure and README
+- `mcp__plugin_ai-workspace_threads__get_template(template_name)` — Return contents of a plugin template file
+- `mcp__plugin_ai-workspace_threads__archive_thread(workspace_dir, thread_name, summary, keywords, body)` — Compress a thread, write a search-friendly summary, delete the original
+- `mcp__plugin_ai-workspace_threads__restore_thread(workspace_dir, archive_base)` — Restore an archived thread; deletes the archive on success
+- `mcp__plugin_ai-workspace_threads__list_archived_threads(workspace_dir)` — List archived threads with dates and inline keywords
+- `mcp__plugin_ai-workspace_threads__inspect_archive(workspace_dir, archive_base)` — Extract an archive into `archive/tmp/` without restoring (non-destructive peek)
+- `mcp__plugin_ai-workspace_threads__purge_archive_tmp(workspace_dir)` — Wipe `archive/tmp/` after inspection
 
 Pass the resolved `workspace_dir` from `resolve_workspace` (literal path, not `$(pwd)`).
 
@@ -322,7 +322,7 @@ Pass the resolved `workspace_dir` from `resolve_workspace` (literal path, not `$
 - Write tool when creating new threads
 - Bash(mkdir:*) for directory structure
 
-**Create a new thread** — use `mcp__threads__create_thread`. Do not use Bash or Write for thread creation.
+**Create a new thread** — use `mcp__plugin_ai-workspace_threads__create_thread`. Do not use Bash or Write for thread creation.
 
 ## Artifact Conventions
 

@@ -175,6 +175,8 @@ If you ask to resume or find a thread that isn't in your active threads, Claude 
 
 On Codex CLI, drop the `/ai-workspace:` namespace prefix: `/threads`, `/threads create <name>`, and so on. Or just describe what you want in plain English.
 
+> `/init` is an exception — it collides with Codex's built-in command. To run the plugin's init skill on Codex, use the natural-language form: `> initialize the ai-workspace`.
+
 ## Migrating from the pre-plugin version
 
 > [!NOTE]

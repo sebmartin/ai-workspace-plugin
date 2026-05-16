@@ -34,8 +34,9 @@ def get_template_path(template_name: str) -> Path:
 def get_plugin_data_dir() -> Path:
     """Get the plugin's persistent data directory.
 
-    Uses PLUGIN_DATA_DIR env var (set by Claude Code via ${CLAUDE_PLUGIN_DATA}),
-    falls back to ~/.claude/plugins/data/ai-workspace/.
+    Uses PLUGIN_DATA_DIR env var, which the plugin manifests wire up from
+    each CLI's plugin-data variable (${CLAUDE_PLUGIN_DATA} on Claude Code,
+    ${PLUGIN_DATA} on Codex). Falls back to ~/.claude/plugins/data/ai-workspace/.
     """
     env_dir = os.environ.get("PLUGIN_DATA_DIR")
     if env_dir:
