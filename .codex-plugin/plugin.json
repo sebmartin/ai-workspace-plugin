@@ -16,7 +16,7 @@
         "run",
         "--with", "mcp",
         "python3",
-        "${CODEX_PLUGIN_ROOT}/skills/threads/scripts/mcp_server.py"
+        "${PLUGIN_ROOT}/skills/threads/scripts/mcp_server.py"
       ]
     }
   }
