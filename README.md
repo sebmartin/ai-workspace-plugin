@@ -17,7 +17,10 @@ The plugin ships for both Claude Code and OpenAI Codex CLI from a single source.
 
 Restart Claude Code after installing.
 
-### Codex CLI
+### Codex CLI (Beta)
+
+> [!WARNING]
+> Codex support is in beta. Core skills (init, threads, debate) work, but skill instruction-following varies by model — some commands may require natural language instead of slash commands. Please report issues.
 
 ```
 codex plugin marketplace add sebmartin/ai-workspace-plugin
