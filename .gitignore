@@ -1,6 +1,9 @@
 # Python virtual environment
 .venv/
 
+# Potential secrets
+.env
+
 # Python cache and compiled files
 __pycache__/
 .mypy_cache/

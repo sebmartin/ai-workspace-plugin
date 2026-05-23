@@ -118,6 +118,33 @@ You don't need to memorize these. You can tell Claude what you want in plain Eng
 | `/ai-workspace:threads link-related <name>` | Link two threads as related |
 | `/ai-workspace:threads open <name>` | Open thread in Finder (macOS) |
 | `/ai-workspace:threads set-workspace <path>` | Set default workspace for cross-directory access |
+| `/ai-workspace:threads archive <name>` | Archive a completed thread (compress and move to archive/) |
+| `/ai-workspace:threads restore <base>` | Restore an archived thread back to threads/ |
+| `/ai-workspace:threads list-archived` | Show all archived threads with keywords |
+| `/ai-workspace:threads inspect <base>` | Extract an archive to archive/tmp/ for inspection |
+| `/ai-workspace:threads purge-tmp` | Clean up temporary archive extractions |
+
+## Archiving Old Threads
+
+When a thread has run its course, compress it into a searchable archive:
+
+```bash
+/ai-workspace:threads archive my-old-project
+# → Moves to archive/2026-my-old-project.tar.gz + creates archive/2026-my-old-project.md
+```
+
+The archive summary (.md) includes the thread's title, dates, and keywords so you can search for it later without opening the tarball. Browse archived threads with `/ai-workspace:threads list-archived`.
+
+A restored thread automatically captures the archived summary as a session file, preserving the LLM's interpretation as thread history:
+
+```bash
+/ai-workspace:threads restore 2026-my-old-project
+# → Restores to threads/my-old-project and writes sessions/20260523-restored.md
+```
+
+Use `/ai-workspace:threads inspect <base>` to peek into an archive without restoring it.
+
+If you ask to resume or find a thread that isn't in your active threads, Claude will automatically check the archive and offer to restore it if found.
 
 ## Migrating from the pre-plugin version
 
