@@ -12,10 +12,10 @@ def get_plugin_dir() -> Path:
     """
     Get plugin directory by walking up from workspace_utils.py location.
 
-    workspace_utils.py is located in: <plugin>/skills/common/workspace_utils.py
-    So we walk up 3 levels to reach the plugin root.
+    workspace_utils.py is located in: <plugin>/lib/workspace_utils.py
+    So we walk up 2 levels to reach the plugin root.
     """
-    return Path(__file__).resolve().parent.parent.parent
+    return Path(__file__).resolve().parent.parent
 
 
 def get_template_path(template_name: str) -> Path:
@@ -34,13 +34,13 @@ def get_template_path(template_name: str) -> Path:
 def get_plugin_data_dir() -> Path:
     """Get the plugin's persistent data directory.
 
-    Uses PLUGIN_DATA_DIR env var, which the plugin manifests wire up from
-    each CLI's plugin-data variable (${CLAUDE_PLUGIN_DATA} on Claude Code,
-    ${PLUGIN_DATA} on Codex). Falls back to ~/.claude/plugins/data/ai-workspace/.
+    Uses PLUGIN_DATA_DIR env var. Claude wires this from its plugin-data
+    variable; Codex uses a static user-local path in its MCP config.
+    Falls back to ~/.claude/plugins/data/ai-workspace/.
     """
     env_dir = os.environ.get("PLUGIN_DATA_DIR")
     if env_dir:
-        return Path(env_dir)
+        return Path(env_dir).expanduser()
     return Path.home() / ".claude" / "plugins" / "data" / "ai-workspace"
 
 
@@ -134,13 +134,13 @@ def validate_thread_name(name: str) -> bool:
     # ^[a-z0-9]+ - Start with lowercase letter or number
     # ([a-z0-9-]*[a-z0-9]+)? - Optional middle section with hyphens, must end with letter/number
     # $ - End of string
-    pattern = r'^[a-z0-9]+([a-z0-9-]*[a-z0-9]+)?$'
+    pattern = r"^[a-z0-9]+([a-z0-9-]*[a-z0-9]+)?$"
 
     if not re.match(pattern, name):
         return False
 
     # Check for consecutive hyphens
-    if '--' in name:
+    if "--" in name:
         return False
 
     return True

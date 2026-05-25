@@ -30,12 +30,13 @@ ai-workspace-plugin/
 │   └── skeptic.md
 ├── hooks/                           # Session-start hook
 ├── skills/                          # User-invocable skills (shared by both CLIs)
-│   ├── common/workspace_utils.py
 │   ├── debate/SKILL.md
 │   ├── init/SKILL.md
 │   └── threads/
 │       ├── SKILL.md
 │       └── scripts/mcp_server.py
+├── lib/
+│   └── workspace_utils.py           # Shared Python helpers
 ├── templates/
 │   ├── AGENTS.md.template           # Workspace instructions (vendor-neutral)
 │   ├── CLAUDE.md.template           # One-line "@AGENTS.md" import for Claude

@@ -14,7 +14,7 @@ from pathlib import Path
 
 ARCHIVE_SCHEMA_VERSION = 1
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "common"))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "lib"))
 
 from mcp.server.fastmcp import FastMCP
 from workspace_utils import (

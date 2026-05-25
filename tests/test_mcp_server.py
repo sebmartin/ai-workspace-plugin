@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 # Add mcp_server's parent to path so we can import its functions
-sys.path.insert(0, str(Path(__file__).parent.parent / "skills" / "common"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
 sys.path.insert(0, str(Path(__file__).parent.parent / "skills" / "threads" / "scripts"))
 
 import mcp_server
@@ -25,7 +25,7 @@ from mcp_server import (
     restore_thread,
     set_default_workspace,
 )
-from workspace_utils import read_config, write_config
+from workspace_utils import get_plugin_data_dir, read_config, write_config
 
 
 def _make_thread(workspace, name, started="2026-01-15", last_session="2026-04-22"):
@@ -93,6 +93,26 @@ class TestListThreads:
         lines = result.strip().split("\n")
         assert lines[0].startswith("1. newer-thread")
         assert lines[1].startswith("2. older-thread")
+
+
+class TestPluginDataDir:
+    def test_uses_valid_plugin_data_dir_env(self, monkeypatch, tmp_path):
+        data_dir = tmp_path / "plugin-data"
+        monkeypatch.setenv("PLUGIN_DATA_DIR", str(data_dir))
+
+        assert get_plugin_data_dir() == data_dir
+
+    def test_expands_user_in_plugin_data_dir_env(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setenv(
+            "PLUGIN_DATA_DIR",
+            "~/.codex/plugins/data/ai-workspace",
+        )
+
+        assert (
+            get_plugin_data_dir()
+            == tmp_path / ".codex" / "plugins" / "data" / "ai-workspace"
+        )
 
 
 class TestGetThreadStatus:
