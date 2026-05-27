@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "skills" / "threads" / "sc
 import mcp_server
 from mcp_server import (
     archive_thread,
+    create_thread,
     get_thread_status,
     inspect_archive,
     list_archived_threads,
@@ -25,7 +26,18 @@ from mcp_server import (
     restore_thread,
     set_default_workspace,
 )
-from workspace_utils import get_plugin_data_dir, read_config, write_config
+from workspace_utils import get_config_dir, read_config, write_config
+
+
+@pytest.fixture(autouse=True)
+def _isolated_config_dir(tmp_path, monkeypatch):
+    """Keep tests deterministic by pointing AI_WORKSPACE_CONFIG_DIR at an empty per-test dir.
+
+    Without this, tools that read config (now including every operating tool, since
+    each does its own workspace resolution) could pick up a real default_workspace
+    from the developer's machine.
+    """
+    monkeypatch.setenv("AI_WORKSPACE_CONFIG_DIR", str(tmp_path / "_config"))
 
 
 def _make_thread(workspace, name, started="2026-01-15", last_session="2026-04-22"):
@@ -47,9 +59,22 @@ def _make_thread(workspace, name, started="2026-01-15", last_session="2026-04-22
 
 
 class TestListThreads:
-    def test_no_threads_dir(self, tmp_path):
+    def test_no_workspace_returns_error(self, tmp_path):
+        """Bare dir + no config → NO_WORKSPACE."""
         result = list_threads(str(tmp_path))
-        assert "No threads directory found" in result
+        assert "Error: NO_WORKSPACE" in result
+
+    def test_config_fallback_used(self, tmp_path):
+        """Bare cwd but config points to a real workspace → resolve via config."""
+        workspace = tmp_path / "workspace"
+        (workspace / "threads").mkdir(parents=True)
+        write_config({"default_workspace": str(workspace)})
+
+        bare = tmp_path / "bare"
+        bare.mkdir()
+        result = list_threads(str(bare))
+        # Workspace resolved via config and is empty → "No threads found".
+        assert "No threads found" in result
 
     def test_empty_threads_dir(self, tmp_path):
         (tmp_path / "threads").mkdir()
@@ -95,28 +120,39 @@ class TestListThreads:
         assert lines[1].startswith("2. older-thread")
 
 
-class TestPluginDataDir:
-    def test_uses_valid_plugin_data_dir_env(self, monkeypatch, tmp_path):
-        data_dir = tmp_path / "plugin-data"
-        monkeypatch.setenv("PLUGIN_DATA_DIR", str(data_dir))
+class TestConfigDir:
+    def test_uses_valid_config_dir_env(self, monkeypatch, tmp_path):
+        config_dir = tmp_path / "config"
+        monkeypatch.setenv("AI_WORKSPACE_CONFIG_DIR", str(config_dir))
 
-        assert get_plugin_data_dir() == data_dir
+        assert get_config_dir() == config_dir
 
-    def test_expands_user_in_plugin_data_dir_env(self, monkeypatch, tmp_path):
+    def test_expands_user_in_config_dir_env(self, monkeypatch, tmp_path):
         monkeypatch.setenv("HOME", str(tmp_path))
         monkeypatch.setenv(
-            "PLUGIN_DATA_DIR",
-            "~/.codex/plugins/data/ai-workspace",
+            "AI_WORKSPACE_CONFIG_DIR",
+            "~/.config/ai-workspace",
         )
 
-        assert (
-            get_plugin_data_dir()
-            == tmp_path / ".codex" / "plugins" / "data" / "ai-workspace"
-        )
+        assert get_config_dir() == tmp_path / ".config" / "ai-workspace"
+
+    def test_default_uses_xdg_config_home(self, monkeypatch, tmp_path):
+        monkeypatch.delenv("AI_WORKSPACE_CONFIG_DIR", raising=False)
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+
+        assert get_config_dir() == tmp_path / "xdg" / "ai-workspace"
+
+    def test_default_falls_back_to_dot_config(self, monkeypatch, tmp_path):
+        monkeypatch.delenv("AI_WORKSPACE_CONFIG_DIR", raising=False)
+        monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+        monkeypatch.setenv("HOME", str(tmp_path))
+
+        assert get_config_dir() == tmp_path / ".config" / "ai-workspace"
 
 
 class TestGetThreadStatus:
     def test_missing_thread(self, tmp_path):
+        (tmp_path / "threads").mkdir()
         result = get_thread_status(str(tmp_path), "nonexistent")
         assert "not found" in result
 
@@ -156,7 +192,28 @@ class TestGetThreadStatus:
             "## Quick Resume\n\n\n**Focus**: something\n\n\n"
         )
         result = get_thread_status(str(tmp_path), "my-thread")
-        assert result == "**Focus**: something"
+        # Body (after the Workspace/Thread header block) is trimmed.
+        body = result.split("\n\n", 1)[1]
+        assert body == "**Focus**: something"
+
+    def test_success_includes_workspace_and_thread_headers(self, tmp_path):
+        threads = tmp_path / "threads"
+        threads.mkdir()
+        thread = threads / "my-thread"
+        thread.mkdir()
+        (thread / "README.md").write_text(
+            "## Quick Resume\n**Focus**: x\n"
+        )
+        result = get_thread_status(str(tmp_path), "my-thread")
+        assert result.startswith(
+            f"Workspace: {tmp_path}\nThread: {tmp_path / 'threads' / 'my-thread'}\n\n"
+        )
+
+    def test_error_returns_no_headers(self, tmp_path):
+        (tmp_path / "threads").mkdir()
+        result = get_thread_status(str(tmp_path), "nonexistent")
+        assert not result.startswith("Workspace:")
+        assert "not found" in result
 
     def test_purpose_line_excluded(self, tmp_path):
         threads = tmp_path / "threads"
@@ -173,6 +230,73 @@ class TestGetThreadStatus:
         assert "**Focus**: kept" in result
 
 
+class TestCreateThread:
+    def test_creates_thread_in_local_workspace(self, tmp_path):
+        (tmp_path / "threads").mkdir()
+        result = create_thread(str(tmp_path), "my-feature")
+        assert "Created thread 'my-feature'" in result
+        thread = tmp_path / "threads" / "my-feature"
+        assert (thread / "README.md").exists()
+        for sub in ("sessions", "decisions", "attachments", "artifacts"):
+            assert (thread / sub).is_dir()
+
+    def test_success_includes_workspace_and_thread_headers(self, tmp_path):
+        (tmp_path / "threads").mkdir()
+        result = create_thread(str(tmp_path), "headered")
+        assert result.startswith(
+            f"Workspace: {tmp_path}\nThread: {tmp_path / 'threads' / 'headered'}\n\n"
+        )
+
+    def test_already_exists_error_has_no_headers(self, tmp_path):
+        (tmp_path / "threads" / "dupe").mkdir(parents=True)
+        (tmp_path / "threads" / "dupe" / "README.md").write_text("# x")
+        result = create_thread(str(tmp_path), "dupe")
+        assert not result.startswith("Workspace:")
+        assert "already exists" in result
+
+    def test_invalid_name_rejected_before_resolution(self, tmp_path):
+        # Bare dir, but name validation runs first so we should see name error,
+        # not NO_WORKSPACE.
+        result = create_thread(str(tmp_path), "Bad Name")
+        assert "Invalid thread name" in result
+        assert "NO_WORKSPACE" not in result
+
+    def test_ambiguous_when_config_default_exists(self, tmp_path):
+        """Bare cwd + config default set → ask the user which to use."""
+        workspace = tmp_path / "configured-workspace"
+        (workspace / "threads").mkdir(parents=True)
+        write_config({"default_workspace": str(workspace)})
+
+        bare = tmp_path / "elsewhere"
+        bare.mkdir()
+        result = create_thread(str(bare), "new-thread")
+        assert "Status: AMBIGUOUS_WORKSPACE" in result
+        assert str(workspace) in result
+        assert str(bare) in result
+        # Thread must NOT have been created in either location.
+        assert not (workspace / "threads" / "new-thread").exists()
+        assert not (bare / "threads" / "new-thread").exists()
+
+    def test_needs_init_when_no_workspace_anywhere(self, tmp_path):
+        """Bare cwd + no config → ask the user to init here or supply a path."""
+        bare = tmp_path / "fresh-dir"
+        bare.mkdir()
+        result = create_thread(str(bare), "first-thread")
+        assert "Status: NEEDS_INIT" in result
+        assert str(bare) in result
+        assert not (bare / "threads").exists()
+
+    def test_retry_with_configured_path_succeeds(self, tmp_path):
+        """After AMBIGUOUS, retry with cwd=<configured> works as the response suggests."""
+        workspace = tmp_path / "configured-workspace"
+        (workspace / "threads").mkdir(parents=True)
+        write_config({"default_workspace": str(workspace)})
+
+        result = create_thread(str(workspace), "from-retry")
+        assert "Created thread 'from-retry'" in result
+        assert (workspace / "threads" / "from-retry" / "README.md").exists()
+
+
 class TestResolveWorkspace:
     def test_local_threads_dir(self, tmp_path):
         (tmp_path / "threads").mkdir()
@@ -185,10 +309,10 @@ class TestResolveWorkspace:
         workspace = tmp_path / "workspace"
         (workspace / "threads").mkdir(parents=True)
 
-        # Point plugin data dir to tmp_path for config
-        data_dir = tmp_path / "plugin-data"
+        # Point config dir to tmp_path
+        data_dir = tmp_path / "config"
         data_dir.mkdir()
-        monkeypatch.setenv("PLUGIN_DATA_DIR", str(data_dir))
+        monkeypatch.setenv("AI_WORKSPACE_CONFIG_DIR", str(data_dir))
 
         # Write config with default_workspace
         config_path = data_dir / "config.json"
@@ -203,9 +327,9 @@ class TestResolveWorkspace:
         assert result["workspace_dir"] == str(workspace)
 
     def test_no_workspace_found(self, tmp_path, monkeypatch):
-        data_dir = tmp_path / "plugin-data"
+        data_dir = tmp_path / "config"
         data_dir.mkdir()
-        monkeypatch.setenv("PLUGIN_DATA_DIR", str(data_dir))
+        monkeypatch.setenv("AI_WORKSPACE_CONFIG_DIR", str(data_dir))
 
         result = json.loads(resolve_workspace(str(tmp_path)))
         assert result["source"] == "none"
@@ -213,9 +337,9 @@ class TestResolveWorkspace:
 
     def test_config_path_missing(self, tmp_path, monkeypatch):
         """Config points to a workspace that no longer exists."""
-        data_dir = tmp_path / "plugin-data"
+        data_dir = tmp_path / "config"
         data_dir.mkdir()
-        monkeypatch.setenv("PLUGIN_DATA_DIR", str(data_dir))
+        monkeypatch.setenv("AI_WORKSPACE_CONFIG_DIR", str(data_dir))
 
         config_path = data_dir / "config.json"
         config_path.write_text(json.dumps({"default_workspace": "/nonexistent/path"}))
@@ -231,9 +355,9 @@ class TestResolveWorkspace:
         remote = tmp_path / "remote-workspace"
         (remote / "threads").mkdir(parents=True)
 
-        data_dir = tmp_path / "plugin-data"
+        data_dir = tmp_path / "config"
         data_dir.mkdir()
-        monkeypatch.setenv("PLUGIN_DATA_DIR", str(data_dir))
+        monkeypatch.setenv("AI_WORKSPACE_CONFIG_DIR", str(data_dir))
         (data_dir / "config.json").write_text(
             json.dumps({"default_workspace": str(remote)})
         )
@@ -248,8 +372,8 @@ class TestSetDefaultWorkspace:
         workspace = tmp_path / "workspace"
         (workspace / "threads").mkdir(parents=True)
 
-        data_dir = tmp_path / "plugin-data"
-        monkeypatch.setenv("PLUGIN_DATA_DIR", str(data_dir))
+        data_dir = tmp_path / "config"
+        monkeypatch.setenv("AI_WORKSPACE_CONFIG_DIR", str(data_dir))
 
         result = set_default_workspace(str(workspace))
         assert "Default workspace set" in result
@@ -258,16 +382,16 @@ class TestSetDefaultWorkspace:
         assert config["default_workspace"] == str(workspace.resolve())
 
     def test_rejects_missing_directory(self, tmp_path, monkeypatch):
-        data_dir = tmp_path / "plugin-data"
-        monkeypatch.setenv("PLUGIN_DATA_DIR", str(data_dir))
+        data_dir = tmp_path / "config"
+        monkeypatch.setenv("AI_WORKSPACE_CONFIG_DIR", str(data_dir))
 
         result = set_default_workspace("/nonexistent/path")
         assert "Error" in result
         assert "does not exist" in result
 
     def test_rejects_dir_without_threads(self, tmp_path, monkeypatch):
-        data_dir = tmp_path / "plugin-data"
-        monkeypatch.setenv("PLUGIN_DATA_DIR", str(data_dir))
+        data_dir = tmp_path / "config"
+        monkeypatch.setenv("AI_WORKSPACE_CONFIG_DIR", str(data_dir))
 
         result = set_default_workspace(str(tmp_path))
         assert "Error" in result
@@ -276,20 +400,20 @@ class TestSetDefaultWorkspace:
 
 class TestConfigHelpers:
     def test_read_missing_config(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("PLUGIN_DATA_DIR", str(tmp_path / "nonexistent"))
+        monkeypatch.setenv("AI_WORKSPACE_CONFIG_DIR", str(tmp_path / "nonexistent"))
         assert read_config() == {}
 
     def test_write_and_read_config(self, tmp_path, monkeypatch):
-        data_dir = tmp_path / "plugin-data"
-        monkeypatch.setenv("PLUGIN_DATA_DIR", str(data_dir))
+        data_dir = tmp_path / "config"
+        monkeypatch.setenv("AI_WORKSPACE_CONFIG_DIR", str(data_dir))
 
         write_config({"default_workspace": "/some/path"})
         config = read_config()
         assert config["default_workspace"] == "/some/path"
 
     def test_write_creates_directory(self, tmp_path, monkeypatch):
-        data_dir = tmp_path / "nested" / "plugin-data"
-        monkeypatch.setenv("PLUGIN_DATA_DIR", str(data_dir))
+        data_dir = tmp_path / "nested" / "config"
+        monkeypatch.setenv("AI_WORKSPACE_CONFIG_DIR", str(data_dir))
 
         write_config({"key": "value"})
         assert data_dir.exists()
@@ -324,6 +448,7 @@ class TestArchiveThread:
         assert "Invalid thread name" in result
 
     def test_missing_thread(self, tmp_path):
+        (tmp_path / "threads").mkdir()
         result = archive_thread(str(tmp_path), "ghost", "s", [], "b")
         assert "not found" in result
 
@@ -483,6 +608,7 @@ class TestRestoreThread:
         assert "threads/tri-restored-3" in result
 
     def test_missing_archive(self, tmp_path):
+        (tmp_path / "threads").mkdir()
         result = restore_thread(str(tmp_path), "2026-ghost")
         assert "not found" in result
 
@@ -492,6 +618,7 @@ class TestRestoreThread:
             assert "Invalid archive base" in result, f"failed for {bad!r}"
 
     def test_malicious_tar_member_rejected(self, tmp_path):
+        (tmp_path / "threads").mkdir()
         archive_dir = tmp_path / "archive"
         archive_dir.mkdir()
         tar_path = archive_dir / "2026-evil.tar.gz"
@@ -516,6 +643,7 @@ class TestRestoreThread:
         assert not (tmp_path / "threads" / "evil").exists()
 
     def test_multi_top_level_archive_rejected(self, tmp_path):
+        (tmp_path / "threads").mkdir()
         archive_dir = tmp_path / "archive"
         archive_dir.mkdir()
         tar_path = archive_dir / "2026-multi.tar.gz"
@@ -537,9 +665,11 @@ class TestRestoreThread:
 
 class TestListArchivedThreads:
     def test_empty_returns_message(self, tmp_path):
+        (tmp_path / "threads").mkdir()
         assert "No archived threads" in list_archived_threads(str(tmp_path))
 
     def test_missing_archive_dir(self, tmp_path):
+        (tmp_path / "threads").mkdir()
         assert "No archived threads" in list_archived_threads(str(tmp_path))
 
     def test_lists_archives_sorted_newest_first(self, tmp_path, monkeypatch):
@@ -574,6 +704,7 @@ class TestListArchivedThreads:
         assert "stray" not in result
 
     def test_orphan_md_without_archive_skipped(self, tmp_path):
+        (tmp_path / "threads").mkdir()
         archive_dir = tmp_path / "archive"
         archive_dir.mkdir()
         (archive_dir / "2026-orphan.md").write_text(
@@ -609,6 +740,7 @@ class TestInspectArchive:
         assert (tmp_path / "archive" / "tmp" / base / "twice" / "README.md").exists()
 
     def test_missing_archive(self, tmp_path):
+        (tmp_path / "threads").mkdir()
         result = inspect_archive(str(tmp_path), "2026-ghost")
         assert "not found" in result
 
@@ -617,6 +749,7 @@ class TestInspectArchive:
         assert "Invalid archive base" in result
 
     def test_malicious_archive_rejected(self, tmp_path):
+        (tmp_path / "threads").mkdir()
         archive_dir = tmp_path / "archive"
         archive_dir.mkdir()
         tar_path = archive_dir / "2026-bad.tar.gz"
@@ -635,10 +768,12 @@ class TestInspectArchive:
 
 class TestPurgeArchiveTmp:
     def test_no_op_when_missing(self, tmp_path):
+        (tmp_path / "threads").mkdir()
         result = purge_archive_tmp(str(tmp_path))
         assert "already clean" in result
 
     def test_removes_tmp_subtree(self, tmp_path):
+        (tmp_path / "threads").mkdir()
         tmp_dir = tmp_path / "archive" / "tmp" / "2026-x" / "thread"
         tmp_dir.mkdir(parents=True)
         (tmp_dir / "file.txt").write_text("content")
@@ -647,6 +782,7 @@ class TestPurgeArchiveTmp:
         assert not (tmp_path / "archive" / "tmp").exists()
 
     def test_does_not_touch_siblings(self, tmp_path):
+        (tmp_path / "threads").mkdir()
         archive_dir = tmp_path / "archive"
         archive_dir.mkdir()
         (archive_dir / "2026-keep.md").write_text("---\nthread: keep\n---\n")

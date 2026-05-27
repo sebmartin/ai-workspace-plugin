@@ -11,10 +11,7 @@
         "python3",
         "skills/threads/scripts/mcp_server.py"
       ],
-      "cwd": ".",
-      "env": {
-        "PLUGIN_DATA_DIR": "~/.codex/plugins/data/ai-workspace"
-      }
+      "cwd": "."
     }
   }
 }

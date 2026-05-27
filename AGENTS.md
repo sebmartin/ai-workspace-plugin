@@ -144,7 +144,7 @@ threads/{thread-name}/
 The threads MCP server is declared in both `.claude-plugin/plugin.json` and `.codex-plugin/plugin.json`. Tools are exposed under the `threads` server name with a vendor-prefixed bridge:
 
 ```
-mcp__plugin_ai-workspace_threads__resolve_workspace(cwd="/abs/path")
+mcp__plugin_ai-workspace_threads__resolve_workspace(workspace_dir="/abs/path")  # diagnostic only
 mcp__plugin_ai-workspace_threads__list_threads(workspace_dir="/abs/path")
 mcp__plugin_ai-workspace_threads__get_thread_status(workspace_dir, thread_name)
 mcp__plugin_ai-workspace_threads__create_thread(workspace_dir, thread_name)
@@ -153,7 +153,7 @@ mcp__plugin_ai-workspace_threads__get_template(template_name)
 ```
 
 - Plugin location at runtime: each vendor's plugin cache
-- Pass the resolved `workspace_dir` from `resolve_workspace` (literal path, not `$(pwd)`)
+- Pass the workspace path hint as `workspace_dir` (literal path, not `$(pwd)`). Operating tools resolve internally — probe `workspace_dir/threads/`, then the persisted default, then return `Error: NO_WORKSPACE` (or `Status: AMBIGUOUS_WORKSPACE` / `NEEDS_INIT` for `create_thread`).
 
 ## Verification Practices
 
@@ -164,7 +164,7 @@ mcp__plugin_ai-workspace_threads__get_template(template_name)
 
 **When working with threads (as a user would):**
 - Threads live in the user's workspace, not the plugin repo
-- Always resolve workspace via `mcp__plugin_ai-workspace_threads__resolve_workspace(cwd)` first
+- Always resolve workspace via `mcp__plugin_ai-workspace_threads__resolve_workspace(workspace_dir)` first
 - Read `threads/{name}/README.md` for thread details
 - Never assume thread content, always verify
 

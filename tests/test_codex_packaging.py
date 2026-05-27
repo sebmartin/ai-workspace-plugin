@@ -15,7 +15,7 @@ def test_codex_manifest_uses_companion_mcp_file():
     assert (PLUGIN_ROOT / ".mcp.json").is_file()
 
 
-def test_codex_mcp_config_uses_relative_paths_and_static_data_dir():
+def test_codex_mcp_config_uses_relative_paths():
     mcp_config = json.loads((PLUGIN_ROOT / ".mcp.json").read_text())
     threads_server = mcp_config["mcpServers"]["threads"]
     serialized = json.dumps(mcp_config)
@@ -23,9 +23,6 @@ def test_codex_mcp_config_uses_relative_paths_and_static_data_dir():
     assert "type" not in threads_server
     assert threads_server["cwd"] == "."
     assert "skills/threads/scripts/mcp_server.py" in threads_server["args"]
-    assert threads_server["env"]["PLUGIN_DATA_DIR"] == (
-        "~/.codex/plugins/data/ai-workspace"
-    )
     assert "${PLUGIN_ROOT}" not in serialized
     assert "${PLUGIN_DATA}" not in serialized
     assert "${CLAUDE_PLUGIN_ROOT}" not in serialized

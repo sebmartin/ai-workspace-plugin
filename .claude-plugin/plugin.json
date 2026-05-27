@@ -18,10 +18,7 @@
         "--with", "mcp",
         "python3",
         "${CLAUDE_PLUGIN_ROOT}/skills/threads/scripts/mcp_server.py"
-      ],
-      "env": {
-        "PLUGIN_DATA_DIR": "${CLAUDE_PLUGIN_DATA}"
-      }
+      ]
     }
   }
 }

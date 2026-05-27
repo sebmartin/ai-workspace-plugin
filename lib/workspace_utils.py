@@ -31,38 +31,42 @@ def get_template_path(template_name: str) -> Path:
     return get_plugin_dir() / "templates" / template_name
 
 
-def get_plugin_data_dir() -> Path:
-    """Get the plugin's persistent data directory.
+def get_config_dir() -> Path:
+    """Get the user-global config directory shared across CLI installs.
 
-    Uses PLUGIN_DATA_DIR env var. Claude wires this from its plugin-data
-    variable; Codex uses a static user-local path in its MCP config.
-    Falls back to ~/.claude/plugins/data/ai-workspace/.
+    Uses AI_WORKSPACE_CONFIG_DIR if set (explicit override, primarily for tests),
+    otherwise ${XDG_CONFIG_HOME:-~/.config}/ai-workspace/. The path is
+    install-method-independent so a default_workspace set under one install
+    (marketplace, inline, local-dev, Codex) is visible from all the others.
     """
-    env_dir = os.environ.get("PLUGIN_DATA_DIR")
+    env_dir = os.environ.get("AI_WORKSPACE_CONFIG_DIR")
     if env_dir:
         return Path(env_dir).expanduser()
-    return Path.home() / ".claude" / "plugins" / "data" / "ai-workspace"
+
+    xdg = os.environ.get("XDG_CONFIG_HOME")
+    base = Path(xdg).expanduser() if xdg else Path.home() / ".config"
+    return base / "ai-workspace"
 
 
 def read_config() -> dict:
-    """Read plugin config from the persistent data directory.
+    """Read plugin config from the user-global config directory.
 
     Returns empty dict if config file doesn't exist.
     """
-    config_path = get_plugin_data_dir() / "config.json"
+    config_path = get_config_dir() / "config.json"
     if not config_path.exists():
         return {}
     return json.loads(config_path.read_text())
 
 
 def write_config(config: dict) -> None:
-    """Write plugin config to the persistent data directory.
+    """Write plugin config to the user-global config directory.
 
-    Creates the data directory if it doesn't exist.
+    Creates the config directory if it doesn't exist.
     """
-    data_dir = get_plugin_data_dir()
-    data_dir.mkdir(parents=True, exist_ok=True)
-    config_path = data_dir / "config.json"
+    config_dir = get_config_dir()
+    config_dir.mkdir(parents=True, exist_ok=True)
+    config_path = config_dir / "config.json"
     config_path.write_text(json.dumps(config, indent=2) + "\n")
 
 
