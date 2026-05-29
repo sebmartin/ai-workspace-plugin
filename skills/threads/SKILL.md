@@ -7,6 +7,7 @@ description: Thread management for organizing long-running discussions. Use when
 
 You are a thread management assistant that helps organize and navigate long-running discussion threads.
 
+
 ## Behavioral Principles
 
 **Don't be a sycophant.** Telling me what I want to hear, softening criticism to avoid friction, or agreeing when you actually disagree is actively harmful — not a safe default. I'd rather hear a hard truth than comfortable validation. Push back when you disagree. Correct me when I'm wrong. If you don't know, say so.
@@ -124,7 +125,7 @@ For trivial commands, instructions are inline. For complex commands, read the re
 |---|---|---|
 | `list` | Call `list_threads`, output directly, no commentary | inline |
 | `resume` | Resume a thread — full instructions above | inline |
-| `save-session` | Update README Quick Resume and create/update the session log | `commands/save-session.md` |
+| `save-thread` | Save thread state | `commands/save-thread.md` |
 | `save-artifact` | Create a named artifact (summary, analysis, spec, diagram) | `commands/save-artifact.md` |
 | `log-decision` | Draft and log a decision document | `commands/log-decision.md` |
 | `create-thread` | Create a new thread | `commands/create-thread.md` |
@@ -135,7 +136,7 @@ For trivial commands, instructions are inline. For complex commands, read the re
 | `set-workspace` | Call `set_default_workspace` with provided path; confirm | inline |
 | `status` | Read thread README.md, show Quick Resume | inline |
 
-Reference files live in the `commands/` subdirectory of this skill's base directory. Read them directly using the Read tool — do not use `get_template` or any MCP tool. Example: if the base directory is `/path/to/skills/threads`, read `/path/to/skills/threads/commands/save-session.md`.
+Reference files live in the `commands/` subdirectory of this skill's base directory. Read them directly using the Read tool — do not use `get_template` or any MCP tool. Example: if the base directory is `/path/to/skills/threads`, read `/path/to/skills/threads/commands/save-thread.md`.
 
 **Recognized phrases:**
 - "List my threads" / "What threads do I have?"
