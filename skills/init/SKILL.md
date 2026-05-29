@@ -50,15 +50,9 @@ This file is Claude-Code-specific. It is harmless on Codex; Codex ignores it.
 
 ### 5. Codex subagent install (Codex CLI only)
 
-This step only applies on Codex CLI. **Detect the CLI before doing anything**: run
+This step only applies on Codex CLI. **Detect the CLI before doing anything**: you know which CLI you are. If you are Claude Code, skip this entire step — Claude loads the `proponent` and `skeptic` agents directly from the plugin's `agents/` directory; nothing to copy.
 
-```bash
-printenv CLAUDE_PLUGIN_ROOT
-```
-
-If it prints a value, you are on Claude Code — **skip this entire step**. Claude loads the `proponent` and `skeptic` agents directly from the plugin's `agents/` directory; nothing to copy.
-
-If it prints nothing, you are on Codex CLI. Codex plugin manifests cannot bundle subagents directly, so the `.toml` files have to be copied into the user's home `agents/` directory:
+If you are Codex CLI: Codex plugin manifests cannot bundle subagents directly, so the `.toml` files have to be copied into the user's home `agents/` directory:
 
 ```bash
 mkdir -p ~/.codex/agents

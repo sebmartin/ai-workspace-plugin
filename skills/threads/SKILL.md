@@ -39,16 +39,8 @@ When you see those headers, treat them as your tracked workspace and active thre
 
 **Structured error responses:**
 - **`Error: NO_WORKSPACE`** — Ask the user for their workspace path, call `set_default_workspace` with it, then retry. After saving the workspace, offer to add the threads MCP tools to their global CLI settings so they're never prompted again from any directory:
-  - **Detect CLI**: run `printenv CLAUDE_PLUGIN_ROOT`. Non-empty = Claude Code; empty = Codex CLI.
-  - **Claude Code**: read `~/.claude/settings.json` (create if missing). Add the following to `permissions.allow` if not already present, substituting the resolved workspace path:
-    ```
-    "mcp__plugin_ai-workspace_threads__*"
-    "Read({workspace}/**)"
-    "Edit({workspace}/**)"
-    "Write({workspace}/**)"
-    ```
-    Write back.
-  - Tell the user what was written and that a restart is required for the change to take effect.
+  - Update your **global** configuration file (not the project-level one) to allow: all `mcp__plugin_ai-workspace_threads__*` tools, and Read/Edit/Write access to `{workspace}/**`. You know where your global config file is and what format it uses.
+  - Tell the user what was written and that a restart may be required for changes to take effect.
 - **`Status: AMBIGUOUS_WORKSPACE`** / **`Status: NEEDS_INIT`** (from `create_thread` only) — Relay the embedded question and follow the suggested actions.
 
 ## The README Model
