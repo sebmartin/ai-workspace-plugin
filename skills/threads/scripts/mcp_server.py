@@ -62,9 +62,8 @@ def _with_focus(workspace: Path, thread_name: str, body: str) -> str:
     """Prefix a tool's success response with Workspace + Thread headers.
 
     Used only by tools that shift the session's focus to a specific thread
-    (create_thread, get_thread_status). The LLM tracks Workspace and Thread
-    across the session and uses them for follow-up file ops (Read on README.md,
-    Glob on sessions/, etc.).
+    (create_thread, resume_thread). The LLM tracks Workspace and Thread
+    across the session and uses them for follow-up file ops.
     """
     return (
         f"Workspace: {workspace}\n"
@@ -244,8 +243,8 @@ def list_threads(workspace_dir: str) -> str:
 
 
 @mcp.tool()
-def get_thread_status(workspace_dir: str, thread_name: str) -> str:
-    """Get the Quick Resume section from a thread's README.
+def resume_thread(workspace_dir: str, thread_name: str) -> str:
+    """Resolve the workspace and thread path, and return the full README content.
 
     Args:
         workspace_dir: Directory hint for locating the workspace; typically the
@@ -262,28 +261,7 @@ def get_thread_status(workspace_dir: str, thread_name: str) -> str:
     if not readme_path.exists():
         return f"Error: Thread '{thread_name}' not found."
 
-    lines = readme_path.read_text().split("\n")
-    in_section = False
-    result = []
-
-    for line in lines:
-        if line.strip() == "## Quick Resume":
-            in_section = True
-            continue
-        elif in_section and line.startswith("## "):
-            break
-        elif in_section and not line.strip().startswith("> **Purpose**"):
-            result.append(line)
-
-    if not result:
-        return f"Error: No Quick Resume section found in thread '{thread_name}'."
-
-    while result and not result[0].strip():
-        result.pop(0)
-    while result and not result[-1].strip():
-        result.pop()
-
-    return _with_focus(workspace, thread_name, "\n".join(result))
+    return _with_focus(workspace, thread_name, readme_path.read_text())
 
 
 @mcp.tool()

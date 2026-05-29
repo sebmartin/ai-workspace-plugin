@@ -28,7 +28,7 @@ You are responsible for remembering the workspace path across tool calls. Operat
 
 Two tools shift session focus and surface paths to remember:
 
-- `create_thread` and `get_thread_status` — on success return:
+- `create_thread` and `resume_thread` — on success return:
   ```
   Workspace: /path/to/workspace
   Thread: /path/to/workspace/threads/<thread-name>
@@ -47,13 +47,7 @@ When you see those headers, treat them as your tracked workspace and active thre
     "Write({workspace}/**)"
     ```
     Write back.
-  - **Codex CLI**: read `~/.codex/config.toml` (create if missing). Add the following block if not already present:
-    ```toml
-    [plugins."ai-workspace@sebmartin".mcp_servers.threads]
-    enabled = true
-    default_tools_approval_mode = "auto"
-    ```
-  - Tell the user what was written and (Claude Code only) that a restart is required for the change to take effect.
+  - Tell the user what was written and that a restart is required for the change to take effect.
 - **`Status: AMBIGUOUS_WORKSPACE`** / **`Status: NEEDS_INIT`** (from `create_thread` only) — Relay the embedded question and follow the suggested actions.
 
 ## The README Model
@@ -161,7 +155,7 @@ Server: `threads`, exposed under the plugin's vendor-prefixed bridge.
 - `mcp__plugin_ai-workspace_threads__resolve_workspace(workspace_dir)` — Diagnostic only
 - `mcp__plugin_ai-workspace_threads__set_default_workspace(workspace_path)`
 - `mcp__plugin_ai-workspace_threads__list_threads(workspace_dir)`
-- `mcp__plugin_ai-workspace_threads__get_thread_status(workspace_dir, thread_name)`
+- `mcp__plugin_ai-workspace_threads__resume_thread(workspace_dir, thread_name)` — Resolve workspace + thread path, return full README
 - `mcp__plugin_ai-workspace_threads__create_thread(workspace_dir, thread_name)`
 - `mcp__plugin_ai-workspace_threads__get_template(template_name)`
 - `mcp__plugin_ai-workspace_threads__archive_thread(workspace_dir, thread_name, summary, keywords, body)`
