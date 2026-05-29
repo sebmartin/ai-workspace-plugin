@@ -77,7 +77,7 @@ The README is a lean index — the complete map of a thread. It must be short en
 - If thread name provided: resume it. If not: list threads with numbers, ask which, wait for reply.
 - **Archive fallback**: If not found among active threads, call `list_archived_threads` and scan for a match. If found, tell the user it's archived and offer to restore.
 - Read the thread's README.md **in full** — every section. This is the complete map.
-- From the sessions listed in the README, load context using a recency gradient — do not surface this in the output:
+- From the sessions listed in the README, load context using a recency gradient — do not surface this in the output. Use this context to decide whether a full session read is warranted later: if the user asks about something covered in a recent session, you already know enough to answer or to know which session to read in full.
   - **Most recent session**: read frontmatter (`summary`, `keywords`, `next_context`)
   - **Next 2–4 sessions**: read frontmatter (`summary` and `date` only)
   - **Older sessions**: the README link is enough

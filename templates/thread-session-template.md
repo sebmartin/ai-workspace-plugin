@@ -1,6 +1,6 @@
 ---
 date: YYYY-MM-DD
-summary: [One sentence — what happened in this session.]
+summary: [Brief summary of what was discussed — key topics, decisions, outcomes. Be concise but capture what matters. Up to 150 words.]
 keywords: [comma-separated terms — tools, people, topics, file paths the user would search for later]
 next_context: [1-2 sentences — current state and what to tackle next, for resuming from this session]
 ---
