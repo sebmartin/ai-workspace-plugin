@@ -31,7 +31,7 @@ Still working in `{Thread}/README.md`:
 
 Look for a session file in `{Thread}/sessions/` with today's date prefix (`YYYYMMDD-*.md`).
 
-**If none exists**: call `mcp__plugin_ai-workspace_threads__get_template(template_name="thread-session-template.md")` to get the template. Create `{Thread}/sessions/YYYYMMDD-kebab-summary.md`. Fill in:
+**If none exists**: call `mcp__plugin_ai-workspace_threads__get_skill_file("templates/thread-session-template.md")` to get the template. Create `{Thread}/sessions/YYYYMMDD-kebab-summary.md`. Fill in:
 - Frontmatter: `date`, `summary` (up to 150 words of what was discussed), `keywords`, `next_context`
 - Body: goal, key discussion points, decisions made, outcomes, next steps
 

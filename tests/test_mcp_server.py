@@ -18,6 +18,7 @@ from mcp_server import (
     archive_thread,
     create_thread,
     resume_thread,
+    get_skill_file,
     inspect_archive,
     list_archived_threads,
     list_threads,
@@ -756,3 +757,22 @@ class TestPurgeArchiveTmp:
         assert (archive_dir / "2026-keep.md").exists()
         assert (archive_dir / "2026-keep.tar.gz").exists()
         assert not (archive_dir / "tmp").exists()
+
+
+class TestGetSkillFile:
+    def test_reads_existing_file(self):
+        result = get_skill_file("skills/threads/commands/save-thread.md")
+        assert "save-thread" in result
+        assert "Step 1" in result
+
+    def test_missing_file_returns_error(self):
+        result = get_skill_file("skills/threads/commands/nonexistent.md")
+        assert "Error" in result
+
+    def test_path_traversal_blocked(self):
+        result = get_skill_file("../../etc/passwd")
+        assert "Error" in result
+
+    def test_directory_returns_error(self):
+        result = get_skill_file("skills/threads/commands")
+        assert "Error" in result

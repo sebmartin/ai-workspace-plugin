@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "lib"))
 
 from mcp.server.fastmcp import FastMCP
 from workspace_utils import (
+    get_plugin_dir,
     get_template_path,
     read_config,
     validate_thread_name,
@@ -342,19 +343,29 @@ def create_thread(workspace_dir: str, thread_name: str) -> str:
     )
 
 
+
 @mcp.tool()
-def get_template(template_name: str) -> str:
-    """Return the contents of a plugin template file.
+def get_skill_file(relative_path: str) -> str:
+    """Return the contents of a file from the plugin directory.
+
+    Use this to read skill reference files (e.g. commands/save-thread.md)
+    without needing direct filesystem access. Paths are resolved relative
+    to the plugin root and must not escape it.
 
     Args:
-        template_name: Filename of the template (e.g., "thread-template.md").
+        relative_path: Path relative to the plugin root (e.g., "skills/threads/commands/save-thread.md").
     """
-    path = get_template_path(template_name)
-    if not path.exists():
-        templates_dir = get_template_path(".")
-        available = [p.name for p in templates_dir.iterdir() if p.is_file()]
-        return f"Error: Template '{template_name}' not found. Available: {', '.join(sorted(available))}"
-    return path.read_text()
+    plugin_root = get_plugin_dir().resolve()
+    target = (plugin_root / relative_path).resolve()
+    try:
+        target.relative_to(plugin_root)
+    except ValueError:
+        return "Error: Path escapes plugin directory."
+    if not target.exists():
+        return f"Error: File '{relative_path}' not found in plugin."
+    if not target.is_file():
+        return f"Error: '{relative_path}' is not a file."
+    return target.read_text()
 
 
 @mcp.tool()

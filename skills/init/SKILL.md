@@ -30,11 +30,11 @@ Skip if `threads/` already exists.
 
 ### 2. Create `AGENTS.md`
 
-Check if `AGENTS.md` exists. If not, call `mcp__plugin_ai-workspace_threads__get_template(template_name="AGENTS.md.template")` and write the result to `AGENTS.md`.
+Check if `AGENTS.md` exists. If not, call `mcp__plugin_ai-workspace_threads__get_skill_file("templates/AGENTS.md.template")` and write the result to `AGENTS.md`.
 
 ### 3. Create `CLAUDE.md`
 
-Check if `CLAUDE.md` exists. If not, call `mcp__plugin_ai-workspace_threads__get_template(template_name="CLAUDE.md.template")` and write the result to `CLAUDE.md`. The template is a single `@AGENTS.md` line so Claude imports the AGENTS.md content without content duplication.
+Check if `CLAUDE.md` exists. If not, call `mcp__plugin_ai-workspace_threads__get_skill_file("templates/CLAUDE.md.template")` and write the result to `CLAUDE.md`. The template is a single `@AGENTS.md` line so Claude imports the AGENTS.md content without content duplication.
 
 ### 4. Create `.claude/settings.json`
 
@@ -44,7 +44,7 @@ Check if `.claude/settings.json` exists. If not:
 mkdir -p .claude
 ```
 
-Then call `mcp__plugin_ai-workspace_threads__get_template(template_name="settings.json.template")` and write the result to `.claude/settings.json`.
+Then call `mcp__plugin_ai-workspace_threads__get_skill_file("templates/settings.json.template")` and write the result to `.claude/settings.json`.
 
 This file is Claude-Code-specific. It is harmless on Codex; Codex ignores it.
 

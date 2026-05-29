@@ -136,7 +136,7 @@ For trivial commands, instructions are inline. For complex commands, read the re
 | `set-workspace` | Call `set_default_workspace` with provided path; confirm | inline |
 | `status` | Read thread README.md, show Quick Resume | inline |
 
-Reference files live in the `commands/` subdirectory of this skill's base directory. Read them directly using the Read tool — do not use `get_template` or any MCP tool. Example: if the base directory is `/path/to/skills/threads`, read `/path/to/skills/threads/commands/save-thread.md`.
+Reference files are loaded via `mcp__plugin_ai-workspace_threads__get_skill_file(relative_path)`. Pass the path relative to the plugin root. Example: `get_skill_file("skills/threads/commands/save-thread.md")`.
 
 **Recognized phrases:**
 - "List my threads" / "What threads do I have?"
@@ -160,7 +160,7 @@ Server: `threads`, exposed under the plugin's vendor-prefixed bridge.
 - `mcp__plugin_ai-workspace_threads__list_threads(workspace_dir)`
 - `mcp__plugin_ai-workspace_threads__resume_thread(workspace_dir, thread_name)` — Resolve workspace + thread path, return full README
 - `mcp__plugin_ai-workspace_threads__create_thread(workspace_dir, thread_name)`
-- `mcp__plugin_ai-workspace_threads__get_template(template_name)`
+- `mcp__plugin_ai-workspace_threads__get_skill_file(relative_path)` — Read any file from the plugin directory; use for templates (`templates/foo.md`) and command references (`skills/threads/commands/foo.md`)
 - `mcp__plugin_ai-workspace_threads__archive_thread(workspace_dir, thread_name, summary, keywords, body)`
 - `mcp__plugin_ai-workspace_threads__restore_thread(workspace_dir, archive_base)`
 - `mcp__plugin_ai-workspace_threads__list_archived_threads(workspace_dir)`
