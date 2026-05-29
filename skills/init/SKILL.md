@@ -48,11 +48,17 @@ Then call `mcp__plugin_ai-workspace_threads__get_template(template_name="setting
 
 This file is Claude-Code-specific. It is harmless on Codex; Codex ignores it.
 
-### 5. Codex subagent install (Codex users only)
+### 5. Codex subagent install (Codex CLI only)
 
-Codex plugin manifests cannot bundle subagents directly. If the user is on Codex and wants to use the `/debate` skill with isolated-context personas, they need to copy the plugin's `.codex-plugin/agents/*.toml` files into `~/.codex/agents/`.
+This step only applies on Codex CLI. **Detect the CLI before doing anything**: run
 
-When running on Codex (or whenever the user asks for Codex setup), do this once:
+```bash
+printenv CLAUDE_PLUGIN_ROOT
+```
+
+If it prints a value, you are on Claude Code — **skip this entire step**. Claude loads the `proponent` and `skeptic` agents directly from the plugin's `agents/` directory; nothing to copy.
+
+If it prints nothing, you are on Codex CLI. Codex plugin manifests cannot bundle subagents directly, so the `.toml` files have to be copied into the user's home `agents/` directory:
 
 ```bash
 mkdir -p ~/.codex/agents
@@ -60,8 +66,6 @@ cp <plugin-root>/.codex-plugin/agents/*.toml ~/.codex/agents/
 ```
 
 Resolve `<plugin-root>` from the location of this SKILL.md (three directories up: `..` → `..` → `..`). Skip files that already exist in `~/.codex/agents/` unless the user asks to overwrite.
-
-On Claude Code, this step is unnecessary — the proponent and skeptic agents are loaded automatically from the plugin's `agents/` directory by Claude Code's subagent discovery.
 
 ## Output
 

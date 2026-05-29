@@ -164,7 +164,8 @@ mcp__plugin_ai-workspace_threads__get_template(template_name)
 
 **When working with threads (as a user would):**
 - Threads live in the user's workspace, not the plugin repo
-- Always resolve workspace via `mcp__plugin_ai-workspace_threads__resolve_workspace(workspace_dir)` first
+- Pass the caller's current working directory as `workspace_dir` on the first operating tool call. The server probes it, falls back to the persisted default, and either uses it or returns `Error: NO_WORKSPACE`. `resolve_workspace` is diagnostic only — do not call it before every operation.
+- After `create_thread` or `get_thread_status`, treat the `Workspace:`/`Thread:` headers as the tracked workspace path for the rest of the session.
 - Read `threads/{name}/README.md` for thread details
 - Never assume thread content, always verify
 

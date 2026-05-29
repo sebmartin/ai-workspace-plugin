@@ -139,7 +139,7 @@ When invoked, help the user manage their threads in `threads/`:
 - Command: `/threads create [thread-name]`
 - Also recognized: "create a new thread", "start a new thread about [topic]"
 - Ask for thread name if not provided (must be kebab-case)
-- Call `mcp__plugin_ai-workspace_threads__create_thread(cwd, thread_name)` — this handles validation, directory structure, and README creation in one step. Handle `Status: AMBIGUOUS_WORKSPACE` or `Status: NEEDS_INIT` responses by relaying the embedded question to the user and following the suggested follow-up actions.
+- Call `mcp__plugin_ai-workspace_threads__create_thread(workspace_dir, thread_name)` — this handles validation, directory structure, and README creation in one step. Handle `Status: AMBIGUOUS_WORKSPACE` or `Status: NEEDS_INIT` responses by relaying the embedded question to the user and following the suggested follow-up actions.
 - Optionally help fill in initial context (problem, current state, desired state)
 - Confirm creation and show next steps
 
@@ -222,7 +222,7 @@ When invoked, help the user manage their threads in `threads/`:
      - **`summary`** (one short sentence): what this thread was about, in the user's domain language
      - **`keywords`** (list of short strings): the actual nouns / terms / tools / file paths / people the user would search for later. Cast wide — include synonyms. Examples: `["oauth", "session-tokens", "compliance", "auth-middleware-v2", "legal-review"]`. Don't over-think length; 5–20 is typical
      - **`body`** (markdown narrative): topic-rich prose for embeddings. Cover what was discussed, decisions made and *why*, systems and files touched, vocabulary and synonyms. This is what semantic search will embed, so be concrete (use real names, not paraphrases)
-- Call `mcp__plugin_ai-workspace_threads__archive_thread(cwd, thread_name, summary, keywords, body)`
+- Call `mcp__plugin_ai-workspace_threads__archive_thread(workspace_dir, thread_name, summary, keywords, body)`
 - The tool: creates `archive/{YYYY}-{name}.tar.gz`, writes `archive/{YYYY}-{name}.md` with the frontmatter + body, then deletes `threads/{name}/`
 - If the thread contains symlinks, the tool refuses to archive (they would leak out-of-thread paths). Resolve or remove them first.
 - Report the resulting archive paths to the user
@@ -231,7 +231,7 @@ When invoked, help the user manage their threads in `threads/`:
 - Command: `/threads restore [archive-base]` (also `unarchive`)
 - `archive-base` is the filename stem, e.g. `2026-last-months-project`
 - If not provided: call `list_archived_threads` and ask the user to choose by number
-- Call `mcp__plugin_ai-workspace_threads__restore_thread(cwd, archive_base)`
+- Call `mcp__plugin_ai-workspace_threads__restore_thread(workspace_dir, archive_base)`
 - The tool extracts the archive back into `threads/{name}/`, writes a `sessions/{YYYYMMDD}-restored.md` file capturing the archive-time summary + body (so the LLM's interpretation survives as thread history), deletes the `.md` + archive files, and reports the final path (appends `-restored`, then `-restored-2`, `-3`, ... on collision)
 
 **List archived threads:**
@@ -260,7 +260,7 @@ When invoked, help the user manage their threads in `threads/`:
 ### For List Threads
 **CRITICAL**: Call the MCP tool and output the result directly. Do not add commentary.
 
-Call `mcp__plugin_ai-workspace_threads__list_threads` with the current working directory as `cwd`.
+Call `mcp__plugin_ai-workspace_threads__list_threads` with the current working directory as `workspace_dir`.
 
 ### For Snapshot
 Present a concise snapshot with:
