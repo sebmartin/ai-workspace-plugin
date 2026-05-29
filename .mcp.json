@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "threads": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--python",
+        ">=3.12",
+        "--with",
+        "mcp",
+        "python3",
+        "skills/threads/scripts/mcp_server.py"
+      ],
+      "cwd": "."
+    }
+  }
+}

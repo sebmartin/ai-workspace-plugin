@@ -12,10 +12,10 @@ def get_plugin_dir() -> Path:
     """
     Get plugin directory by walking up from workspace_utils.py location.
 
-    workspace_utils.py is located in: <plugin>/skills/common/workspace_utils.py
-    So we walk up 3 levels to reach the plugin root.
+    workspace_utils.py is located in: <plugin>/lib/workspace_utils.py
+    So we walk up 2 levels to reach the plugin root.
     """
-    return Path(__file__).resolve().parent.parent.parent
+    return Path(__file__).resolve().parent.parent
 
 
 def get_template_path(template_name: str) -> Path:
@@ -31,37 +31,42 @@ def get_template_path(template_name: str) -> Path:
     return get_plugin_dir() / "templates" / template_name
 
 
-def get_plugin_data_dir() -> Path:
-    """Get the plugin's persistent data directory.
+def get_config_dir() -> Path:
+    """Get the user-global config directory shared across CLI installs.
 
-    Uses PLUGIN_DATA_DIR env var (set by Claude Code via ${CLAUDE_PLUGIN_DATA}),
-    falls back to ~/.claude/plugins/data/ai-workspace/.
+    Uses AI_WORKSPACE_CONFIG_DIR if set (explicit override, primarily for tests),
+    otherwise ${XDG_CONFIG_HOME:-~/.config}/ai-workspace/. The path is
+    install-method-independent so a default_workspace set under one install
+    (marketplace, inline, local-dev, Codex) is visible from all the others.
     """
-    env_dir = os.environ.get("PLUGIN_DATA_DIR")
+    env_dir = os.environ.get("AI_WORKSPACE_CONFIG_DIR")
     if env_dir:
-        return Path(env_dir)
-    return Path.home() / ".claude" / "plugins" / "data" / "ai-workspace"
+        return Path(env_dir).expanduser()
+
+    xdg = os.environ.get("XDG_CONFIG_HOME")
+    base = Path(xdg).expanduser() if xdg else Path.home() / ".config"
+    return base / "ai-workspace"
 
 
 def read_config() -> dict:
-    """Read plugin config from the persistent data directory.
+    """Read plugin config from the user-global config directory.
 
     Returns empty dict if config file doesn't exist.
     """
-    config_path = get_plugin_data_dir() / "config.json"
+    config_path = get_config_dir() / "config.json"
     if not config_path.exists():
         return {}
     return json.loads(config_path.read_text())
 
 
 def write_config(config: dict) -> None:
-    """Write plugin config to the persistent data directory.
+    """Write plugin config to the user-global config directory.
 
-    Creates the data directory if it doesn't exist.
+    Creates the config directory if it doesn't exist.
     """
-    data_dir = get_plugin_data_dir()
-    data_dir.mkdir(parents=True, exist_ok=True)
-    config_path = data_dir / "config.json"
+    config_dir = get_config_dir()
+    config_dir.mkdir(parents=True, exist_ok=True)
+    config_path = config_dir / "config.json"
     config_path.write_text(json.dumps(config, indent=2) + "\n")
 
 
@@ -133,13 +138,13 @@ def validate_thread_name(name: str) -> bool:
     # ^[a-z0-9]+ - Start with lowercase letter or number
     # ([a-z0-9-]*[a-z0-9]+)? - Optional middle section with hyphens, must end with letter/number
     # $ - End of string
-    pattern = r'^[a-z0-9]+([a-z0-9-]*[a-z0-9]+)?$'
+    pattern = r"^[a-z0-9]+([a-z0-9-]*[a-z0-9]+)?$"
 
     if not re.match(pattern, name):
         return False
 
     # Check for consecutive hyphens
-    if '--' in name:
+    if "--" in name:
         return False
 
     return True

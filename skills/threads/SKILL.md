@@ -9,19 +9,41 @@ You are a thread management assistant that helps organize and navigate long-runn
 
 ## Workspace Resolution
 
-This skill is part of the `ai-workspace` plugin and uses the `/ai-workspace:threads` namespace.
+This skill is part of the `ai-workspace` plugin. On Claude Code it is invoked via the `/ai-workspace:threads` slash command. On Codex CLI it is invoked via `/threads` or natural language.
 
-**Before executing any command**, resolve the workspace directory by calling `mcp__plugin_ai-workspace_threads__resolve_workspace` with the current working directory as `cwd`.
+### Tracking the workspace across a session
 
-The tool returns JSON with `workspace_dir` and `source`:
+You are responsible for remembering the workspace path across tool calls. Operating tools take a `workspace_dir` argument — but it's really a *directory hint*: the path you currently think is the workspace. The server probes that path for `threads/`, falls back to a persisted default, and either uses it or returns an error.
 
-- **`source: "local"`** -- A local `threads/` directory was found. Show a brief note: `"(Using threads from [workspace_dir])"` then proceed.
-- **`source: "config"`** -- Using a configured default workspace. Show a brief note: `"(Using threads from [workspace_dir])"` then proceed.
-- **`source: "none"`** -- No workspace found. Ask the user:
+- **First call in a session**: you don't know the workspace yet, so pass the caller's current working directory as `workspace_dir`.
+- **Subsequent calls**: pass the resolved workspace path (from `Workspace:` headers below) as `workspace_dir`. The probe succeeds immediately; no extra disk lookups.
+
+Two tools shift the session's focus to a specific thread and surface paths you should remember:
+
+- `create_thread` — on success returns a response prefixed with:
+  ```
+  Workspace: /path/to/workspace
+  Thread: /path/to/workspace/threads/<thread-name>
+
+  Created thread '<thread-name>' at ...
+  ```
+- `get_thread_status` — on success (resume flow) returns the same two-line prefix above the Quick Resume.
+
+When you see those headers, treat them as your new tracked workspace and active thread. Use them for direct `Read`/`Glob`/`Write` on `README.md`, `sessions/`, `decisions/`, `artifacts/`. Pass `Workspace` as `workspace_dir` on every subsequent tool call in this session.
+
+Other tools (`list_threads`, `archive_thread`, `restore_thread`, etc.) don't shift focus and don't surface the headers — they assume you already know the workspace.
+
+### Structured error / status responses
+
+Handle these if they come back:
+
+- **`Error: NO_WORKSPACE`** -- No workspace at the path you passed and none configured. Ask the user:
   > "No threads/ directory found here. Where is your threads workspace? Provide the path and I'll remember it for next time."
-  - Once the user provides a path, call `mcp__plugin_ai-workspace_threads__set_default_workspace` with that path, then proceed.
+  - Once the user provides a path, call `mcp__plugin_ai-workspace_threads__set_default_workspace` with that path, then retry the original tool call.
+- **`Status: AMBIGUOUS_WORKSPACE`** (only from `create_thread`) -- the path you passed has no threads/ but a configured workspace exists. The response embeds the question to ask the user and the two follow-up actions; follow it.
+- **`Status: NEEDS_INIT`** (only from `create_thread`) -- No workspace anywhere. The response embeds the question and follow-ups; follow it.
 
-Use the resolved `workspace_dir` for ALL subsequent MCP tool calls and file operations in this session.
+For diagnostic use ("where is my workspace?") when you're not committing to an operation, `mcp__plugin_ai-workspace_threads__resolve_workspace(workspace_dir)` returns `{"workspace_dir": ..., "source": "local" | "config" | "none"}`.
 
 ## Your Role
 
@@ -68,7 +90,7 @@ When invoked, help the user manage their threads in `threads/`:
   2. If none exists: call `mcp__plugin_ai-workspace_threads__get_template(template_name="thread-session-template.md")` to get the template, then create `YYYYMMDD-kebab-summary.md` filled with current conversation context (goal, key points, decisions, next steps)
   3. If one exists: update it — append new discussion points, decisions, and progress since last save
   4. Link the session file in README.md Resources > Sessions if not already listed
-- A session loosely maps to a single Claude invocation: one file per conversation, updated on each save
+- A session loosely maps to a single CLI invocation: one file per conversation, updated on each save
 - Does NOT generate a snapshot (use `/threads snapshot` for that)
 
 **Link to parent thread:**
@@ -117,7 +139,7 @@ When invoked, help the user manage their threads in `threads/`:
 - Command: `/threads create [thread-name]`
 - Also recognized: "create a new thread", "start a new thread about [topic]"
 - Ask for thread name if not provided (must be kebab-case)
-- Call `mcp__threads__create_thread(workspace_dir, thread_name)` — this handles validation, directory structure, and README creation in one step
+- Call `mcp__plugin_ai-workspace_threads__create_thread(workspace_dir, thread_name)` — this handles validation, directory structure, and README creation in one step. Handle `Status: AMBIGUOUS_WORKSPACE` or `Status: NEEDS_INIT` responses by relaying the embedded question to the user and following the suggested follow-up actions.
 - Optionally help fill in initial context (problem, current state, desired state)
 - Confirm creation and show next steps
 
@@ -127,8 +149,8 @@ When invoked, help the user manage their threads in `threads/`:
 - Display next steps and open questions
 
 **Resume a thread:**
-- **Use case**: Switching to a different thread within an active Claude session
-- **Note**: If user is starting a new Claude session, they should use `claude --continue` or `claude --resume <id>` instead (preserves full conversation context)
+- **Use case**: Switching to a different thread within an active CLI session
+- **Note**: If the user is starting a new session and their CLI supports session resume (e.g., `claude --continue` / `claude --resume <id>`), that preserves full conversation context. Use `/threads resume` when switching threads within an active session or when no native session resume is available.
 - If thread name is provided: Resume that thread
 - If NO thread name provided:
   1. List all threads with numbers (1, 2, 3...)
@@ -200,7 +222,7 @@ When invoked, help the user manage their threads in `threads/`:
      - **`summary`** (one short sentence): what this thread was about, in the user's domain language
      - **`keywords`** (list of short strings): the actual nouns / terms / tools / file paths / people the user would search for later. Cast wide — include synonyms. Examples: `["oauth", "session-tokens", "compliance", "auth-middleware-v2", "legal-review"]`. Don't over-think length; 5–20 is typical
      - **`body`** (markdown narrative): topic-rich prose for embeddings. Cover what was discussed, decisions made and *why*, systems and files touched, vocabulary and synonyms. This is what semantic search will embed, so be concrete (use real names, not paraphrases)
-- Call `mcp__threads__archive_thread(workspace_dir, thread_name, summary, keywords, body)`
+- Call `mcp__plugin_ai-workspace_threads__archive_thread(workspace_dir, thread_name, summary, keywords, body)`
 - The tool: creates `archive/{YYYY}-{name}.tar.gz`, writes `archive/{YYYY}-{name}.md` with the frontmatter + body, then deletes `threads/{name}/`
 - If the thread contains symlinks, the tool refuses to archive (they would leak out-of-thread paths). Resolve or remove them first.
 - Report the resulting archive paths to the user
@@ -209,12 +231,12 @@ When invoked, help the user manage their threads in `threads/`:
 - Command: `/threads restore [archive-base]` (also `unarchive`)
 - `archive-base` is the filename stem, e.g. `2026-last-months-project`
 - If not provided: call `list_archived_threads` and ask the user to choose by number
-- Call `mcp__threads__restore_thread(workspace_dir, archive_base)`
+- Call `mcp__plugin_ai-workspace_threads__restore_thread(workspace_dir, archive_base)`
 - The tool extracts the archive back into `threads/{name}/`, writes a `sessions/{YYYYMMDD}-restored.md` file capturing the archive-time summary + body (so the LLM's interpretation survives as thread history), deletes the `.md` + archive files, and reports the final path (appends `-restored`, then `-restored-2`, `-3`, ... on collision)
 
 **List archived threads:**
 - Command: `/threads list-archived` (also `archived`, `show archived`)
-- Call `mcp__threads__list_archived_threads(workspace_dir)` and output the result directly
+- Call `mcp__plugin_ai-workspace_threads__list_archived_threads(workspace_dir)` and output the result directly
 - Each line shows: archive base, dates, and inline keywords — enough to decide what to inspect deeper
 
 **Inspect an archive (without restoring):**
@@ -223,14 +245,14 @@ When invoked, help the user manage their threads in `threads/`:
 - Workflow for a search:
   1. Call `list_archived_threads` to see all bases + keywords inline
   2. Read `archive/{base}.md` files for likely candidates (summary + body)
-  3. For any candidate that needs deeper investigation: call `mcp__threads__inspect_archive(workspace_dir, archive_base)`
+  3. For any candidate that needs deeper investigation: call `mcp__plugin_ai-workspace_threads__inspect_archive(workspace_dir, archive_base)`
   4. Read files under the returned path (`archive/tmp/{base}/{thread-name}/`) — sessions, decisions, etc.
   5. When done, suggest `/threads purge-tmp` to clean up
 - Inspect is non-destructive: the archive stays put. Use `/threads restore` when the user actually wants the thread back in `threads/`.
 
 **Purge archive tmp:**
 - Command: `/threads purge-tmp`
-- Call `mcp__threads__purge_archive_tmp(workspace_dir)`
+- Call `mcp__plugin_ai-workspace_threads__purge_archive_tmp(workspace_dir)`
 - Wipes `archive/tmp/` entirely. Safe because every file in it can be regenerated by re-running `inspect_archive`.
 
 ## Response Format
@@ -238,7 +260,7 @@ When invoked, help the user manage their threads in `threads/`:
 ### For List Threads
 **CRITICAL**: Call the MCP tool and output the result directly. Do not add commentary.
 
-Call `mcp__threads__list_threads` with the current working directory as `workspace_dir`.
+Call `mcp__plugin_ai-workspace_threads__list_threads` with the current working directory as `workspace_dir`.
 
 ### For Snapshot
 Present a concise snapshot with:
@@ -257,14 +279,19 @@ Interactively guide the user through:
 5. Confirm and show path to README.md
 
 ### For Resume
-Keep it fast and minimal. Just show:
+Keep it fast and minimal. Show:
 ```
 Resumed: [Thread Name]
 
 [Quick Resume section from README - paste it directly]
+
+## Locked Decisions
+[One line per decision log: "**[title]** ([status]): [summary]"]
 ```
 
-That's it. No verbose summaries, no session log reading. The Quick Resume already has current focus, next steps, and recent progress.
+No verbose summaries, no session log reading. The Quick Resume has current focus and next steps. The Locked Decisions keep key specs in context throughout the conversation — without them, Claude forgets locked-in choices and re-litigates settled decisions.
+
+**Decision log summaries**: Read the frontmatter of every file in `threads/{name}/decisions/`. If a log is missing YAML frontmatter entirely, or has frontmatter but no `summary:` field, automatically read the log, infer a one-sentence summary of WHAT was decided (no rationale), and add the `summary:` field to the frontmatter. Do this silently before completing the resume. Use the decision log template at `templates/decision-template.md` as the format reference.
 
 ## Commands to Recognize
 
@@ -294,20 +321,20 @@ Users might say:
 
 ## Implementation
 
-**Available MCP Tools (server: `threads`):**
-- `mcp__threads__resolve_workspace(cwd)` — Resolve which workspace to use (local or configured default)
-- `mcp__threads__set_default_workspace(workspace_path)` — Set the default workspace for use outside workspace dirs
-- `mcp__threads__list_threads(workspace_dir)` — List threads sorted by recent activity
-- `mcp__threads__get_thread_status(workspace_dir, thread_name)` — Get Quick Resume section
-- `mcp__threads__create_thread(workspace_dir, thread_name)` — Create thread directory structure and README
-- `mcp__threads__get_template(template_name)` — Return contents of a plugin template file
-- `mcp__threads__archive_thread(workspace_dir, thread_name, summary, keywords, body)` — Compress a thread, write a search-friendly summary, delete the original
-- `mcp__threads__restore_thread(workspace_dir, archive_base)` — Restore an archived thread; deletes the archive on success
-- `mcp__threads__list_archived_threads(workspace_dir)` — List archived threads with dates and inline keywords
-- `mcp__threads__inspect_archive(workspace_dir, archive_base)` — Extract an archive into `archive/tmp/` without restoring (non-destructive peek)
-- `mcp__threads__purge_archive_tmp(workspace_dir)` — Wipe `archive/tmp/` after inspection
+**Available MCP Tools (server: `threads`, exposed under the plugin's vendor-prefixed bridge):**
+- `mcp__plugin_ai-workspace_threads__resolve_workspace(workspace_dir)` — Diagnostic: resolve which workspace to use (local or configured default). Optional; operating tools resolve on their own.
+- `mcp__plugin_ai-workspace_threads__set_default_workspace(workspace_path)` — Set the default workspace for use outside workspace dirs
+- `mcp__plugin_ai-workspace_threads__list_threads(workspace_dir)` — List threads sorted by recent activity
+- `mcp__plugin_ai-workspace_threads__get_thread_status(workspace_dir, thread_name)` — Get Quick Resume section
+- `mcp__plugin_ai-workspace_threads__create_thread(workspace_dir, thread_name)` — Create thread directory structure and README
+- `mcp__plugin_ai-workspace_threads__get_template(template_name)` — Return contents of a plugin template file
+- `mcp__plugin_ai-workspace_threads__archive_thread(workspace_dir, thread_name, summary, keywords, body)` — Compress a thread, write a search-friendly summary, delete the original
+- `mcp__plugin_ai-workspace_threads__restore_thread(workspace_dir, archive_base)` — Restore an archived thread; deletes the archive on success
+- `mcp__plugin_ai-workspace_threads__list_archived_threads(workspace_dir)` — List archived threads with dates and inline keywords
+- `mcp__plugin_ai-workspace_threads__inspect_archive(workspace_dir, archive_base)` — Extract an archive into `archive/tmp/` without restoring (non-destructive peek)
+- `mcp__plugin_ai-workspace_threads__purge_archive_tmp(workspace_dir)` — Wipe `archive/tmp/` after inspection
 
-Pass the resolved `workspace_dir` from `resolve_workspace` (literal path, not `$(pwd)`).
+Pass the caller's current working directory as `workspace_dir` (literal path, not `$(pwd)`). The server resolves the workspace internally.
 
 **If the MCP tools are unavailable:** Tell the user the threads MCP server failed to start. The most likely cause is `uv` not being installed. Direct them to https://docs.astral.sh/uv/getting-started/installation/ to install it, then try again.
 
@@ -317,7 +344,7 @@ Pass the resolved `workspace_dir` from `resolve_workspace` (literal path, not `$
 - Write tool when creating new threads
 - Bash(mkdir:*) for directory structure
 
-**Create a new thread** — use `mcp__threads__create_thread`. Do not use Bash or Write for thread creation.
+**Create a new thread** — use `mcp__plugin_ai-workspace_threads__create_thread`. Do not use Bash or Write for thread creation.
 
 ## Artifact Conventions
 
@@ -385,8 +412,8 @@ This rule applies to ALL artifacts: snapshots, proposals, analyses, diagrams, sp
 - If not found: Say "No active thread set. Run `/threads` to see available threads."
 
 **Context preservation across sessions:**
-- Users should use `claude --continue` or `claude --resume <id>` when starting Claude to preserve full conversation context
-- The `/threads resume` command is for switching threads within an active session, not for starting new sessions
+- If the user's CLI supports session resume (e.g., `claude --continue` / `claude --resume <id>` for Claude Code), prefer that when re-entering work, since it keeps full conversation context.
+- The `/threads resume` command is for switching threads within an active session or when starting a fresh session without native resume.
 
 ## When README Gets Updated
 

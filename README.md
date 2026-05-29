@@ -6,17 +6,43 @@ Threads aim to address that. A thread is a folder on disk: a README that stays c
 
 ## Installation
 
+The plugin ships for both Claude Code and OpenAI Codex CLI from a single source. Threads, MCP server, and templates are shared; each CLI installs through its native plugin system.
+
+### Claude Code
+
 ```
 /plugin marketplace add sebmartin/ai-marketplace
 /plugin install ai-workspace@sebmartin
 ```
 
-Restart Claude Code after installing, then initialize a workspace:
+Restart Claude Code after installing.
+
+### Codex CLI (Beta)
+
+> [!WARNING]
+> Codex support is in beta. Core skills (init, threads, debate) work, but skill instruction-following varies by model — some commands may require natural language instead of slash commands. Please report issues.
+
+```
+codex plugin marketplace add sebmartin/ai-workspace-plugin
+codex
+/plugins
+```
+
+Select `ai-workspace` and install.
+
+### Initialize a workspace
 
 ```bash
 cd ~/my-workspace
+
+# Claude Code
 /ai-workspace:init
+
+# Codex CLI
+> initialize the ai-workspace
 ```
+
+`init` creates `threads/`, `AGENTS.md` (read by both), `CLAUDE.md` (a one-line `@AGENTS.md` import for Claude), and `.claude/settings.json` (Claude-only permission allowlist; Codex ignores). All files are vendor-safe.
 
 ## Examples
 
@@ -30,15 +56,17 @@ Threads work for anything you'd want to revisit across sessions, not just code.
 
 ```
 my-workspace/
+├── AGENTS.md                # Workspace instructions (read by Claude and Codex)
+├── CLAUDE.md                # One-line "@AGENTS.md" import (Claude only)
 ├── threads/
 │   └── {thread-name}/
 │       ├── README.md        # Current focus, next steps, links to everything else
 │       ├── sessions/        # One file per conversation
 │       ├── decisions/       # Decisions with context and rationale
 │       ├── attachments/     # Files you bring in (specs, docs, data)
-│       └── artifacts/       # Files Claude generates (snapshots, reports, emails)
+│       └── artifacts/       # Files the CLI generates (snapshots, reports, emails)
 └── .claude/
-    └── settings.json
+    └── settings.json        # Claude-only permission allowlist
 ```
 
 You can run Claude from your workspace or from any repo. The plugin finds your threads either way.
@@ -84,6 +112,8 @@ Install the [`tech-expert-agents`](https://github.com/sebmartin/ai-marketplace/t
 | **Tech Advisor** | Technology choice trade-offs |
 | **Cost Analyzer** | Infrastructure cost and ROI assumptions |
 | **Product Strategist** | User value and market assumptions |
+
+On Codex CLI: Codex's plugin manifest cannot bundle subagents yet, so `tech-expert-agents` is not installable as a plugin. The `init` skill installs the proponent and skeptic agents directly into `~/.codex/agents/`; specialist personas can be added there manually as `.toml` files until plugin-agent distribution lands.
 
 ## Custom Skills
 
@@ -145,6 +175,10 @@ A restored thread automatically captures the archived summary as a session file,
 Use `/ai-workspace:threads inspect <base>` to peek into an archive without restoring it.
 
 If you ask to resume or find a thread that isn't in your active threads, Claude will automatically check the archive and offer to restore it if found.
+
+On Codex CLI, drop the `/ai-workspace:` namespace prefix: `/threads`, `/threads create <name>`, and so on. Or just describe what you want in plain English.
+
+> `/init` is an exception — it collides with Codex's built-in command. To run the plugin's init skill on Codex, use the natural-language form: `> initialize the ai-workspace`.
 
 ## Migrating from the pre-plugin version
 

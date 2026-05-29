@@ -1,0 +1,30 @@
+{
+  "name": "ai-workspace",
+  "version": "2.2.0",
+  "description": "Thread-based workspace management with specialized agents for long-running AI conversations",
+  "author": {
+    "name": "Sebastien Martin",
+    "url": "https://github.com/sebmartin"
+  },
+  "repository": "https://github.com/sebmartin/ai-workspace-plugin",
+  "license": "MIT",
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "AI Workspace",
+    "shortDescription": "Manage persistent AI work threads on disk.",
+    "longDescription": "AI Workspace organizes long-running AI work into local Markdown thread folders with session logs, decisions, artifacts, and resumable context.",
+    "developerName": "Sebastien Martin",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Initialize the ai-workspace",
+      "Create a thread for this project",
+      "Resume my current thread"
+    ]
+  }
+}

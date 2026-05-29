@@ -6,10 +6,22 @@ This workspace uses the [ai-workspace plugin](https://github.com/sebmartin/ai-wo
 
 Threads are organized conversations stored in `threads/`. Each thread has its own README, session logs, decisions, and artifacts.
 
-```bash
+Use natural language to manage them, or the explicit commands below.
+
+**Claude Code:**
+
+```
 /ai-workspace:threads create <name>   # Start a new thread
 /ai-workspace:threads resume <name>   # Resume a thread mid-session
 /ai-workspace:threads                 # List all threads
 ```
 
-Or just describe what you want — Claude understands natural language.
+**Codex CLI:**
+
+```
+/threads create <name>
+/threads resume <name>
+/threads
+```
+
+Or just describe what you want, both clients understand natural language.

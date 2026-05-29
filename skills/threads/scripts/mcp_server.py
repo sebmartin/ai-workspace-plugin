@@ -14,18 +14,63 @@ from pathlib import Path
 
 ARCHIVE_SCHEMA_VERSION = 1
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "common"))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "lib"))
 
 from mcp.server.fastmcp import FastMCP
 from workspace_utils import (
     get_template_path,
-    get_workspace_dir,
     read_config,
     validate_thread_name,
     write_config,
 )
 
 mcp = FastMCP("threads")
+
+
+# ---------- Workspace resolution ----------
+
+def _resolve_workspace(workspace_dir: str) -> tuple[Path | None, str]:
+    """Resolve a directory hint to a workspace path.
+
+    Probe order: (1) workspace_dir/threads/, (2) configured default_workspace/threads/.
+    Returns (workspace_path, source) where source ∈ {"local", "config", "none"}.
+    When source is "none" the path is None.
+    """
+    ws_path = Path(workspace_dir)
+    if (ws_path / "threads").is_dir():
+        return ws_path, "local"
+    config = read_config()
+    default = config.get("default_workspace")
+    if default:
+        default_path = Path(default)
+        if (default_path / "threads").is_dir():
+            return default_path, "config"
+    return None, "none"
+
+
+def _no_workspace_message(workspace_dir: str) -> str:
+    """Stable text the skill teaches the LLM to recognize."""
+    return (
+        "Error: NO_WORKSPACE\n"
+        f"No threads workspace found at {workspace_dir} or in saved settings.\n"
+        "Ask the user for the path to their threads workspace, then call "
+        "set_default_workspace with that path before retrying."
+    )
+
+
+def _with_focus(workspace: Path, thread_name: str, body: str) -> str:
+    """Prefix a tool's success response with Workspace + Thread headers.
+
+    Used only by tools that shift the session's focus to a specific thread
+    (create_thread, get_thread_status). The LLM tracks Workspace and Thread
+    across the session and uses them for follow-up file ops (Read on README.md,
+    Glob on sessions/, etc.).
+    """
+    return (
+        f"Workspace: {workspace}\n"
+        f"Thread: {workspace / 'threads' / thread_name}\n\n"
+        f"{body}"
+    )
 
 
 # ---------- Archive helpers ----------
@@ -167,10 +212,18 @@ def _find_archive(archive_dir: Path, base: str) -> Path | None:
 def list_threads(workspace_dir: str) -> str:
     """List all discussion threads sorted by most recent activity.
 
+    Resolves the workspace from `workspace_dir` (local threads/ first, then configured
+    default). Returns `Error: NO_WORKSPACE` if neither is available.
+
     Args:
-        workspace_dir: Absolute path to the user's workspace directory.
+        workspace_dir: Directory hint for locating the workspace; typically the
+            tracked workspace path from session context, or the caller's cwd on
+            a fresh invocation. The tool probes this directory for threads/,
+            falls back to the configured default, and returns NO_WORKSPACE if neither works.
     """
-    workspace = get_workspace_dir(Path(workspace_dir))
+    workspace, _ = _resolve_workspace(workspace_dir)
+    if workspace is None:
+        return _no_workspace_message(workspace_dir)
     threads_dir = workspace / "threads"
 
     if not threads_dir.exists():
@@ -195,10 +248,15 @@ def get_thread_status(workspace_dir: str, thread_name: str) -> str:
     """Get the Quick Resume section from a thread's README.
 
     Args:
-        workspace_dir: Absolute path to the user's workspace directory.
+        workspace_dir: Directory hint for locating the workspace; typically the
+            tracked workspace path from session context, or the caller's cwd on
+            a fresh invocation. The tool probes this directory for threads/,
+            falls back to the configured default, and returns NO_WORKSPACE if neither works.
         thread_name: Name of the thread (kebab-case).
     """
-    workspace = get_workspace_dir(Path(workspace_dir))
+    workspace, _ = _resolve_workspace(workspace_dir)
+    if workspace is None:
+        return _no_workspace_message(workspace_dir)
     readme_path = workspace / "threads" / thread_name / "README.md"
 
     if not readme_path.exists():
@@ -225,15 +283,27 @@ def get_thread_status(workspace_dir: str, thread_name: str) -> str:
     while result and not result[-1].strip():
         result.pop()
 
-    return "\n".join(result)
+    return _with_focus(workspace, thread_name, "\n".join(result))
 
 
 @mcp.tool()
 def create_thread(workspace_dir: str, thread_name: str) -> str:
     """Create a new discussion thread with the standard directory structure.
 
+    Resolves the workspace from `workspace_dir`. If `workspace_dir` has a threads/ dir, the thread
+    is created there. If not, the tool may return a status the LLM must surface
+    to the user:
+    - `Status: AMBIGUOUS_WORKSPACE` when a configured default workspace exists
+      (user picks between configured workspace vs initialising a new one here).
+    - `Status: NEEDS_INIT` when no workspace exists anywhere (user picks between
+      initialising here vs supplying a path).
+
     Args:
-        workspace_dir: Absolute path to the user's workspace directory.
+        workspace_dir: Directory hint for locating the workspace; typically the
+            tracked workspace path from session context, or the caller's cwd on
+            a fresh invocation. The tool probes this directory for threads/,
+            falls back to the configured default, and returns a status question
+            (AMBIGUOUS_WORKSPACE or NEEDS_INIT) if neither works.
         thread_name: Name of the thread (kebab-case: lowercase letters, numbers, hyphens).
     """
     if not validate_thread_name(thread_name):
@@ -243,7 +313,36 @@ def create_thread(workspace_dir: str, thread_name: str) -> str:
             "Examples: my-thread, api-redesign, auth-refactor"
         )
 
-    workspace = get_workspace_dir(Path(workspace_dir))
+    ws_path = Path(workspace_dir)
+    if (ws_path / "threads").is_dir():
+        workspace = ws_path
+    else:
+        config = read_config()
+        default = config.get("default_workspace")
+        if default and (Path(default) / "threads").is_dir():
+            return (
+                "Status: AMBIGUOUS_WORKSPACE\n"
+                f"No threads/ directory at {workspace_dir}, but a configured workspace "
+                f"exists at {default}.\n"
+                f'Ask the user: "Create the new thread in the configured '
+                f'workspace at {default}, or initialize a new workspace here '
+                f'at {workspace_dir}?"\n'
+                f"- If they pick the configured workspace, retry create_thread "
+                f"with workspace_dir={default}.\n"
+                f"- If they pick \"here\", run the ai-workspace:init skill at "
+                f"{workspace_dir}, then retry."
+            )
+        return (
+            "Status: NEEDS_INIT\n"
+            "No threads workspace found.\n"
+            f'Ask the user: "Initialize a new workspace at {workspace_dir}, or use one '
+            f'elsewhere?"\n'
+            f"- If \"here\", run the ai-workspace:init skill at {workspace_dir}, then "
+            f"retry.\n"
+            f"- If \"elsewhere\", get the path from the user, call "
+            f"set_default_workspace, then retry."
+        )
+
     thread_dir = workspace / "threads" / thread_name
 
     if thread_dir.exists():
@@ -260,7 +359,9 @@ def create_thread(workspace_dir: str, thread_name: str) -> str:
     readme = re.sub(r"\[YYYY-MM-DD\]", today, readme)
     (thread_dir / "README.md").write_text(readme)
 
-    return f"Created thread '{thread_name}' at {thread_dir}"
+    return _with_focus(
+        workspace, thread_name, f"Created thread '{thread_name}' at {thread_dir}"
+    )
 
 
 @mcp.tool()
@@ -279,33 +380,26 @@ def get_template(template_name: str) -> str:
 
 
 @mcp.tool()
-def resolve_workspace(cwd: str) -> str:
+def resolve_workspace(workspace_dir: str) -> str:
     """Resolve which workspace directory to use for thread operations.
 
     Checks for a local threads/ directory first, then falls back to the
-    configured default workspace.
+    configured default workspace. Kept as an optional diagnostic — operating
+    tools (list_threads, create_thread, etc.) resolve internally now.
 
     Args:
-        cwd: The current working directory (absolute path).
+        workspace_dir: Directory hint for locating the workspace; typically the
+            caller's current working directory. The tool probes this directory
+            for threads/, falls back to the configured default, and returns the
+            result with its source ("local", "config", or "none").
     """
-    cwd_path = Path(cwd)
-
-    # Priority 1: local threads/ directory
-    if (cwd_path / "threads").is_dir():
-        return json.dumps({"workspace_dir": cwd, "source": "local"})
-
-    # Priority 2: configured default workspace
-    config = read_config()
-    default_workspace = config.get("default_workspace")
-    if default_workspace:
-        default_path = Path(default_workspace)
-        if (default_path / "threads").is_dir():
-            return json.dumps(
-                {"workspace_dir": default_workspace, "source": "config"}
-            )
-
-    # No workspace found
-    return json.dumps({"workspace_dir": None, "source": "none"})
+    workspace, source = _resolve_workspace(workspace_dir)
+    return json.dumps(
+        {
+            "workspace_dir": str(workspace) if workspace is not None else None,
+            "source": source,
+        }
+    )
 
 
 @mcp.tool()
@@ -347,7 +441,10 @@ def archive_thread(
     """Archive a thread: compress its directory, write a searchable summary, delete the original.
 
     Args:
-        workspace_dir: Absolute path to the user's workspace directory.
+        workspace_dir: Directory hint for locating the workspace; typically the
+            tracked workspace path from session context, or the caller's cwd on
+            a fresh invocation. The tool probes this directory for threads/,
+            falls back to the configured default, and returns NO_WORKSPACE if neither works.
         thread_name: Name of the thread to archive (kebab-case).
         summary: One-line summary; goes into frontmatter `summary:` field.
         keywords: List of short keyword strings for search; normalised (lowercased, deduped).
@@ -357,7 +454,9 @@ def archive_thread(
     if not validate_thread_name(thread_name):
         return f"Error: Invalid thread name '{thread_name}'."
 
-    workspace = get_workspace_dir(Path(workspace_dir))
+    workspace, _ = _resolve_workspace(workspace_dir)
+    if workspace is None:
+        return _no_workspace_message(workspace_dir)
     thread_dir = workspace / "threads" / thread_name
     readme_path = thread_dir / "README.md"
     if not readme_path.exists():
@@ -438,13 +537,18 @@ def restore_thread(workspace_dir: str, archive_base: str) -> str:
     survives as thread history.
 
     Args:
-        workspace_dir: Absolute path to the user's workspace directory.
+        workspace_dir: Directory hint for locating the workspace; typically the
+            tracked workspace path from session context, or the caller's cwd on
+            a fresh invocation. The tool probes this directory for threads/,
+            falls back to the configured default, and returns NO_WORKSPACE if neither works.
         archive_base: Filename stem of the archive (e.g. '2026-last-months-project').
     """
     if not _validate_archive_base(archive_base):
         return f"Error: Invalid archive base '{archive_base}'."
 
-    workspace = get_workspace_dir(Path(workspace_dir))
+    workspace, _ = _resolve_workspace(workspace_dir)
+    if workspace is None:
+        return _no_workspace_message(workspace_dir)
     archive_dir = workspace / "archive"
 
     archive_path = _find_archive(archive_dir, archive_base)
@@ -585,9 +689,14 @@ def list_archived_threads(workspace_dir: str) -> str:
     """List archived threads with metadata for quick search.
 
     Args:
-        workspace_dir: Absolute path to the user's workspace directory.
+        workspace_dir: Directory hint for locating the workspace; typically the
+            tracked workspace path from session context, or the caller's cwd on
+            a fresh invocation. The tool probes this directory for threads/,
+            falls back to the configured default, and returns NO_WORKSPACE if neither works.
     """
-    workspace = get_workspace_dir(Path(workspace_dir))
+    workspace, _ = _resolve_workspace(workspace_dir)
+    if workspace is None:
+        return _no_workspace_message(workspace_dir)
     archive_dir = workspace / "archive"
     if not archive_dir.exists():
         return "No archived threads found."
@@ -652,13 +761,18 @@ def inspect_archive(workspace_dir: str, archive_base: str) -> str:
     Use /threads purge-tmp when done. The extraction target stays inside the workspace.
 
     Args:
-        workspace_dir: Absolute path to the user's workspace directory.
+        workspace_dir: Directory hint for locating the workspace; typically the
+            tracked workspace path from session context, or the caller's cwd on
+            a fresh invocation. The tool probes this directory for threads/,
+            falls back to the configured default, and returns NO_WORKSPACE if neither works.
         archive_base: Filename stem of the archive (e.g. '2026-last-months-project').
     """
     if not _validate_archive_base(archive_base):
         return f"Error: Invalid archive base '{archive_base}'."
 
-    workspace = get_workspace_dir(Path(workspace_dir))
+    workspace, _ = _resolve_workspace(workspace_dir)
+    if workspace is None:
+        return _no_workspace_message(workspace_dir)
     archive_dir = workspace / "archive"
 
     archive_path = _find_archive(archive_dir, archive_base)
@@ -695,9 +809,14 @@ def purge_archive_tmp(workspace_dir: str) -> str:
     """Wipe archive/tmp/ entirely. Safe — every file in it is regeneratable from sibling archives.
 
     Args:
-        workspace_dir: Absolute path to the user's workspace directory.
+        workspace_dir: Directory hint for locating the workspace; typically the
+            tracked workspace path from session context, or the caller's cwd on
+            a fresh invocation. The tool probes this directory for threads/,
+            falls back to the configured default, and returns NO_WORKSPACE if neither works.
     """
-    workspace = get_workspace_dir(Path(workspace_dir))
+    workspace, _ = _resolve_workspace(workspace_dir)
+    if workspace is None:
+        return _no_workspace_message(workspace_dir)
     tmp_dir = workspace / "archive" / "tmp"
     if not tmp_dir.exists():
         return "archive/tmp/ is already clean."

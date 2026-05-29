@@ -1,17 +1,19 @@
 # Contributing to AI Workspace Plugin
 
-Thank you for contributing! This plugin helps developers organize long-running AI conversations with thread management and specialized agents.
+Thank you for contributing! This plugin helps developers organize long-running AI conversations with thread management and specialized agents. It ships as a cross-vendor plugin for both Claude Code and OpenAI Codex CLI from a single source tree.
 
 ## Development Setup
 
 1. Clone the repository
 2. Make your changes (skills, agents, templates, documentation)
-3. Test with `--plugin-dir` flag (see Testing below)
-4. Submit a pull request
+3. Regenerate the Codex agent TOMLs if you edited `agents/*.md`: `python3 scripts/sync-codex-agents.py`
+4. Test with `--plugin-dir` flag on Claude Code (see Testing below); Codex testing requires a local marketplace stub
+5. Submit a pull request
 
 ## Prerequisites
 
-- **Claude Code CLI** - Required to test the plugin
+- **Claude Code CLI** - Required to test the Claude side
+- **Codex CLI** (optional) - Required to test the Codex side
 - **git** - Version control
 - **uv** - Required to run the MCP server and tests (see https://docs.astral.sh/uv/getting-started/installation/)
 
@@ -19,30 +21,33 @@ Thank you for contributing! This plugin helps developers organize long-running A
 
 ```
 ai-workspace-plugin/
-├── .claude-plugin/
-│   └── plugin.json            # Plugin manifest
-├── agents/                    # AI persona subagents
+├── .claude-plugin/plugin.json       # Claude Code plugin manifest
+├── .codex-plugin/
+│   ├── plugin.json                  # Codex CLI plugin manifest
+│   └── agents/                      # Generated from agents/*.md (do not edit)
+├── agents/                          # Canonical persona source (Claude reads directly)
 │   ├── proponent.md
 │   └── skeptic.md
-├── skills/
-│   ├── common/
-│   │   └── workspace_utils.py
-│   ├── debate/
-│   │   └── SKILL.md
-│   ├── init/
-│   │   └── SKILL.md
+├── hooks/                           # Session-start hook
+├── skills/                          # User-invocable skills (shared by both CLIs)
+│   ├── debate/SKILL.md
+│   ├── init/SKILL.md
 │   └── threads/
 │       ├── SKILL.md
-│       └── scripts/
-│           └── mcp_server.py
-├── templates/                 # Thread templates
-│   ├── thread-template.md
-│   ├── settings.json.template
+│       └── scripts/mcp_server.py
+├── lib/
+│   └── workspace_utils.py           # Shared Python helpers
+├── templates/
+│   ├── AGENTS.md.template           # Workspace instructions (vendor-neutral)
+│   ├── CLAUDE.md.template           # One-line "@AGENTS.md" import for Claude
+│   ├── settings.json.template       # Claude-only permission allowlist
 │   └── ...
-├── tests/
-│   └── test_mcp_server.py
-├── CLAUDE.md
-├── CONTRIBUTING.md
+├── scripts/
+│   └── sync-codex-agents.py         # Regenerates .codex-plugin/agents/*.toml
+├── tests/test_mcp_server.py
+├── docs/examples/                   # User walkthroughs
+├── AGENTS.md                        # Repo instructions (vendor-neutral)
+├── CLAUDE.md                        # One-line "@AGENTS.md" for Claude
 ├── README.md
 └── LICENSE
 ```
@@ -69,20 +74,19 @@ cd ~/some-other-directory
 claude --plugin-dir ~/ai-workspace-plugin
 ```
 
-### Testing Thread Management
+### Testing Thread Management (Claude Code)
 
 ```bash
-cd /tmp/test-workspace
+mkdir /tmp/test-workspace && cd /tmp/test-workspace
 claude --plugin-dir ~/ai-workspace-plugin
 
 # Initialize the workspace
 /ai-workspace:init
-# Verify: ls threads/       # Should exist
-# Verify: ls .claude/       # Should show settings.json
+# Verify: ls threads/ AGENTS.md CLAUDE.md .claude/settings.json
 
 # Create a thread
 /ai-workspace:threads create test-thread
-# Verify: ls threads/       # Should show test-thread/
+# Verify: ls threads/test-thread/
 
 # Test thread operations
 /ai-workspace:threads
@@ -90,8 +94,19 @@ claude --plugin-dir ~/ai-workspace-plugin
 /ai-workspace:threads snapshot
 
 # Clean up
-cd ~
-rm -rf /tmp/test-workspace
+cd ~ && rm -rf /tmp/test-workspace
+```
+
+### Testing on Codex CLI
+
+Codex has no `--plugin-dir` flag. To test a local checkout, point a Codex marketplace at the plugin directory:
+
+```bash
+# (Once Codex marketplace stub is set up — TBD; see plan follow-ups)
+codex plugin marketplace add /path/to/local/marketplace
+codex
+> initialize the ai-workspace
+> create a thread called test-thread
 ```
 
 ## Code Style
@@ -112,10 +127,21 @@ rm -rf /tmp/test-workspace
 ## Adding New Skills
 
 1. Create directory in `skills/<skill-name>/`
-2. Add `SKILL.md` with skill definition
-3. Add supporting scripts (Python, etc.) in `scripts/` subdirectory if needed
-4. Update README.md to list the new skill
-5. Test the skill works with `/ai-workspace:skill-name` command
+2. Add `SKILL.md` with skill definition (keep frontmatter to `name` + `description`; Codex requires this and Claude accepts it)
+3. Write prose vendor-neutrally: prefer "your CLI" or note Claude-vs-Codex differences explicitly. Avoid hard-coding `/ai-workspace:` namespace in user-facing examples (Codex uses bare `/skill-name`).
+4. Add supporting scripts in `scripts/` subdirectory if needed
+5. Update README.md to list the new skill
+6. Test the skill works with `/ai-workspace:skill-name` (Claude) and `/skill-name` (Codex)
+
+## Adding or Editing Agents
+
+1. Edit `agents/{name}.md` (Claude format)
+2. Regenerate Codex `.toml` mirrors:
+   ```bash
+   python3 scripts/sync-codex-agents.py
+   ```
+3. Commit both the `.md` source and the generated `.toml` files together. Do not hand-edit the `.toml` files; they are generated artifacts.
+4. Write prose vendor-neutrally so the same persona works under both CLIs' subagent systems.
 
 ## Pull Request Guidelines
 
@@ -158,18 +184,24 @@ uv run --with pytest --with mcp python3 -m pytest tests/ -v
 Before releasing a new version:
 
 - [ ] Plugin loads with `claude --plugin-dir .`
+- [ ] Plugin loads on Codex (via local marketplace install)
 - [ ] Init works in a clean directory:
-  - [ ] `/ai-workspace:init` creates `threads/`, `.claude/settings.json`, and `CLAUDE.md`
-  - [ ] Re-running `/ai-workspace:init` skips existing files safely
-- [ ] Thread management works:
-  - [ ] `/ai-workspace:threads create` works
-  - [ ] `/ai-workspace:threads` lists threads
-  - [ ] `/ai-workspace:threads save` works
-  - [ ] `/ai-workspace:threads snapshot` works
+  - [ ] Creates `threads/`, `AGENTS.md`, `CLAUDE.md` (one-liner), and `.claude/settings.json`
+  - [ ] On Codex, also copies `.codex-plugin/agents/*.toml` into `~/.codex/agents/`
+  - [ ] Re-running skips existing files safely
+- [ ] Thread management works (both CLIs):
+  - [ ] `threads create` works
+  - [ ] `threads` lists threads
+  - [ ] `threads save` works
+  - [ ] `threads snapshot` works
+- [ ] Debate works (both CLIs):
+  - [ ] Proponent and skeptic subagents spawn in isolated contexts
+  - [ ] Final artifact is saved to the active thread
+- [ ] Agents `.toml` mirrors regenerated if any `agents/*.md` changed (`python3 scripts/sync-codex-agents.py`)
 - [ ] Documentation is up to date:
   - [ ] README.md Quick Start is accurate
   - [ ] CONTRIBUTING.md reflects current structure
-  - [ ] plugin.json version bumped
+  - [ ] Both `.claude-plugin/plugin.json` and `.codex-plugin/plugin.json` versions bumped in sync
 
 ## Questions?
 
