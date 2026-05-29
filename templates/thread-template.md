@@ -1,5 +1,7 @@
 # Thread: [Thread Name]
 
+> Fixed structure — do not add sections. Everything substantive goes in a linked artifact or decision.
+
 **Started**: [YYYY-MM-DD]
 **Status**: Active
 **Last Session**: [YYYY-MM-DD]
@@ -9,7 +11,7 @@
 
 ## Quick Resume
 
-> **Purpose**: Quick context for resuming after days/weeks/months. Keep this BRIEF and CURRENT.
+> Keep this BRIEF and CURRENT. Ideal: 5 next steps, max 10. Recent progress: last 3–5 entries only.
 
 **Current focus**:
 
@@ -23,45 +25,25 @@
 
 ---
 
-## Problem
+## About
 
+A few sentences describing what this thread is about. For threads with a clear problem and desired outcome, include those here. For others, describe the topic, goal, or context.
 
+## Decisions
 
-## Current State
+> Read these before planning or making recommendations from this thread.
 
-
-
-## Desired State
-
-
-
-## Existing Infrastructure
-
-- **Tech stack**:
-- **Systems**:
-- **Constraints**:
-
----
+- None
 
 ## Open Questions
 
 - None
 
-## Resolved Questions
-
-> **Keep this high-level.** For detailed decision rationale, see decisions/ directory.
-
 ---
 
 ## Resources
 
-> **Important**: This README should NOT duplicate content from sessions, decisions, or todos.
-> It's a landing page with links to the details.
-
 ### Sessions
- - None
-
-### Decisions
  - None
 
 ### Attachments
@@ -69,12 +51,6 @@
 
 ### Artifacts
  - None
-
----
-
-## Notes
-
-
 
 ---
 

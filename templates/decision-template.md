@@ -1,7 +1,7 @@
 ---
 title: [Decision Title]
 status: open # open | partially-locked | locked
-summary: [One sentence — WHAT was decided. No rationale. E.g. "Belt drive with 2.8:1 ratio (100mm/280mm pulleys), SPB section belt."]
+summary: [One sentence — WHAT was decided. No rationale. E.g. "Chose Pi (pi.dev) RPC mode as the agent harness; model-agnostic is load-bearing."]
 ---
 
 # Decision Log: [Title]
@@ -14,13 +14,6 @@ summary: [One sentence — WHAT was decided. No rationale. E.g. "Belt drive with
 
 **Decided**: [what]
 
-[Rationale, trade-offs, analysis, cost details...]
+[Rationale, trade-offs, analysis...]
 
 ---
-
-## Cost Summary
-
-| Item | Cost | Status |
-|---|---|---|
-| [item] | $[x] | [ordered/pending/estimated] |
-| **Total** | **$[x]** | |

@@ -93,7 +93,7 @@ One source tree serves both CLIs. Maximum deduplication:
 **Skills:**
 - Defined in `skills/{name}/SKILL.md`; supporting scripts in a `scripts/` subdirectory
 - Shared helper code lives outside `skills/` so Codex does not treat it as an invocable skill
-- Claude invokes with `/ai-workspace:skill-name`, Codex with `/skill-name` or natural language
+- Claude invokes with `/ai-workspace:skill-name`, Codex with `$skill-name` or natural language
 
 **Agents (subagents):**
 - Canonical source: `agents/{name}.md` (Claude format: YAML frontmatter + markdown body)
