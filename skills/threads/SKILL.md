@@ -1,6 +1,6 @@
 ---
 name: threads
-description: Thread management for organizing long-running discussions. Use when creating threads, listing threads, resuming work, saving context, creating snapshots, or logging decisions.
+description: Thread management for organizing long-running discussions. Use when creating threads, listing threads, resuming work, saving context, or logging decisions.
 ---
 
 # Threads Skill
@@ -124,22 +124,24 @@ For trivial commands, instructions are inline. For complex commands, read the re
 |---|---|---|
 | `list` | Call `list_threads`, output directly, no commentary | inline |
 | `resume` | Resume a thread — full instructions above | inline |
-| `save` / `snapshot` | Save context or generate a snapshot artifact | `commands/save-snapshot.md` |
-| `log-decision` | Draft and log a decision document | `commands/decision.md` |
-| `create` | Create a new thread | `commands/create.md` |
-| `park` / `pop` / `parked` | Park topics, pop them, list parked | `commands/park.md` |
-| `link-parent` / `create-child` / `link-related` | Thread linking | `commands/thread-links.md` |
-| `archive` / `restore` / `list-archived` / `inspect` / `purge-tmp` | Archive operations | `commands/archive.md` |
+| `save-session` | Update README Quick Resume and create/update the session log | `commands/save-session.md` |
+| `save-artifact` | Create a named artifact (summary, analysis, spec, diagram) | `commands/save-artifact.md` |
+| `log-decision` | Draft and log a decision document | `commands/log-decision.md` |
+| `create-thread` | Create a new thread | `commands/create-thread.md` |
+| `park-topic` | Park topics, pop them, list parked | `commands/park-topic.md` |
+| `link-thread` | Link parent, child, or related threads | `commands/link-thread.md` |
+| `archive-thread` | Archive, restore, list, inspect, and purge archive tmp | `commands/archive-thread.md` |
 | `open` | `open threads/{name}` or `open threads`; confirm | inline |
 | `set-workspace` | Call `set_default_workspace` with provided path; confirm | inline |
 | `status` | Read thread README.md, show Quick Resume | inline |
 
-Reference files are in this skill's `commands/` directory. Artifact naming and registration rules: `commands/artifact-conventions.md`.
+Reference files live in the `commands/` subdirectory of this skill's base directory. Read them directly using the Read tool — do not use `get_template` or any MCP tool. Example: if the base directory is `/path/to/skills/threads`, read `/path/to/skills/threads/commands/save-session.md`.
 
 **Recognized phrases:**
 - "List my threads" / "What threads do I have?"
 - "Resume [name]" / "Continue [name]" / "Resume" (no name)
-- "Save" / "Save context" / "Snapshot [name]"
+- "Save" / "Save context" / "Save the thread"
+- "Summarize this for [person]" / "Create an artifact" / "Write a spec" / "Capture this analysis"
 - "Log a decision" / "Save this decision"
 - "Create a thread" / "New thread about [topic]"
 - "Park [topic]" / "Pop" / "What's parked?"
