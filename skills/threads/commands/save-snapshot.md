@@ -5,7 +5,7 @@
 - Update README.md Quick Resume section with current context
 - Create or update the session log for this invocation:
   1. Look for a session file in `sessions/` with today's date prefix (`YYYYMMDD-*.md`)
-  2. If none exists: call `mcp__plugin_ai-workspace_threads__get_template(template_name="thread-session-template.md")` to get the template, then create `YYYYMMDD-kebab-summary.md` filled with current conversation context (goal, key points, decisions, next steps). Fill in the frontmatter: `date`, `summary`, `keywords`.
+  2. If none exists: call `mcp__plugin_ai-workspace_threads__get_template(template_name="thread-session-template.md")` to get the template, then create `YYYYMMDD-kebab-summary.md` filled with current conversation context (goal, key points, decisions, next steps). Fill in the frontmatter: `date`, `summary`, `keywords`, `next_context`.
   3. If one exists: update it — append new discussion points, decisions, and progress since last save
   4. Link the session file in README.md Resources > Sessions if not already listed
 - A session loosely maps to a single CLI invocation: one file per conversation, updated on each save

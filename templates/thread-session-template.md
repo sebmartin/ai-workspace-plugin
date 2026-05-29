@@ -2,6 +2,7 @@
 date: YYYY-MM-DD
 summary: [One sentence — what happened in this session.]
 keywords: [comma-separated terms — tools, people, topics, file paths the user would search for later]
+next_context: [1-2 sentences — current state and what to tackle next, for resuming from this session]
 ---
 
 # Session: [Topic] - [YYYY-MM-DD]
@@ -49,5 +50,3 @@ What were we trying to accomplish in this session?
 - Question 1?
 - Question 2?
 
-### Context for Next Time
-[Brief summary of current state and what to tackle next. After filling this in, update the thread README's Quick Resume section.]
