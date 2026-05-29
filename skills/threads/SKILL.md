@@ -77,8 +77,9 @@ The README is a lean index — the complete map of a thread. It must be short en
 - If thread name provided: resume it. If not: list threads with numbers, ask which, wait for reply.
 - **Archive fallback**: If not found among active threads, call `list_archived_threads` and scan for a match. If found, tell the user it's archived and offer to restore.
 - Read the thread's README.md **in full** — every section. This is the complete map.
+- From the sessions listed in the README, read the frontmatter of the 5 most recent. If a session has a `summary:` field, include it in the resume output. Skip sessions without one silently.
 - Do not read linked files eagerly. Pull them on demand when work requires them.
-- Show Quick Resume and Locked Decisions (format below). Nothing else.
+- Show Quick Resume, recent session summaries (if any), and Locked Decisions (format below). Nothing else.
 - End with: "**Working on thread: [thread-name]**"
 
 ### Resume Response Format
@@ -88,9 +89,14 @@ Resumed: [Thread Name]
 
 [Quick Resume section from README — paste verbatim]
 
+## Recent Sessions
+[One line per session with a summary: "**YYYY-MM-DD** — [summary]"]
+
 ## Locked Decisions
 [One line per decision: "**[title]** ([status]): [summary]"]
 ```
+
+Omit `## Recent Sessions` entirely if no sessions have a `summary:` field.
 
 The Locked Decisions keep key constraints in context — without them, settled decisions get re-litigated.
 
