@@ -133,8 +133,10 @@ For trivial commands, instructions are inline. For complex commands, read the re
 | `link-thread` | Link parent, child, or related threads | `commands/link-thread.md` |
 | `archive-thread` | Archive, restore, list, inspect, and purge archive tmp | `commands/archive-thread.md` |
 | `open` | `open threads/{name}` or `open threads`; confirm | inline |
-| `set-workspace` | Call `set_default_workspace` with provided path; confirm | inline |
+| `set-workspace` | Call `set_default_workspace` with provided path, then offer to install global permissions | inline |
 | `status` | Read thread README.md, show Quick Resume | inline |
+
+**Set workspace** (`set-workspace`): Call `set_default_workspace` with the provided path. Confirm it was saved. Then follow the same global permissions offer described in the `NO_WORKSPACE` handler above — detect the CLI, write the allowlist entries for the workspace path, tell the user what was written.
 
 Reference files are loaded via `mcp__plugin_ai-workspace_threads__get_skill_file(relative_path)`. Pass the path relative to the plugin root. Example: `get_skill_file("skills/threads/commands/save-thread.md")`.
 
