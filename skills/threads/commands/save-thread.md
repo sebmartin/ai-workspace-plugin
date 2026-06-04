@@ -59,7 +59,7 @@ Review the conversation context for decisions that were made but not yet logged 
 
 A decision worth logging is any choice that: settles a meaningful question, constrains future work, or would need to be recalled when resuming. Trivial choices don't need logging.
 
-If you find unlogged decisions, ask: "I noticed a decision about [topic] — want me to log it?" Do not create decision files silently. If the user confirms, use the `log-decision` command to create them.
+If you find unlogged decisions, ask: "I noticed a decision about [topic] — want me to log it?" Do not create decision files silently. If the user confirms, use the `log-decision` command to create them and update the README Decisions section — do not ask again before updating the README.
 
 ---
 
