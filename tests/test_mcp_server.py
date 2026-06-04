@@ -17,7 +17,8 @@ import mcp_server
 from mcp_server import (
     archive_thread,
     create_thread,
-    get_thread_status,
+    resume_thread,
+    get_skill_file,
     inspect_archive,
     list_archived_threads,
     list_threads,
@@ -150,13 +151,13 @@ class TestConfigDir:
         assert get_config_dir() == tmp_path / ".config" / "ai-workspace"
 
 
-class TestGetThreadStatus:
+class TestResumeThread:
     def test_missing_thread(self, tmp_path):
         (tmp_path / "threads").mkdir()
-        result = get_thread_status(str(tmp_path), "nonexistent")
+        result = resume_thread(str(tmp_path), "nonexistent")
         assert "not found" in result
 
-    def test_extracts_quick_resume(self, tmp_path):
+    def test_returns_full_readme(self, tmp_path):
         threads = tmp_path / "threads"
         threads.mkdir()
         thread = threads / "my-thread"
@@ -164,70 +165,33 @@ class TestGetThreadStatus:
         (thread / "README.md").write_text(
             "# My Thread\n\n"
             "## Quick Resume\n\n"
-            "**Focus**: current focus\n"
-            "**Next**: next step\n\n"
-            "## Other Section\n"
-            "other content\n"
+            "**Focus**: current focus\n\n"
+            "## About\n\n"
+            "This thread is about something.\n\n"
+            "## Decisions\n\n"
+            "- None\n"
         )
-        result = get_thread_status(str(tmp_path), "my-thread")
+        result = resume_thread(str(tmp_path), "my-thread")
         assert "**Focus**: current focus" in result
-        assert "**Next**: next step" in result
-        assert "Other Section" not in result
-
-    def test_no_quick_resume_section(self, tmp_path):
-        threads = tmp_path / "threads"
-        threads.mkdir()
-        thread = threads / "my-thread"
-        thread.mkdir()
-        (thread / "README.md").write_text("# My Thread\n\n## Overview\nsome content\n")
-        result = get_thread_status(str(tmp_path), "my-thread")
-        assert "No Quick Resume section found" in result
-
-    def test_strips_blank_lines(self, tmp_path):
-        threads = tmp_path / "threads"
-        threads.mkdir()
-        thread = threads / "my-thread"
-        thread.mkdir()
-        (thread / "README.md").write_text(
-            "## Quick Resume\n\n\n**Focus**: something\n\n\n"
-        )
-        result = get_thread_status(str(tmp_path), "my-thread")
-        # Body (after the Workspace/Thread header block) is trimmed.
-        body = result.split("\n\n", 1)[1]
-        assert body == "**Focus**: something"
+        assert "## About" in result
+        assert "## Decisions" in result
 
     def test_success_includes_workspace_and_thread_headers(self, tmp_path):
         threads = tmp_path / "threads"
         threads.mkdir()
         thread = threads / "my-thread"
         thread.mkdir()
-        (thread / "README.md").write_text(
-            "## Quick Resume\n**Focus**: x\n"
-        )
-        result = get_thread_status(str(tmp_path), "my-thread")
+        (thread / "README.md").write_text("# My Thread\n**Focus**: x\n")
+        result = resume_thread(str(tmp_path), "my-thread")
         assert result.startswith(
             f"Workspace: {tmp_path}\nThread: {tmp_path / 'threads' / 'my-thread'}\n\n"
         )
 
     def test_error_returns_no_headers(self, tmp_path):
         (tmp_path / "threads").mkdir()
-        result = get_thread_status(str(tmp_path), "nonexistent")
+        result = resume_thread(str(tmp_path), "nonexistent")
         assert not result.startswith("Workspace:")
         assert "not found" in result
-
-    def test_purpose_line_excluded(self, tmp_path):
-        threads = tmp_path / "threads"
-        threads.mkdir()
-        thread = threads / "my-thread"
-        thread.mkdir()
-        (thread / "README.md").write_text(
-            "## Quick Resume\n"
-            "> **Purpose**: this is filtered\n"
-            "**Focus**: kept\n"
-        )
-        result = get_thread_status(str(tmp_path), "my-thread")
-        assert "> **Purpose**" not in result
-        assert "**Focus**: kept" in result
 
 
 class TestCreateThread:
@@ -793,3 +757,22 @@ class TestPurgeArchiveTmp:
         assert (archive_dir / "2026-keep.md").exists()
         assert (archive_dir / "2026-keep.tar.gz").exists()
         assert not (archive_dir / "tmp").exists()
+
+
+class TestGetSkillFile:
+    def test_reads_existing_file(self):
+        result = get_skill_file("skills/threads/commands/save-thread.md")
+        assert "save-thread" in result
+        assert "Step 1" in result
+
+    def test_missing_file_returns_error(self):
+        result = get_skill_file("skills/threads/commands/nonexistent.md")
+        assert "Error" in result
+
+    def test_path_traversal_blocked(self):
+        result = get_skill_file("../../etc/passwd")
+        assert "Error" in result
+
+    def test_directory_returns_error(self):
+        result = get_skill_file("skills/threads/commands")
+        assert "Error" in result

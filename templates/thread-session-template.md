@@ -1,7 +1,11 @@
-# Session: [Topic] - [YYYY-MM-DD]
+---
+date: YYYY-MM-DD
+summary: [Brief summary of what was discussed — key topics, decisions, outcomes. Be concise but capture what matters. Up to 150 words.]
+keywords: [comma-separated terms — tools, people, topics, file paths the user would search for later]
+next_context: [1-2 sentences — current state and what to tackle next, for resuming from this session]
+---
 
-**Date**: [YYYY-MM-DD]
-**Thread**: [Thread name - link to ../README.md]
+# Session: [Topic] - [YYYY-MM-DD]
 
 ## Goal
 
@@ -13,9 +17,6 @@ What were we trying to accomplish in this session?
 - Point 1
 - Point 2
 - Point 3
-
-### Skills Used
-- [e.g., /ai-workspace:debate, /ai-workspace:threads snapshot]
 
 ### Decisions Made
 - Decision 1 → [Link to ADR if created]
@@ -49,9 +50,3 @@ What were we trying to accomplish in this session?
 - Question 1?
 - Question 2?
 
-### Context for Next Time
-[Brief summary to help resume: what's the current state, what should we tackle next?]
-
-## Notes
-
-Any additional thoughts, links, or context.

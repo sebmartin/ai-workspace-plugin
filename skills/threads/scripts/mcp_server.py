@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "lib"))
 
 from mcp.server.fastmcp import FastMCP
 from workspace_utils import (
+    get_plugin_dir,
     get_template_path,
     read_config,
     validate_thread_name,
@@ -62,9 +63,8 @@ def _with_focus(workspace: Path, thread_name: str, body: str) -> str:
     """Prefix a tool's success response with Workspace + Thread headers.
 
     Used only by tools that shift the session's focus to a specific thread
-    (create_thread, get_thread_status). The LLM tracks Workspace and Thread
-    across the session and uses them for follow-up file ops (Read on README.md,
-    Glob on sessions/, etc.).
+    (create_thread, resume_thread). The LLM tracks Workspace and Thread
+    across the session and uses them for follow-up file ops.
     """
     return (
         f"Workspace: {workspace}\n"
@@ -244,8 +244,8 @@ def list_threads(workspace_dir: str) -> str:
 
 
 @mcp.tool()
-def get_thread_status(workspace_dir: str, thread_name: str) -> str:
-    """Get the Quick Resume section from a thread's README.
+def resume_thread(workspace_dir: str, thread_name: str) -> str:
+    """Resolve the workspace and thread path, and return the full README content.
 
     Args:
         workspace_dir: Directory hint for locating the workspace; typically the
@@ -262,28 +262,7 @@ def get_thread_status(workspace_dir: str, thread_name: str) -> str:
     if not readme_path.exists():
         return f"Error: Thread '{thread_name}' not found."
 
-    lines = readme_path.read_text().split("\n")
-    in_section = False
-    result = []
-
-    for line in lines:
-        if line.strip() == "## Quick Resume":
-            in_section = True
-            continue
-        elif in_section and line.startswith("## "):
-            break
-        elif in_section and not line.strip().startswith("> **Purpose**"):
-            result.append(line)
-
-    if not result:
-        return f"Error: No Quick Resume section found in thread '{thread_name}'."
-
-    while result and not result[0].strip():
-        result.pop(0)
-    while result and not result[-1].strip():
-        result.pop()
-
-    return _with_focus(workspace, thread_name, "\n".join(result))
+    return _with_focus(workspace, thread_name, readme_path.read_text())
 
 
 @mcp.tool()
@@ -364,19 +343,29 @@ def create_thread(workspace_dir: str, thread_name: str) -> str:
     )
 
 
+
 @mcp.tool()
-def get_template(template_name: str) -> str:
-    """Return the contents of a plugin template file.
+def get_skill_file(relative_path: str) -> str:
+    """Return the contents of a file from the plugin directory.
+
+    Use this to read skill reference files (e.g. commands/save-thread.md)
+    without needing direct filesystem access. Paths are resolved relative
+    to the plugin root and must not escape it.
 
     Args:
-        template_name: Filename of the template (e.g., "thread-template.md").
+        relative_path: Path relative to the plugin root (e.g., "skills/threads/commands/save-thread.md").
     """
-    path = get_template_path(template_name)
-    if not path.exists():
-        templates_dir = get_template_path(".")
-        available = [p.name for p in templates_dir.iterdir() if p.is_file()]
-        return f"Error: Template '{template_name}' not found. Available: {', '.join(sorted(available))}"
-    return path.read_text()
+    plugin_root = get_plugin_dir().resolve()
+    target = (plugin_root / relative_path).resolve()
+    try:
+        target.relative_to(plugin_root)
+    except ValueError:
+        return "Error: Path escapes plugin directory."
+    if not target.exists():
+        return f"Error: File '{relative_path}' not found in plugin."
+    if not target.is_file():
+        return f"Error: '{relative_path}' is not a file."
+    return target.read_text()
 
 
 @mcp.tool()
