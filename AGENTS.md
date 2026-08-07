@@ -44,7 +44,7 @@ ai-workspace-plugin/                # Plugin repository
 │   ├── init/SKILL.md
 │   └── threads/
 │       ├── SKILL.md
-│       └── scripts/mcp_server.py   # FastMCP server
+│       └── scripts/mcp_server.py   # MCP server (mcp>=2, MCPServer API)
 ├── lib/
 │   └── workspace_utils.py          # Shared Python helpers
 ├── templates/

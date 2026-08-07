@@ -58,7 +58,7 @@ ai-workspace-plugin/
 
 ```bash
 # Run unit tests
-uv run --with pytest --with mcp python3 -m pytest tests/ -v
+uv run --with pytest --with 'mcp>=2' python3 -m pytest tests/ -v
 ```
 
 ### Basic Testing
@@ -148,7 +148,7 @@ codex
 - **Clear description**: Explain what changes and why
 - **Update documentation**: If behavior changes, update relevant docs
 - **No workspace/ files**: PRs must not include workspace/ content
-- **Tests pass**: Run `uv run --with pytest --with mcp python3 -m pytest tests/ -v`
+- **Tests pass**: Run `uv run --with pytest --with 'mcp>=2' python3 -m pytest tests/ -v`
 
 ## Common Tasks
 
@@ -173,7 +173,7 @@ vim skills/threads/SKILL.md
 vim skills/threads/scripts/mcp_server.py
 
 # Run tests
-uv run --with pytest --with mcp python3 -m pytest tests/ -v
+uv run --with pytest --with 'mcp>=2' python3 -m pytest tests/ -v
 
 # Test the skill
 /ai-workspace:threads
