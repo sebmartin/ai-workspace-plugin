@@ -181,7 +181,7 @@ uv run --with pytest --with 'mcp>=2' python3 -m pytest tests/ -v
 
 ## Release Checklist
 
-Before releasing a new version:
+Merging to `main` ships the plugin, so this is the pre-merge checklist for every PR, not a separate release event:
 
 - [ ] Plugin loads with `claude --plugin-dir .`
 - [ ] Plugin loads on Codex (via local marketplace install)
@@ -201,7 +201,7 @@ Before releasing a new version:
 - [ ] Documentation is up to date:
   - [ ] README.md Quick Start is accurate
   - [ ] CONTRIBUTING.md reflects current structure
-  - [ ] Both `.claude-plugin/plugin.json` and `.codex-plugin/plugin.json` versions bumped in sync
+- [ ] Both `.claude-plugin/plugin.json` and `.codex-plugin/plugin.json` versions bumped in sync (required on every PR, since the merge is the release)
 
 ## Questions?
 
