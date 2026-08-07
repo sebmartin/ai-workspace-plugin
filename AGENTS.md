@@ -44,7 +44,7 @@ ai-workspace-plugin/                # Plugin repository
 │   ├── init/SKILL.md
 │   └── threads/
 │       ├── SKILL.md
-│       └── scripts/mcp_server.py   # FastMCP server
+│       └── scripts/mcp_server.py   # MCP server (mcp>=2, MCPServer API)
 ├── lib/
 │   └── workspace_utils.py          # Shared Python helpers
 ├── templates/
@@ -111,7 +111,8 @@ One source tree serves both CLIs. Maximum deduplication:
 2. **Follow existing patterns** - Match the style and structure of existing code
 3. **Regenerate Codex agents after editing `agents/*.md`** - Run `python3 scripts/sync-codex-agents.py` and commit both the `.md` source and the `.toml` mirror together
 4. **Test changes** - Load locally with `claude --plugin-dir .` on the Claude side. Codex doesn't have a `--plugin-dir` flag; testing on Codex requires a local marketplace stub.
-5. **Keep it simple** - Avoid over-engineering, only change what's needed
+5. **Bump the version in every PR** - Merging to `main` ships the plugin to users, so there is no separate release step. Bump `version` in both `.claude-plugin/plugin.json` and `.codex-plugin/plugin.json`, in sync, as part of the PR. Patch for fixes, minor for new capability, major for breaking changes.
+6. **Keep it simple** - Avoid over-engineering, only change what's needed
 
 See CONTRIBUTING.md for testing procedures and PR guidelines.
 

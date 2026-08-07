@@ -29,6 +29,24 @@ def test_codex_mcp_config_uses_relative_paths():
     assert "${CLAUDE_PLUGIN_DATA}" not in serialized
 
 
+def test_both_launch_configs_require_mcp_2x():
+    """The server imports mcp.server.mcpserver, which only exists on mcp>=2."""
+    codex_args = json.loads((PLUGIN_ROOT / ".mcp.json").read_text())["mcpServers"]["threads"]["args"]
+    claude_args = json.loads(
+        (PLUGIN_ROOT / ".claude-plugin" / "plugin.json").read_text()
+    )["mcpServers"]["threads"]["args"]
+
+    for args in (codex_args, claude_args):
+        assert "mcp>=2" in args, args
+
+
+def test_manifest_versions_stay_in_sync():
+    claude = json.loads((PLUGIN_ROOT / ".claude-plugin" / "plugin.json").read_text())
+    codex = json.loads((PLUGIN_ROOT / ".codex-plugin" / "plugin.json").read_text())
+
+    assert claude["version"] == codex["version"]
+
+
 def test_codex_manifest_has_required_interface_metadata():
     manifest = json.loads((PLUGIN_ROOT / ".codex-plugin" / "plugin.json").read_text())
     interface = manifest["interface"]

@@ -1,6 +1,6 @@
 {
   "name": "ai-workspace",
-  "version": "2.3.0",
+  "version": "2.3.1",
   "description": "Thread-based workspace management with specialized agents for long-running AI conversations",
   "author": {
     "name": "Sebastien Martin",
@@ -15,7 +15,7 @@
       "args": [
         "run",
         "--python", ">=3.12",
-        "--with", "mcp",
+        "--with", "mcp>=2",
         "python3",
         "${CLAUDE_PLUGIN_ROOT}/skills/threads/scripts/mcp_server.py"
       ]

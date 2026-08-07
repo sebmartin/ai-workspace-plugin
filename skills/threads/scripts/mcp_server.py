@@ -16,7 +16,7 @@ ARCHIVE_SCHEMA_VERSION = 1
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "lib"))
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 from workspace_utils import (
     get_plugin_dir,
     get_template_path,
@@ -25,7 +25,7 @@ from workspace_utils import (
     write_config,
 )
 
-mcp = FastMCP("threads")
+mcp = MCPServer("threads")
 
 
 # ---------- Workspace resolution ----------
