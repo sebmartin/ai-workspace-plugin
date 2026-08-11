@@ -4,7 +4,7 @@ Create a named artifact — a summary, analysis, spec, diagram, or any output wo
 
 Artifacts are for content that needs to persist beyond the conversation: something to share, reference later, or hand off. If the user asks to summarize something for someone else, produce a design, write a spec, or capture an analysis — that's an artifact.
 
-If the artifact is meant to be sent or shown to someone without access to this workspace, it must stand alone: no decision IDs, session paths, or "see the thread". Carry the reasoning over instead of the pointer. See "Artifacts that leave the workspace must stand alone" in the skill's Behavioral Principles.
+If the artifact is meant to be sent or shown to someone without access to this workspace, it must stand alone: no decision IDs, session paths, thread names, or "see the thread". Carry the reasoning over instead of the pointer. See "Anything that leaves the workspace must stand alone" in the skill's Behavioral Principles.
 
 ## Naming
 
