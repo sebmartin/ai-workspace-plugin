@@ -24,6 +24,8 @@ Nothing errors when you do. The citation looks well-sourced from inside the sess
 
 When a citation carries real content, such as why an approach was retired or why a constraint exists, rewrite it as the argument itself. The reasoning belongs in what you send. Only the pointer is forbidden.
 
+That last part is about the pointer alone. It does not make the rest of the thread safe to send. A thread holds candid assessments of people and of work, positions the user is still forming, information belonging to third parties, and plans that aren't public yet. Carry across only what the recipient needs and is entitled to read, restated for someone who has no other context. Removing a reference to private content is not the same as removing the private content. If you can't tell whether a detail is shareable, ask before it goes out, since there is no recall after.
+
 Cases that are easy to miss:
 
 - **Text drafted in conversation.** An email or Slack message composed in the session and pasted elsewhere never passes through a file, so nothing prompts a review before it goes out.
