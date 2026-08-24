@@ -1,15 +1,19 @@
 """Schema 2 thread operations: the indexes are the record, the README is a view."""
 
 import re
+from datetime import date
 from pathlib import Path
 
+from ai_workspace.plugin import get_template_path
 from ai_workspace.text import split_frontmatter
-from ai_workspace.threads import marker, v1
+from ai_workspace.threads import marker
 from ai_workspace.threads.v2 import index as idx
 
 SESSION_WINDOW = 10
 
-_SECTION_RE = r"(?m)^##[ \t]+{name}[ \t]*$\n(.*?)(?=^##[ \t]|\Z)"
+# Stop at the next heading or at a horizontal rule: the last section would
+# otherwise swallow the footer that follows it.
+_SECTION_RE = r"(?m)^##[ \t]+{name}[ \t]*$\n(.*?)(?=^##[ \t]|^---[ \t]*$|\Z)"
 
 
 def _section(text: str, name: str) -> str:
@@ -36,16 +40,23 @@ SUBDIRS = ("sessions", "decisions", "attachments", "artifacts", "todos")
 def create(thread) -> str:
     """Lay out a new schema 2 thread.
 
-    v1's layout plus todos/, which is a schema 2 concept, plus the marker.
-    Index files are not pre-created: a missing index is an empty index, and the
-    marker is what declares the schema, so there is nothing for their absence
-    to be confused with.
+    Its own template rather than v1's, because the README is a view here and
+    the sections the renderer owns have to exist for it to fill in. Index files
+    are not pre-created: a missing index is an empty index, and the marker is
+    what declares the schema, so there is nothing for their absence to be
+    confused with.
     """
-    result = v1.create(thread)
     for subdir in SUBDIRS:
         (thread.dir / subdir).mkdir(parents=True, exist_ok=True)
+
+    today = date.today().isoformat()
+    template = get_template_path("v2/thread-template.md").read_text()
+    readme = re.sub(r"\[Thread Name\]", thread.name, template)
+    readme = re.sub(r"\[YYYY-MM-DD\]", today, readme)
+    (thread.dir / "README.md").write_text(readme)
+
     marker.write(thread.dir, SCHEMA)
-    return result
+    return f"Created thread '{thread.name}' at {thread.dir}"
 
 
 def resume(thread) -> str:

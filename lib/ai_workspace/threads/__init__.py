@@ -40,6 +40,7 @@ __all__ = [
     "retire_artifact",
     "retire_decision",
     "retire_todo",
+    "save_session",
     "set_todo_state",
     "set_window",
     "validate_thread_name",
@@ -213,3 +214,11 @@ def retire_artifact(workspace_dir: str, thread_name: str, artifact_id: str,
     """Retire an artifact that is superseded or no longer relevant."""
     thread, fn, error = _for(workspace_dir, thread_name, "retire_artifact")
     return error or fn(thread, artifact_id, state)
+
+
+def save_session(workspace_dir: str, thread_name: str, slug: str, summary: str,
+                 keywords: str, next_context: str, body: str | None = None,
+                 status: str | None = None) -> str:
+    """Write the session log and the Status paragraph in one call."""
+    thread, fn, error = _for(workspace_dir, thread_name, "save_session")
+    return error or fn(thread, slug, summary, keywords, next_context, body, status)
