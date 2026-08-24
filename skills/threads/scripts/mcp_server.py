@@ -16,7 +16,6 @@ from mcp.server.mcpserver import MCPServer
 from ai_workspace import plugin as _plugin
 from ai_workspace import threads as _threads
 from ai_workspace import workspace as _ws
-from ai_workspace.threads.tarball import ARCHIVE_SCHEMA_VERSION  # noqa: F401  (re-export)
 
 mcp = MCPServer("threads")
 

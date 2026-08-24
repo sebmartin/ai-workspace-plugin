@@ -36,10 +36,10 @@ def test_every_registered_schema_declares_its_surface():
     directory left behind by a branch switch, holding nothing but stale
     bytecode, is not mistaken for a schema.
     """
-    from ai_workspace.threads import _schema
+    from ai_workspace.threads import schema
 
-    assert _schema.SCHEMAS, "no schemas registered"
-    for version, module in sorted(_schema.SCHEMAS.items()):
+    assert schema.SCHEMAS, "no schemas registered"
+    for version, module in sorted(schema.SCHEMAS.items()):
         surface = getattr(module, "__all__", None)
         assert surface, f"schema {version} ({module.__name__}) declares no __all__"
         for op in surface:
@@ -48,26 +48,73 @@ def test_every_registered_schema_declares_its_surface():
             )
 
 
-def test_every_public_thread_operation_resolves_on_the_current_schema():
-    """Each op the threads API exposes has an implementation to hand off to.
+def _dispatched_operations() -> set[str]:
+    """Every operation name the package hands off to a schema.
 
-    Catches the accidental omission: an operation added to one schema and never
-    re-exported by its successor, which would otherwise show up as a silent
-    refusal rather than a failure.
+    Both call shapes count, and reading only one of them is how a guard stops
+    guarding: `_for(..., "add_todo")` in the API, and `implementation(thread).op`
+    wherever a caller already holds a resolved thread. note_restore and
+    last_active are dispatched only the second way, so a list built from
+    __all__ or from _for alone would never have covered them.
     """
-    from ai_workspace import threads
-    from ai_workspace.threads import _schema
+    import ast
 
-    current = _schema.SCHEMAS[_schema.CURRENT_SCHEMA]
-    # Operations that act on archive/ rather than on one thread take no schema.
-    collection_ops = {
-        "restore", "list_archived_threads", "inspect_archive",
-        "purge_archive_tmp", "list_threads", "validate_thread_name",
-    }
-    dispatched = [op for op in threads.__all__ if op not in collection_ops]
+    names = set()
+    for module in sorted((REPO / "lib" / "ai_workspace").rglob("*.py")):
+        for node in ast.walk(ast.parse(module.read_text())):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == "_for"
+                and len(node.args) >= 3
+                and isinstance(node.args[2], ast.Constant)
+            ):
+                names.add(node.args[2].value)
+            elif (
+                isinstance(node, ast.Attribute)
+                and isinstance(node.value, ast.Call)
+                and isinstance(node.value.func, ast.Name)
+                and node.value.func.id == "implementation"
+            ):
+                names.add(node.attr)
+    return names
+
+
+def test_every_dispatched_operation_resolves_on_the_newest_schema():
+    """Every operation handed to a schema exists on the newest one.
+
+    Checked against max(SCHEMAS) rather than CURRENT_SCHEMA, because those
+    diverge on purpose: CURRENT_SCHEMA is what the plugin creates and can lag
+    what it can read. An older schema legitimately lacks newer operations, and
+    refusing with NEEDS_MIGRATION is the intended behaviour there. The newest
+    schema is the one that has to be complete.
+    """
+    from ai_workspace.threads import schema
+
+    dispatched = _dispatched_operations()
     assert dispatched, "no dispatched operations found"
-    missing = [op for op in dispatched if not hasattr(current, op)]
+
+    newest = schema.SCHEMAS[max(schema.SCHEMAS)]
+    missing = sorted(op for op in dispatched if not hasattr(newest, op))
     assert not missing, (
-        f"threads exposes {missing} but schema {_schema.CURRENT_SCHEMA} "
-        f"does not implement them"
+        f"dispatched {missing}, which schema {max(schema.SCHEMAS)} does not "
+        f"implement"
     )
+
+
+def test_dispatched_operations_are_declared_on_every_schema_that_has_them():
+    """An operation a schema provides is named in its __all__.
+
+    __all__ is the surface dispatch resolves against, so an operation that
+    exists as a function but is not declared is reachable by accident today and
+    silently dropped by the next schema that re-exports the declared set.
+    """
+    from ai_workspace.threads import schema
+
+    undeclared = []
+    for version, module in sorted(schema.SCHEMAS.items()):
+        surface = set(getattr(module, "__all__", ()))
+        for op in sorted(_dispatched_operations()):
+            if hasattr(module, op) and op not in surface:
+                undeclared.append(f"schema {version} provides {op!r} but omits it from __all__")
+    assert not undeclared, "\n  ".join([""] + undeclared)

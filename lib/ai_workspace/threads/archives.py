@@ -9,12 +9,10 @@ afterwards, while the thread is still staged.
 """
 
 import shutil
-from datetime import date
-from pathlib import Path
 
 from ai_workspace import workspace as ws
 from ai_workspace.text import _extract_yaml_field, _extract_yaml_keywords
-from ai_workspace.threads._schema import at as _at, implementation
+from ai_workspace.threads.schema import at as _at, implementation
 from ai_workspace.threads.tarball import (
     _find_archive,
     _is_within,

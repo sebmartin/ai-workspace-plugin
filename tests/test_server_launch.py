@@ -12,6 +12,7 @@ fails to register is a test failure rather than a support ticket.
 """
 
 import json
+import os
 import selectors
 import subprocess
 import sys
@@ -41,50 +42,62 @@ def _talk(requests: list[dict], expect_ids: list[int], timeout: int = 60) -> dic
     bounds the whole wait. A server that starts, answers the handshake and then
     goes quiet with its pipe still open is the case this file exists to catch,
     and a bare readline would block in it forever.
+
+    Bytes come off the fd with os.read and are split here, rather than through
+    a text-mode readline. readline pulls whatever is available into Python's
+    own buffer and hands back one line; anything behind it is then invisible to
+    the selector, which polls the fd. Two replies arriving together would leave
+    the second stranded until the timeout, reported as a server that never
+    started.
     """
     proc = subprocess.Popen(
         [sys.executable, str(SERVER)],
         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        text=True, bufsize=1, cwd=REPO,
+        cwd=REPO,
     )
     replies: dict[int, dict] = {}
+    selector = selectors.DefaultSelector()
+    pending = b""
     try:
         for request in requests:
-            proc.stdin.write(json.dumps(request) + "\n")
+            proc.stdin.write(json.dumps(request).encode() + b"\n")
             proc.stdin.flush()
 
-        selector = selectors.DefaultSelector()
         selector.register(proc.stdout, selectors.EVENT_READ)
         deadline = time.monotonic() + timeout
-        while set(expect_ids) - set(replies) and time.monotonic() < deadline:
-            if not selector.select(timeout=deadline - time.monotonic()):
+        while set(expect_ids) - set(replies):
+            while b"\n" in pending:
+                raw, _, pending = pending.partition(b"\n")
+                line = raw.strip()
+                if line.startswith(b"{"):
+                    try:
+                        message = json.loads(line)
+                    except ValueError:
+                        continue
+                    if "id" in message:
+                        replies[message["id"]] = message
+            if not set(expect_ids) - set(replies):
                 break
-            line = proc.stdout.readline()
-            if not line:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0 or not selector.select(timeout=remaining):
                 break
-            line = line.strip()
-            if line.startswith("{"):
-                try:
-                    message = json.loads(line)
-                except ValueError:
-                    continue
-                if "id" in message:
-                    replies[message["id"]] = message
+            chunk = os.read(proc.stdout.fileno(), 65536)
+            if not chunk:
+                break
+            pending += chunk
     finally:
+        selector.close()
         try:
             proc.stdin.close()
         except OSError:
             pass
-        try:
-            selector.close()
-        except (NameError, OSError):
-            pass
         proc.terminate()
         try:
-            _, stderr = proc.communicate(timeout=10)
+            _, stderr_bytes = proc.communicate(timeout=10)
         except subprocess.TimeoutExpired:
             proc.kill()
-            stderr = ""
+            stderr_bytes = b""
+        stderr = stderr_bytes.decode(errors="replace")
 
     missing = set(expect_ids) - set(replies)
     if missing:

@@ -17,9 +17,10 @@ defined here would be shadowed by it.
 """
 
 import re
+from pathlib import PurePosixPath
 
 from ai_workspace import workspace as ws
-from ai_workspace.threads._schema import (  # noqa: F401  (re-exported)
+from ai_workspace.threads.schema import (  # noqa: F401  (re-exported)
     CURRENT_SCHEMA,
     MARKER,
     MIN_READABLE_SCHEMA,
@@ -78,10 +79,29 @@ def validate_thread_name(name: str) -> bool:
     return True
 
 
+def names_one_directory(thread_name: str) -> bool:
+    """Whether a name refers to a single directory inside threads/.
+
+    All an existing thread needs. Deliberately not validate_thread_name: that
+    enforces the kebab-case convention, which is right for a name being chosen
+    and wrong for one already on disk. Workspaces predate the convention and
+    hold directories like Q3_planning, and refusing to open them would strand
+    the thread while list_threads still advertised it.
+    """
+    if not thread_name or thread_name in {".", ".."}:
+        return False
+    if thread_name.startswith(("/", "~")) or "\\" in thread_name:
+        return False
+    return len(PurePosixPath(thread_name).parts) == 1 and ".." not in thread_name
+
+
 def _locate(workspace_dir: str, thread_name: str) -> tuple[Thread | None, str | None]:
     """Resolve an existing thread and read its schema."""
-    if not validate_thread_name(thread_name):
-        return None, f"Error: Invalid thread name '{thread_name}'."
+    if not names_one_directory(thread_name):
+        return None, (
+            f"Error: Invalid thread name '{thread_name}'. "
+            "A thread name is a single directory inside threads/."
+        )
 
     workspace, directory, error = ws.thread_dir(workspace_dir, thread_name)
     if error:

@@ -408,9 +408,23 @@ class TestArchiveThread:
         assert '- "test"' in summary
         assert "Test body content." in summary
 
-    def test_invalid_thread_name(self, tmp_path):
-        result = archive_thread(str(tmp_path), "Bad Name", "s", [], "b")
-        assert "Invalid thread name" in result
+    def test_traversal_name_is_refused(self, tmp_path):
+        (tmp_path / "threads").mkdir()
+        for name in ("../escape", "a/b", "/abs", ".."):
+            result = archive_thread(str(tmp_path), name, "s", [], "b")
+            assert "Invalid thread name" in result, (name, result)
+
+    def test_unconventional_name_is_not_refused(self, tmp_path):
+        """A thread already on disk is opened whatever it is called.
+
+        The kebab-case rule governs names being chosen, not names already
+        taken. Workspaces predate the convention, and refusing to archive
+        Q3_planning would strand it.
+        """
+        _make_thread(tmp_path, "Q3_planning")
+        result = archive_thread(str(tmp_path), "Q3_planning", "s", [], "b")
+        assert "Invalid thread name" not in result
+        assert "Archived 'Q3_planning'" in result
 
     def test_missing_thread(self, tmp_path):
         (tmp_path / "threads").mkdir()
