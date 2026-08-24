@@ -88,10 +88,17 @@ def _focus(thread: Thread, body: str) -> str:
     """Prefix a response with the headers that set the session's focus.
 
     Used only by operations that shift the session to a specific thread. The
-    LLM tracks Workspace and Thread across the session and uses them for
-    follow-up calls.
+    LLM tracks Workspace, Thread and Schema across the session and uses them
+    for follow-up calls. The schema rides here rather than on every response
+    for the same reason the workspace path does: it is established when focus
+    is set and remembered afterwards.
     """
-    return f"Workspace: {thread.workspace}\nThread: {thread.dir}\n\n{body}"
+    return (
+        f"Workspace: {thread.workspace}\n"
+        f"Thread: {thread.dir}\n"
+        f"Schema: {thread.schema}\n"
+        f"\n{body}"
+    )
 
 
 def resume(workspace_dir: str, thread_name: str) -> str:
