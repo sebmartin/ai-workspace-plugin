@@ -368,3 +368,25 @@ def retire_artifact(thread, artifact_id: str, state: str) -> str:
         return error
     render.render(thread.dir)
     return json.dumps({"id": artifact_id})
+
+
+def save_session(thread, slug: str, summary: str, keywords: str,
+                 next_context: str, body: str | None = None,
+                 status: str | None = None) -> str:
+    """Everything a save does that is not synthesis.
+
+    The incremental tools have already written todos, decisions and artifacts as
+    they happened, so a save is down to the session log and the Status
+    paragraph. A session that dies before this still leaves its stub and a
+    record of what it touched.
+    """
+    from ai_workspace.threads.v2 import readme as readme_mod
+
+    if (unwritable := render.blocked(thread.dir)) is not None:
+        return unwritable
+    session_id, _ = session.save(thread.dir, slug, summary, keywords, next_context, body)
+    if status:
+        readme_mod.set_status(thread.dir, status)
+    readme_mod.touch_dates(thread.dir)
+    render.render(thread.dir)
+    return json.dumps({"id": session_id, "status_written": bool(status)})
