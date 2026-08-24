@@ -12,6 +12,7 @@ from ai_workspace.threads.v2 import index as idx
 SESSION_WINDOW = 10
 ATTACHMENT_WINDOW = 12
 
+
 # Stop at the next heading or at a horizontal rule: the last section would
 # otherwise swallow the footer that follows it.
 _SECTION_RE = r"(?m)^##[ \t]+{name}[ \t]*$\n(.*?)(?=^##[ \t]|^---[ \t]*$|\Z)"
