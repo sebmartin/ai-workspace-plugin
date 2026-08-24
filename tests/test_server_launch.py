@@ -12,6 +12,7 @@ fails to register is a test failure rather than a support ticket.
 """
 
 import json
+import selectors
 import subprocess
 import sys
 import time
@@ -35,6 +36,11 @@ def _talk(requests: list[dict], expect_ids: list[int], timeout: int = 60) -> dic
     exits on stdin EOF, and a tool call that is still running when that happens
     never answers. tools/list survives the batch form and tools/call does not,
     which is exactly the kind of difference this file exists to notice.
+
+    Reads wait on a selector rather than blocking in readline, so `timeout`
+    bounds the whole wait. A server that starts, answers the handshake and then
+    goes quiet with its pipe still open is the case this file exists to catch,
+    and a bare readline would block in it forever.
     """
     proc = subprocess.Popen(
         [sys.executable, str(SERVER)],
@@ -47,8 +53,12 @@ def _talk(requests: list[dict], expect_ids: list[int], timeout: int = 60) -> dic
             proc.stdin.write(json.dumps(request) + "\n")
             proc.stdin.flush()
 
+        selector = selectors.DefaultSelector()
+        selector.register(proc.stdout, selectors.EVENT_READ)
         deadline = time.monotonic() + timeout
         while set(expect_ids) - set(replies) and time.monotonic() < deadline:
+            if not selector.select(timeout=deadline - time.monotonic()):
+                break
             line = proc.stdout.readline()
             if not line:
                 break
@@ -64,6 +74,10 @@ def _talk(requests: list[dict], expect_ids: list[int], timeout: int = 60) -> dic
         try:
             proc.stdin.close()
         except OSError:
+            pass
+        try:
+            selector.close()
+        except (NameError, OSError):
             pass
         proc.terminate()
         try:
