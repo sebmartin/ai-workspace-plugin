@@ -28,7 +28,7 @@ from mcp_server import (
     restore_thread,
     set_default_workspace,
 )
-from workspace_utils import get_config_dir, read_config, write_config
+from ai_workspace.config import get_config_dir, read_config, write_config
 
 
 @pytest.fixture(autouse=True)

@@ -4,7 +4,9 @@ import re
 from datetime import date
 from pathlib import Path
 
-from workspace_utils import get_template_path, read_config, validate_thread_name
+from ai_workspace.config import read_config
+from ai_workspace.plugin import get_template_path
+from ai_workspace.threads import validate_thread_name
 
 from ai_workspace.workspace import _no_workspace_message, _resolve_workspace, _with_focus
 

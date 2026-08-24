@@ -8,7 +8,7 @@ from pathlib import Path
 
 from ai_workspace.text import _extract_body, _extract_yaml_field, _extract_yaml_keywords, _yaml_quote
 from ai_workspace.workspace import _no_workspace_message, _resolve_workspace
-from workspace_utils import validate_thread_name
+from ai_workspace.threads import validate_thread_name
 
 ARCHIVE_SCHEMA_VERSION = 1
 

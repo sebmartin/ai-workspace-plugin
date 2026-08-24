@@ -1,9 +1,14 @@
-"""Workspace resolution — shape-independent."""
+"""Which workspace, and where things live inside it.
+
+Answers "where": which directory is the workspace, and where its threads and
+archive sit within it. What those directories mean is the concept's business,
+in threads/.
+"""
 
 import json
 from pathlib import Path
 
-from workspace_utils import read_config, write_config
+from ai_workspace.config import read_config, write_config
 
 
 def _resolve_workspace(workspace_dir: str) -> tuple[Path | None, str]:
