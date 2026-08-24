@@ -34,9 +34,18 @@ ai-workspace-plugin/
 │   ├── init/SKILL.md
 │   └── threads/
 │       ├── SKILL.md
-│       └── scripts/mcp_server.py
-├── lib/
-│   └── workspace_utils.py           # Shared Python helpers
+│       └── scripts/mcp_server.py    # Tool declarations; delegates to lib/ai_workspace/
+├── lib/ai_workspace/                # Where the server's work happens
+│   ├── workspace.py                 # which workspace, and where things live in it
+│   ├── config.py                    # the user-global config.json
+│   ├── plugin.py                    # plugin root, templates
+│   ├── text.py                      # frontmatter and YAML helpers
+│   └── threads/                     # the thread concept
+│       ├── __init__.py              # the API: one function per operation
+│       ├── _schema.py               # schema -> module
+│       ├── archives.py              # operations on archive/
+│       ├── tarball.py               # tar/extract plumbing
+│       └── v1/                      # schema 1: the README is the thread
 ├── templates/
 │   ├── AGENTS.md.template           # Workspace instructions (vendor-neutral)
 │   ├── CLAUDE.md.template           # One-line "@AGENTS.md" import for Claude
