@@ -75,3 +75,17 @@ def unsupported_message(thread_name: str, schema: int | None) -> str:
         f"Thread '{thread_name}' is schema {schema}; this plugin reads {supported}.\n"
         f"Migrate it with a plugin version that still reads schema {schema}."
     )
+
+
+def needs_migration_message(thread_name: str, schema: int) -> str:
+    """A refusal for an operation this thread's schema does not have.
+
+    Names the schema rather than the operation's absence, because "your thread
+    is older than this feature" is the actionable form.
+    """
+    return (
+        f"Status: NEEDS_MIGRATION\n"
+        f"Thread '{thread_name}' is schema {schema}, which does not support this "
+        f"operation.\n"
+        f"Offer to migrate the thread, then retry."
+    )

@@ -177,5 +177,144 @@ def list_archived_threads(workspace_dir: str) -> str:
 
 
 
+
+@mcp.tool()
+def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
+             state: str = "active") -> str:
+    """Add a todo to the thread's backlog.
+
+    Every todo carries a link, always. Use a file under todos/ when the item has
+    state of its own, an external URL when there is an issue or PR, and
+    otherwise the session it came out of. A bare line cannot be expanded later,
+    which is the whole complaint about one-line next steps.
+
+    Adding does not promote: the backlog is allowed to be long, and the README
+    shows only what set_window selects.
+
+    Args:
+        workspace_dir: The tracked workspace path from session context.
+        thread_name: Name of the thread (kebab-case).
+        title: Short label for the todo.
+        link: Path or URL. Never omit; use the originating session if nothing else.
+        state: `active` or `parked`. Parked means deliberately not now.
+    """
+    return _threads.add_todo(workspace_dir, thread_name, title, link, state)
+
+
+@mcp.tool()
+def retire_todo(workspace_dir: str, thread_name: str, todo_id: str, state: str) -> str:
+    """Retire a todo as done or dropped, removing it from any window.
+
+    Args:
+        workspace_dir: The tracked workspace path from session context.
+        thread_name: Name of the thread (kebab-case).
+        todo_id: The id from the index line, e.g. 20260808-growcer-prep.
+        state: `done` for something finished, `dropped` for something deliberately abandoned.
+    """
+    return _threads.retire_todo(workspace_dir, thread_name, todo_id, state)
+
+
+@mcp.tool()
+def set_todo_state(workspace_dir: str, thread_name: str, todo_id: str, state: str) -> str:
+    """Park or unpark a todo without retiring it.
+
+    Args:
+        workspace_dir: The tracked workspace path from session context.
+        thread_name: Name of the thread (kebab-case).
+        todo_id: The id from the index line.
+        state: `active` or `parked`.
+    """
+    return _threads.set_todo_state(workspace_dir, thread_name, todo_id, state)
+
+
+@mcp.tool()
+def set_window(workspace_dir: str, thread_name: str, entry_ids: list[str],
+               section: str = "next_steps", kind: str = "todos") -> str:
+    """Choose which entries the README shows, and in what order.
+
+    This is the whole of priority. The backlog below the window is never ranked,
+    because ordering the twentieth item against the twenty-first produces
+    nothing. Aim for about five.
+
+    Args:
+        workspace_dir: The tracked workspace path from session context.
+        thread_name: Name of the thread (kebab-case).
+        entry_ids: Ids in the order they should appear.
+        section: README section the window drives. Default `next_steps`.
+        kind: Index the ids belong to. Default `todos`.
+    """
+    return _threads.set_window(workspace_dir, thread_name, entry_ids, section, kind)
+
+
+@mcp.tool()
+def log_decision(workspace_dir: str, thread_name: str, title: str, summary: str,
+                 body: str, status: str = "proposed",
+                 supersedes: list[str] | None = None) -> str:
+    """Write a decision file and index it.
+
+    `summary` is read on every resume, so it carries real cost: one sentence,
+    one subject, what was decided and not why. If it needs "and" twice, that is
+    the signal to log several decisions instead.
+
+    `supersedes` retires the decisions it names. That direction is deliberate —
+    traversal starts from what is in force, so only live-to-dead pointers get
+    followed.
+
+    Args:
+        workspace_dir: The tracked workspace path from session context.
+        thread_name: Name of the thread (kebab-case).
+        title: Short title for the decision.
+        summary: One sentence, one subject. WHAT was decided, no rationale.
+        body: Markdown body. Claim first, argument after.
+        status: `proposed`, `partially-locked` or `locked`.
+        supersedes: Ids of decisions this replaces; each is retired as superseded.
+    """
+    return _threads.log_decision(workspace_dir, thread_name, title, summary, body,
+                                 status, supersedes)
+
+
+@mcp.tool()
+def retire_decision(workspace_dir: str, thread_name: str, decision_id: str,
+                    state: str) -> str:
+    """Retire a decision, updating both the index and the file's own status.
+
+    Args:
+        workspace_dir: The tracked workspace path from session context.
+        thread_name: Name of the thread (kebab-case).
+        decision_id: The id from the index line.
+        state: `superseded` when something replaced it, `withdrawn` when it was
+            abandoned with nothing taking its place.
+    """
+    return _threads.retire_decision(workspace_dir, thread_name, decision_id, state)
+
+
+@mcp.tool()
+def add_artifact(workspace_dir: str, thread_name: str, title: str, link: str) -> str:
+    """Index an artifact that has been written into the thread.
+
+    Args:
+        workspace_dir: The tracked workspace path from session context.
+        thread_name: Name of the thread (kebab-case).
+        title: Short title for the artifact.
+        link: Path relative to the thread, e.g. ./artifacts/20260813-notes-x.md.
+    """
+    return _threads.add_artifact(workspace_dir, thread_name, title, link)
+
+
+@mcp.tool()
+def retire_artifact(workspace_dir: str, thread_name: str, artifact_id: str,
+                    state: str) -> str:
+    """Retire an artifact so it stops appearing as current.
+
+    Args:
+        workspace_dir: The tracked workspace path from session context.
+        thread_name: Name of the thread (kebab-case).
+        artifact_id: The id from the index line.
+        state: `superseded` when something replaced it, `stale` when it no longer
+            describes reality.
+    """
+    return _threads.retire_artifact(workspace_dir, thread_name, artifact_id, state)
+
+
 if __name__ == "__main__":
     mcp.run()
