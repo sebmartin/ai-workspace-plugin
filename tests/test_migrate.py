@@ -9,7 +9,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
 sys.path.insert(0, str(Path(__file__).parent.parent / "skills" / "threads" / "scripts"))
 
-from ai_workspace.threads import _schema, marker, migrate
+from ai_workspace.threads import schema, marker, migrate
 from ai_workspace.threads.v2 import index as idx
 
 
