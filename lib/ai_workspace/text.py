@@ -1,4 +1,4 @@
-"""Frontmatter and YAML text helpers — shape-independent."""
+"""Frontmatter and YAML text helpers. Independent of any schema."""
 
 import re
 

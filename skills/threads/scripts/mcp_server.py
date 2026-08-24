@@ -14,10 +14,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "lib"))
 from mcp.server.mcpserver import MCPServer
 
 from ai_workspace import plugin as _plugin
+from ai_workspace import threads as _threads
 from ai_workspace import workspace as _ws
-from ai_workspace.threads import archive as _archive
-from ai_workspace.threads.archive import ARCHIVE_SCHEMA_VERSION  # noqa: F401  (re-export)
-from ai_workspace.threads.v1 import thread as _v1
+from ai_workspace.threads.tarball import ARCHIVE_SCHEMA_VERSION  # noqa: F401  (re-export)
 
 mcp = MCPServer("threads")
 
@@ -35,7 +34,7 @@ def list_threads(workspace_dir: str) -> str:
             a fresh invocation. The tool probes this directory for threads/,
             falls back to the configured default, and returns NO_WORKSPACE if neither works.
     """
-    return _v1.list_threads(workspace_dir=workspace_dir)
+    return _threads.list_threads(workspace_dir)
 
 
 @mcp.tool()
@@ -49,7 +48,7 @@ def resume_thread(workspace_dir: str, thread_name: str) -> str:
             falls back to the configured default, and returns NO_WORKSPACE if neither works.
         thread_name: Name of the thread (kebab-case).
     """
-    return _v1.resume_thread(workspace_dir=workspace_dir, thread_name=thread_name)
+    return _threads.resume(workspace_dir, thread_name)
 
 
 @mcp.tool()
@@ -72,7 +71,7 @@ def create_thread(workspace_dir: str, thread_name: str) -> str:
             (AMBIGUOUS_WORKSPACE or NEEDS_INIT) if neither works.
         thread_name: Name of the thread (kebab-case: lowercase letters, numbers, hyphens).
     """
-    return _v1.create_thread(workspace_dir=workspace_dir, thread_name=thread_name)
+    return _threads.create(workspace_dir, thread_name)
 
 
 @mcp.tool()
@@ -140,7 +139,7 @@ def archive_thread(
         body: Topic-rich markdown narrative — the embedding payload. Cover what was discussed,
               decisions made, systems/files/people touched, key vocabulary and synonyms.
     """
-    return _archive.archive_thread(workspace_dir=workspace_dir, thread_name=thread_name, summary=summary, keywords=keywords, body=body)
+    return _threads.archive(workspace_dir, thread_name, summary, keywords, body)
 
 
 @mcp.tool()
@@ -158,7 +157,7 @@ def restore_thread(workspace_dir: str, archive_base: str) -> str:
             falls back to the configured default, and returns NO_WORKSPACE if neither works.
         archive_base: Filename stem of the archive (e.g. '2026-last-months-project').
     """
-    return _archive.restore_thread(workspace_dir=workspace_dir, archive_base=archive_base)
+    return _threads.restore(workspace_dir, archive_base)
 
 
 @mcp.tool()
@@ -171,7 +170,7 @@ def list_archived_threads(workspace_dir: str) -> str:
             a fresh invocation. The tool probes this directory for threads/,
             falls back to the configured default, and returns NO_WORKSPACE if neither works.
     """
-    return _archive.list_archived_threads(workspace_dir=workspace_dir)
+    return _threads.list_archived_threads(workspace_dir)
 
 
 @mcp.tool()
@@ -188,7 +187,7 @@ def inspect_archive(workspace_dir: str, archive_base: str) -> str:
             falls back to the configured default, and returns NO_WORKSPACE if neither works.
         archive_base: Filename stem of the archive (e.g. '2026-last-months-project').
     """
-    return _archive.inspect_archive(workspace_dir=workspace_dir, archive_base=archive_base)
+    return _threads.inspect_archive(workspace_dir, archive_base)
 
 
 @mcp.tool()
@@ -201,7 +200,7 @@ def purge_archive_tmp(workspace_dir: str) -> str:
             a fresh invocation. The tool probes this directory for threads/,
             falls back to the configured default, and returns NO_WORKSPACE if neither works.
     """
-    return _archive.purge_archive_tmp(workspace_dir=workspace_dir)
+    return _threads.purge_archive_tmp(workspace_dir)
 
 
 if __name__ == "__main__":

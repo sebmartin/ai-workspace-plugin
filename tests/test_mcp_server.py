@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
 sys.path.insert(0, str(Path(__file__).parent.parent / "skills" / "threads" / "scripts"))
 
 import mcp_server  # noqa: F401  (imported for its sys.path side effect)
-from ai_workspace.threads import archive as archive_module
+from ai_workspace.threads.v1 import thread as v1_thread
 from mcp_server import (
     archive_thread,
     create_thread,
@@ -488,7 +488,7 @@ class TestArchiveThread:
         """If verify fails, archive deleted, original intact, no summary."""
         _make_thread(tmp_path, "guard")
         monkeypatch.setattr(
-            archive_module, "_verify_archive",
+            v1_thread, "_verify_archive",
             lambda *a, **kw: "fake integrity failure",
         )
         result = archive_thread(str(tmp_path), "guard", "s", [], "b")
