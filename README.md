@@ -60,11 +60,14 @@ my-workspace/
 ├── CLAUDE.md                # One-line "@AGENTS.md" import (Claude only)
 ├── threads/
 │   └── {thread-name}/
-│       ├── README.md        # Current focus, next steps, links to everything else
+│       ├── README.md        # Status, next steps, written for you, not the assistant
+│       ├── schema-version   # Which on-disk schema this thread uses
+│       ├── todos/           # Backlog items with room for their own notes
 │       ├── sessions/        # One file per conversation
 │       ├── decisions/       # Decisions with context and rationale
 │       ├── attachments/     # Files you bring in (specs, docs, data)
-│       └── artifacts/       # Files the CLI generates (snapshots, reports, emails)
+│       ├── artifacts/       # Files the CLI generates (snapshots, reports, emails)
+│       └── *-index.md       # One line per item; what the assistant reads
 └── .claude/
     └── settings.json        # Claude-only permission allowlist
 ```

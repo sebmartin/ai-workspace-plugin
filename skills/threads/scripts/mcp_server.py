@@ -351,5 +351,41 @@ def save_session(workspace_dir: str, thread_name: str, slug: str, summary: str,
                                  status or None)
 
 
+
+@mcp.tool()
+def migration_safety_check(workspace_dir: str, thread_name: str) -> str:
+    """Report whether a thread could be recovered if its migration goes wrong.
+
+    Call this before starting a migration and relay what it says. It is advice,
+    not a gate: the plugin never commits, so the user decides. The migration
+    keeps the original either way, but that only covers mistakes up to the
+    swap.
+
+    Args:
+        workspace_dir: The tracked workspace path from session context.
+        thread_name: Name of the thread about to be migrated (kebab-case).
+    """
+    return _threads.migration_safety_check(workspace_dir, thread_name)
+
+
+@mcp.tool()
+def audit_migration(workspace_dir: str, original_thread: str,
+                    converted_thread: str) -> str:
+    """Compare a converted copy against the original and report what it lost.
+
+    Run this after converting and before the swap. It checks the parts that are
+    decidable — files present in one tree and not the other, index entries
+    pointing at nothing, indexes out of date order, entries with no derivable
+    date. It cannot tell you whether the Quick Resume prose survived as todos
+    and Status; read that yourself.
+
+    Args:
+        workspace_dir: The tracked workspace path from session context.
+        original_thread: The untouched original, e.g. my-thread-v1.
+        converted_thread: The converted copy, e.g. my-thread-v2.
+    """
+    return _threads.audit_migration(workspace_dir, original_thread, converted_thread)
+
+
 if __name__ == "__main__":
     mcp.run()

@@ -133,7 +133,24 @@ def test_server_starts_and_completes_a_handshake():
 
 
 def test_server_lists_its_tools(tools):
-    assert len(tools) >= 9, sorted(tools)
+    assert len(tools) >= 20, sorted(tools)
+
+
+@pytest.mark.parametrize("name", [
+    "list_threads", "resume_thread", "create_thread", "get_skill_file",
+    "resolve_workspace", "set_default_workspace",
+    "archive_thread", "restore_thread", "list_archived_threads",
+    "add_todo", "retire_todo", "set_todo_state", "set_window",
+    "log_decision", "retire_decision", "add_artifact", "retire_artifact",
+    "save_session", "migration_safety_check", "audit_migration",
+])
+def test_tool_is_registered(tools, name):
+    """A tool declared in the module but not registered is invisible to clients.
+
+    Importing mcp_server and calling the function directly, which every other
+    test does, passes either way.
+    """
+    assert name in tools, f"{name} missing; server has {sorted(tools)}"
 
 
 def test_every_tool_describes_itself(tools):

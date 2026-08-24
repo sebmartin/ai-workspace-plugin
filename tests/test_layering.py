@@ -14,17 +14,42 @@ REPO = Path(__file__).resolve().parent.parent
 SERVER = REPO / "skills" / "threads" / "scripts" / "mcp_server.py"
 sys.path.insert(0, str(REPO / "lib"))
 
-_VERSION_REF = re.compile(r"\bv\d+\b|\b_v\d+\w*\b")
+_SCHEMA_MODULE = re.compile(r"^_?v\d+$")
 
 
 def test_tool_surface_names_no_schema_version():
-    offenders = [
-        f"{n}: {line.strip()}"
-        for n, line in enumerate(SERVER.read_text().splitlines(), 1)
-        if _VERSION_REF.search(line)
-    ]
+    """No tool reaches for a schema directly; they all go through the API.
+
+    Parses the module rather than grepping lines, so a version that appears in
+    prose is not mistaken for one that appears in code. Docstrings legitimately
+    name things like my-thread-v1 when explaining a migration to the model.
+    """
+    import ast
+
+    tree = ast.parse(SERVER.read_text())
+    offenders = []
+
+    def _flag(node, text):
+        offenders.append(f"line {node.lineno}: {text}")
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            if _SCHEMA_MODULE.search(node.module):
+                _flag(node, f"from {node.module} import ...")
+            for alias in node.names:
+                if _SCHEMA_MODULE.search(alias.name):
+                    _flag(node, f"from {node.module} import {alias.name}")
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                if _SCHEMA_MODULE.search(alias.name):
+                    _flag(node, f"import {alias.name}")
+        elif isinstance(node, ast.Attribute) and _SCHEMA_MODULE.search(node.attr):
+            _flag(node, f"...{node.attr}")
+        elif isinstance(node, ast.Name) and _SCHEMA_MODULE.search(node.id):
+            _flag(node, node.id)
+
     assert not offenders, (
-        "mcp_server.py names a schema version directly. Call the threads API "
+        "mcp_server.py names a schema version in code. Call the threads API "
         "instead, which resolves the schema itself:\n  " + "\n  ".join(offenders)
     )
 
