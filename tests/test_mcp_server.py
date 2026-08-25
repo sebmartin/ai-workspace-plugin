@@ -218,6 +218,22 @@ class TestCreateThread:
         assert not result.startswith("Workspace:")
         assert "already exists" in result
 
+    def test_an_archived_name_is_not_free(self, tmp_path):
+        """Taking it would strand the archive: no restore, no re-archive."""
+        _make_thread(tmp_path, "shelved")
+        archive_thread(str(tmp_path), "shelved")
+        result = create_thread(str(tmp_path), "shelved")
+        assert "archived thread" in result
+        assert not result.startswith("Workspace:")
+        assert "Restored 'shelved'" in restore_thread(str(tmp_path), "shelved")
+
+    def test_a_name_held_by_a_pre_3_0_tarball_is_not_free(self, tmp_path):
+        """Otherwise one name ends up with two archives in two formats."""
+        (tmp_path / "threads").mkdir()
+        (tmp_path / "archive").mkdir()
+        (tmp_path / "archive" / "2026-shelved.tar.gz").write_bytes(b"stand-in")
+        assert "archived thread" in create_thread(str(tmp_path), "shelved")
+
     def test_invalid_name_rejected_before_resolution(self, tmp_path):
         # Bare dir, but name validation runs first so we should see name error,
         # not NO_WORKSPACE.
@@ -427,14 +443,28 @@ class TestArchiveThread:
         assert (tmp_path / "threads" / "dupe").is_dir()
 
     def test_failure_leaves_the_thread_in_place(self, tmp_path, monkeypatch):
+        """A rename either happens or does not; there is no half-moved thread."""
         _make_thread(tmp_path, "stuck")
         monkeypatch.setattr(
-            ws_module.shutil, "move",
+            Path, "rename",
             lambda *a, **kw: (_ for _ in ()).throw(OSError("Device or resource busy")),
         )
         result = archive_thread(str(tmp_path), "stuck")
         assert "untouched" in result and "busy" in result
         assert (tmp_path / "threads" / "stuck" / "README.md").exists()
+        assert not (tmp_path / "archive" / "stuck").exists()
+
+    def test_already_archived_says_so(self, tmp_path):
+        """Checking only threads/ made this report the thread as missing."""
+        _make_thread(tmp_path, "gone")
+        archive_thread(str(tmp_path), "gone")
+        assert "already archived" in archive_thread(str(tmp_path), "gone")
+
+    def test_a_thread_named_tmp_is_archived_like_any_other(self, tmp_path):
+        """archive/tmp was a staging directory nothing creates any more."""
+        _make_thread(tmp_path, "tmp")
+        assert "Archived 'tmp'" in archive_thread(str(tmp_path), "tmp")
+        assert "tmp" in list_archived_threads(str(tmp_path))
 
 
 class TestRestoreThread:
@@ -459,13 +489,21 @@ class TestRestoreThread:
         (tmp_path / "threads").mkdir()
         assert "No archived thread" in restore_thread(str(tmp_path), "nope")
 
-    def test_occupied_destination_refuses(self, tmp_path):
+    def test_a_live_thread_of_that_name_blocks_the_restore(self, tmp_path):
         _make_thread(tmp_path, "clash")
         archive_thread(str(tmp_path), "clash")
         _make_thread(tmp_path, "clash")
         result = restore_thread(str(tmp_path), "clash")
-        assert "already exists" in result
+        assert "already in threads/" in result
         assert (tmp_path / "archive" / "clash").is_dir()
+
+    def test_a_restored_tarball_leaves_the_thread_reachable(self, tmp_path):
+        """Extracting is a copy, so the tarball outlives the restore it produced."""
+        _make_thread(tmp_path, "ancient")
+        (tmp_path / "archive").mkdir()
+        (tmp_path / "archive" / "2026-ancient.tar.gz").write_bytes(b"stand-in")
+        assert ws_module.thread_state(tmp_path, "ancient") == ws_module.ACTIVE
+        assert "Quick Resume" in resume_thread(str(tmp_path), "ancient")
 
     def test_legacy_tarball_points_at_the_reference(self, tmp_path):
         (tmp_path / "threads").mkdir()
@@ -487,11 +525,6 @@ class TestListArchivedThreads:
         result = list_archived_threads(str(tmp_path))
         assert "one" in result
         assert "read-only" in result
-
-    def test_tmp_subdir_skipped(self, tmp_path):
-        (tmp_path / "threads").mkdir()
-        (tmp_path / "archive" / "tmp").mkdir(parents=True)
-        assert "tmp" not in list_archived_threads(str(tmp_path))
 
     def test_legacy_tarball_listed(self, tmp_path):
         (tmp_path / "threads").mkdir()

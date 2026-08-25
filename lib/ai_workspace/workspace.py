@@ -6,7 +6,6 @@ in threads/.
 """
 
 import json
-import shutil
 from pathlib import Path, PurePosixPath
 
 from ai_workspace.config import read_config, write_config
@@ -93,6 +92,11 @@ def set_default_workspace(workspace_path: str) -> str:
 def thread_path(workspace: Path, thread_name: str) -> Path:
     """Where a thread lives inside a resolved workspace."""
     return workspace / "threads" / thread_name
+
+
+def archive_path(workspace: Path, thread_name: str) -> Path:
+    """Where an archived thread lives inside a resolved workspace."""
+    return workspace / "archive" / thread_name
 
 
 def thread_dir(workspace_dir: str, thread_name: str) -> tuple[Path | None, Path | None, str | None]:
@@ -194,6 +198,38 @@ def _thread_name_of(tarball: Path) -> str:
     return rest if sep and head.isdigit() else stem
 
 
+ACTIVE = "ACTIVE"
+ARCHIVED = "ARCHIVED"
+NOT_FOUND = "NOT_FOUND"
+
+
+def _legacy_archive_of(archives: Path, thread_name: str) -> Path | None:
+    """The pre-3.0 tarball holding this thread, if there is one."""
+    return next(
+        (t for t in archives.glob("*.tar.gz") if _thread_name_of(t) == thread_name),
+        None,
+    )
+
+
+def thread_state(workspace: Path, thread_name: str) -> str:
+    """Whether a thread of this name is live, archived, or neither.
+
+    A live directory wins. It is the more recent copy, and what sits under
+    archive/ with the same name does not decide anything.
+
+    ARCHIVED covers both formats. A pre-3.0 tarball is an archive of that
+    thread, so the name is taken; creating over it would leave one name holding
+    two archives of two unrelated threads.
+    """
+    if thread_path(workspace, thread_name).is_dir():
+        return ACTIVE
+    if archive_path(workspace, thread_name).is_dir():
+        return ARCHIVED
+    if _legacy_archive_of(workspace / "archive", thread_name) is not None:
+        return ARCHIVED
+    return NOT_FOUND
+
+
 def _legacy_archives(archives: Path, threads_root: Path) -> list[Path]:
     """Pre-3.0 tarballs that do not already exist as a thread somewhere.
 
@@ -214,24 +250,27 @@ def _legacy_archives(archives: Path, threads_root: Path) -> list[Path]:
 
 
 def _move(source: Path, target: Path, what: str) -> str | None:
-    """Move a directory, or explain why it did not happen. None on success.
+    """Rename a directory, or explain why it did not happen. None on success.
 
-    shutil.move rather than os.rename so a symlinked archive/ degrades to a
-    copy instead of failing with EXDEV, and the destination is checked first
-    because moving onto an existing directory nests inside it rather than
-    failing.
+    A rename either succeeds whole or raises, so a failure leaves no half-moved
+    thread to detect or recover from. shutil.move would instead fall back to
+    copying the tree and deleting the source, which is unusable over a network
+    volume and can fail partway through the delete.
+
+    A workspace whose archive/ is symlinked to another filesystem gets EXDEV
+    here and archiving refuses. That is the intended outcome: the error reaches
+    the user, who can decide whether they want a copy.
+
+    The destination is checked first because a rename onto an existing empty
+    directory replaces it without complaint.
     """
     if target.exists():
         return f"Error: {what} already exists at {target}."
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(str(source), str(target))
+        source.rename(target)
     except OSError as e:
-        return (
-            f"Error: Could not move {source.name}: {e}. Nothing was moved and "
-            f"{source.name} is untouched. On a network volume this usually means "
-            f"something still has a file in it open."
-        )
+        return f"Error: Could not move {source.name}: {e}. {source.name} is untouched."
     return None
 
 
@@ -242,11 +281,15 @@ def archive(workspace_dir: str, thread_name: str) -> str:
     workspace, source, error = thread_dir(workspace_dir, thread_name)
     if error:
         return error
-    if not source.is_dir():
+
+    state = thread_state(workspace, thread_name)
+    if state == ARCHIVED:
+        return f"Error: Thread '{thread_name}' is already archived."
+    if state == NOT_FOUND:
         return f"Error: Thread '{thread_name}' not found."
 
-    _, archives, _ = archive_dir(workspace_dir)
-    failure = _move(source, archives / thread_name, f"An archived thread '{thread_name}'")
+    failure = _move(source, archive_path(workspace, thread_name),
+                    f"An archived thread '{thread_name}'")
     return failure or (
         f"Archived '{thread_name}' to archive/{thread_name}/. "
         f"It is read-only there; restore it to work on it again."
@@ -261,18 +304,21 @@ def restore(workspace_dir: str, thread_name: str) -> str:
     if error:
         return error
 
-    source = archives / thread_name
-    if not source.is_dir():
-        legacy = [t for t in _legacy_archives(archives, workspace / "threads")
-                  if _thread_name_of(t) == thread_name]
-        if legacy:
-            return (
-                f"Status: LEGACY_ARCHIVE\n"
-                f"'{thread_name}' is archived as {legacy[0].name}, a tarball from before 3.0, "
-                f"which this plugin no longer unpacks.\n"
-                f"Read {LEGACY_ARCHIVE_DOC} and follow it."
-            )
+    state = thread_state(workspace, thread_name)
+    if state == ACTIVE:
+        return f"Error: A thread named '{thread_name}' is already in threads/."
+    if state == NOT_FOUND:
         return f"Error: No archived thread named '{thread_name}'."
+
+    source = archive_path(workspace, thread_name)
+    tarball = None if source.is_dir() else _legacy_archive_of(archives, thread_name)
+    if tarball is not None:
+        return (
+            f"Status: LEGACY_ARCHIVE\n"
+            f"'{thread_name}' is archived as {tarball.name}, a tarball from before 3.0, "
+            f"which this plugin no longer unpacks.\n"
+            f"Read {LEGACY_ARCHIVE_DOC} and follow it."
+        )
 
     failure = _move(source, thread_path(workspace, thread_name), f"A thread '{thread_name}'")
     return failure or f"Restored '{thread_name}' to threads/{thread_name}/."
@@ -286,7 +332,7 @@ def list_archived_threads(workspace_dir: str) -> str:
     if not archives.is_dir():
         return "No archived threads."
 
-    names = sorted(p.name for p in archives.iterdir() if p.is_dir() and p.name != "tmp")
+    names = sorted(p.name for p in archives.iterdir() if p.is_dir())
     legacy = _legacy_archives(archives, workspace / "threads")
     if not names and not legacy:
         return "No archived threads."

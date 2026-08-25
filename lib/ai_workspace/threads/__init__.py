@@ -75,7 +75,7 @@ def _locate(workspace_dir: str, thread_name: str) -> tuple[Thread | None, str | 
     if error:
         return None, error
     if not (directory / "README.md").exists():
-        if (workspace / "archive" / thread_name).is_dir():
+        if ws.thread_state(workspace, thread_name) == ws.ARCHIVED:
             return None, (
                 f"Error: Thread '{thread_name}' is archived, and an archived thread is "
                 f"read-only.\nRestore it before working on it."
@@ -113,9 +113,15 @@ def create(workspace_dir: str, thread_name: str) -> str:
     if error:
         return error
 
-    directory = ws.thread_path(workspace, thread_name)
-    if directory.exists():
+    state = ws.thread_state(workspace, thread_name)
+    if state == ws.ACTIVE:
         return f"Error: Thread '{thread_name}' already exists."
+    if state == ws.ARCHIVED:
+        return (
+            f"Error: '{thread_name}' is the name of an archived thread.\n"
+            f"Restore it to work on it again, or choose another name."
+        )
 
+    directory = ws.thread_path(workspace, thread_name)
     thread = Thread(workspace, thread_name, directory, CURRENT_SCHEMA)
     return _focus(thread, implementation(thread).create(thread))
