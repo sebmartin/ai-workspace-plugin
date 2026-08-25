@@ -118,10 +118,16 @@ One source tree serves both CLIs. Maximum deduplication:
 2. **Follow existing patterns** - Match the style and structure of existing code
 3. **Regenerate Codex agents after editing `agents/*.md`** - Run `python3 scripts/sync-codex-agents.py` and commit both the `.md` source and the `.toml` mirror together
 4. **Run the tests** - `uv run --with pytest --with-requirements skills/threads/scripts/mcp_server.py python3 -m pytest tests/ -q`. That reads the server's own dependency block, so a bare `pytest` will not work and neither will a hand-written package list that drifts from it.
-5. **Verify a guard by breaking it** - A test that enforces an invariant is worth only what it catches. Introduce the violation, watch it fail, revert. Several tests in `tests/test_layering.py` exist because the thing they check went wrong once.
-6. **Test changes** - Load locally with `claude --plugin-dir .` on the Claude side. Codex doesn't have a `--plugin-dir` flag; testing on Codex requires a local marketplace stub.
-7. **Bump the version in every PR** - Merging to `main` ships the plugin to users, so there is no separate release step. Bump `version` in both `.claude-plugin/plugin.json` and `.codex-plugin/plugin.json`, in sync, as part of the PR. Patch for fixes, minor for new capability, major for breaking changes.
-8. **Keep it simple** - Avoid over-engineering, only change what's needed
+5. **Lint and type-check before pushing** - both must be clean, and there is no CI to catch it if they are not:
+   ```
+   uv run --with ruff ruff check .
+   uv run --with pyright --with pytest --with-requirements skills/threads/scripts/mcp_server.py pyright
+   ```
+   Config is in `ruff.toml` and `pyrightconfig.json`. Deliberately **not** a `pyproject.toml`: `uv` treats a directory containing one as a project and tries to build it, which changes what every `uv run` command here does.
+6. **Verify a guard by breaking it** - A test that enforces an invariant is worth only what it catches. Introduce the violation, watch it fail, revert. Several tests in `tests/test_layering.py` exist because the thing they check went wrong once.
+7. **Test changes** - Load locally with `claude --plugin-dir .` on the Claude side. Codex doesn't have a `--plugin-dir` flag; testing on Codex requires a local marketplace stub.
+8. **Bump the version in every PR** - Merging to `main` ships the plugin to users, so there is no separate release step. Bump `version` in both `.claude-plugin/plugin.json` and `.codex-plugin/plugin.json`, in sync, as part of the PR. Patch for fixes, minor for new capability, major for breaking changes.
+9. **Keep it simple** - Avoid over-engineering, only change what's needed
 
 See CONTRIBUTING.md for testing procedures and PR guidelines.
 

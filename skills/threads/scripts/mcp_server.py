@@ -14,11 +14,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "lib"))
 
-from mcp.server.mcpserver import MCPServer
-
 from ai_workspace import plugin as _plugin
 from ai_workspace import threads as _threads
 from ai_workspace import workspace as _ws
+from mcp.server.mcpserver import MCPServer
 
 mcp = MCPServer("threads")
 

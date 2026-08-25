@@ -55,7 +55,7 @@ class Entry:
     """One indexed thing. Both tails are optional, and per kind rather than per
     entry: sessions never carry a state, only artifacts carry a description."""
 
-    __slots__ = ("id", "state", "title", "link", "description")
+    __slots__ = ("description", "id", "link", "state", "title")
 
     def __init__(self, id: str, state: str | None, title: str, link: str,
                  description: str = ""):

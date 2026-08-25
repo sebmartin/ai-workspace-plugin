@@ -1,9 +1,7 @@
 """Unit tests for skills/threads/mcp_server.py business logic."""
 
-import io
 import json
 import sys
-import tarfile
 import time
 from pathlib import Path
 
@@ -16,7 +14,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "skills" / "threads" / "sc
 import mcp_server  # noqa: F401  (imported for its sys.path side effect)
 from ai_workspace import workspace as ws_module
 from ai_workspace.config import get_config_dir, read_config, write_config
-from ai_workspace.threads.v1 import thread as v1_thread
 from mcp_server import (
     archive_thread,
     create_thread,
