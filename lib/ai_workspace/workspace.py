@@ -7,8 +7,22 @@ in threads/.
 
 import json
 from pathlib import Path, PurePosixPath
+from typing import NamedTuple
 
 from ai_workspace.config import read_config, write_config
+
+
+class Location(NamedTuple):
+    """A resolved workspace and a path inside it.
+
+    Resolvers return `Location | str`: the location, or the message explaining
+    why there isn't one. A union rather than a `(value, error)` pair because
+    unpacking a pair throws away what the type checker knows, and every caller
+    then has to be trusted to check the right half.
+    """
+
+    workspace: Path
+    path: Path
 
 
 def _resolve_workspace(workspace_dir: str) -> tuple[Path | None, str]:
@@ -99,31 +113,31 @@ def archive_path(workspace: Path, thread_name: str) -> Path:
     return workspace / "archive" / thread_name
 
 
-def thread_dir(workspace_dir: str, thread_name: str) -> tuple[Path | None, Path | None, str | None]:
+def thread_dir(workspace_dir: str, thread_name: str) -> Location | str:
     """Resolve a workspace and the directory one of its threads occupies."""
     workspace, _ = _resolve_workspace(workspace_dir)
     if workspace is None:
-        return None, None, _no_workspace_message(workspace_dir)
-    return workspace, thread_path(workspace, thread_name), None
+        return _no_workspace_message(workspace_dir)
+    return Location(workspace, thread_path(workspace, thread_name))
 
 
-def threads_dir(workspace_dir: str) -> tuple[Path | None, Path | None, str | None]:
+def threads_dir(workspace_dir: str) -> Location | str:
     """Resolve a workspace and the directory holding its threads."""
     workspace, _ = _resolve_workspace(workspace_dir)
     if workspace is None:
-        return None, None, _no_workspace_message(workspace_dir)
-    return workspace, workspace / "threads", None
+        return _no_workspace_message(workspace_dir)
+    return Location(workspace, workspace / "threads")
 
 
-def archive_dir(workspace_dir: str) -> tuple[Path | None, Path | None, str | None]:
+def archive_dir(workspace_dir: str) -> Location | str:
     """Resolve a workspace and the directory holding its archives."""
     workspace, _ = _resolve_workspace(workspace_dir)
     if workspace is None:
-        return None, None, _no_workspace_message(workspace_dir)
-    return workspace, workspace / "archive", None
+        return _no_workspace_message(workspace_dir)
+    return Location(workspace, workspace / "archive")
 
 
-def resolve_for_create(workspace_dir: str) -> tuple[Path | None, str | None]:
+def resolve_for_create(workspace_dir: str) -> Path | str:
     """Resolve where something new should be created.
 
     Unlike _resolve_workspace this never silently falls back to the configured
@@ -132,12 +146,12 @@ def resolve_for_create(workspace_dir: str) -> tuple[Path | None, str | None]:
     """
     ws_path = Path(workspace_dir)
     if (ws_path / "threads").is_dir():
-        return ws_path, None
+        return ws_path
 
     config = read_config()
     default = config.get("default_workspace")
     if default and (Path(default) / "threads").is_dir():
-        return None, (
+        return (
             "Status: AMBIGUOUS_WORKSPACE\n"
             f"No threads/ directory at {workspace_dir}, but a configured workspace "
             f"exists at {default}.\n"
@@ -149,7 +163,7 @@ def resolve_for_create(workspace_dir: str) -> tuple[Path | None, str | None]:
             f'- If they pick "here", run the ai-workspace:init skill at '
             f"{workspace_dir}, then retry."
         )
-    return None, (
+    return (
         "Status: NEEDS_INIT\n"
         "No threads workspace found.\n"
         f'Ask the user: "Initialize a new workspace at {workspace_dir}, or use one '
@@ -278,17 +292,17 @@ def archive(workspace_dir: str, thread_name: str) -> str:
     """Move a thread out of threads/ and into archive/."""
     if not names_one_directory(thread_name):
         return _bad_name(thread_name)
-    workspace, source, error = thread_dir(workspace_dir, thread_name)
-    if error:
-        return error
+    located = thread_dir(workspace_dir, thread_name)
+    if isinstance(located, str):
+        return located
 
-    state = thread_state(workspace, thread_name)
+    state = thread_state(located.workspace, thread_name)
     if state == ARCHIVED:
         return f"Error: Thread '{thread_name}' is already archived."
     if state == NOT_FOUND:
         return f"Error: Thread '{thread_name}' not found."
 
-    failure = _move(source, archive_path(workspace, thread_name),
+    failure = _move(located.path, archive_path(located.workspace, thread_name),
                     f"An archived thread '{thread_name}'")
     return failure or (
         f"Archived '{thread_name}' to archive/{thread_name}/. "
@@ -300,9 +314,10 @@ def restore(workspace_dir: str, thread_name: str) -> str:
     """Move an archived thread back into threads/."""
     if not names_one_directory(thread_name):
         return _bad_name(thread_name)
-    workspace, archives, error = archive_dir(workspace_dir)
-    if error:
-        return error
+    located = archive_dir(workspace_dir)
+    if isinstance(located, str):
+        return located
+    workspace, archives = located
 
     state = thread_state(workspace, thread_name)
     if state == ACTIVE:
@@ -326,9 +341,10 @@ def restore(workspace_dir: str, thread_name: str) -> str:
 
 def list_archived_threads(workspace_dir: str) -> str:
     """List archived threads. Read-only; restore one to work on it."""
-    workspace, archives, error = archive_dir(workspace_dir)
-    if error:
-        return error
+    located = archive_dir(workspace_dir)
+    if isinstance(located, str):
+        return located
+    workspace, archives = located
     if not archives.is_dir():
         return "No archived threads."
 
@@ -357,9 +373,10 @@ def list_threads(workspace_dir: str) -> str:
     wrong is the tail nobody reads. Asking each schema instead would cost an
     operation on every schema forever to be exact where nobody looks.
     """
-    workspace, directory, error = threads_dir(workspace_dir)
-    if error:
-        return error
+    located = threads_dir(workspace_dir)
+    if isinstance(located, str):
+        return located
+    directory = located.path
 
     if not directory.exists():
         return "No threads directory found. Use /threads create to start one."

@@ -12,8 +12,8 @@ from pathlib import Path
 from typing import NamedTuple
 
 from ai_workspace.threads import v1, v2
-from ai_workspace.threads.marker import NAME as MARKER  # noqa: F401  (re-exported)
-from ai_workspace.threads.marker import read as read_schema  # noqa: F401  (re-exported)
+from ai_workspace.threads.marker import NAME as MARKER
+from ai_workspace.threads.marker import read as read_schema
 
 SCHEMAS = {1: v1, 2: v2}
 
@@ -38,16 +38,12 @@ def implementation(thread: Thread):
     return SCHEMAS[thread.schema]
 
 
-def at(workspace: Path, name: str, directory: Path) -> tuple[Thread | None, str | None]:
-    """Build a record for a thread directory. Exactly one of the pair is None.
-
-    Takes the directory rather than deriving it, because restore has to resolve
-    a schema while the thread is still staged outside threads/.
-    """
+def at(workspace: Path, name: str, directory: Path) -> Thread | str:
+    """Build a record for a thread directory, or say why there isn't one."""
     schema = read_schema(directory)
     if schema is None or schema not in SCHEMAS:
-        return None, unsupported_message(name, schema)
-    return Thread(workspace, name, directory, schema), None
+        return unsupported_message(name, schema)
+    return Thread(workspace, name, directory, schema)
 
 
 def unsupported_message(thread_name: str, schema: int | None) -> str:
