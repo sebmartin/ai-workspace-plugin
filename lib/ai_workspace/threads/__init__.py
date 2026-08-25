@@ -10,16 +10,14 @@ threads live under threads/{name}, so workspace.py answers "where" and this
 module answers "which schema, and what can it do". That split is what lets a
 workspace get versioned on its own axis later without touching anything here.
 
-archives.py is plural on purpose: `archive` here is the verb, the operation a
-thread's schema performs on itself, and archives.py holds the operations on the
-collection those archives land in. A submodule sharing a name with a function
-defined here would be shadowed by it.
+Archiving lives in workspace.py, not here. Moving a thread between threads/ and
+archive/ never opens it, so it needs nothing from any schema.
 """
 
 import re
-from pathlib import PurePosixPath
 
 from ai_workspace import workspace as ws
+from ai_workspace.workspace import names_one_directory  # noqa: F401  (re-exported)
 from ai_workspace.threads.schema import (  # noqa: F401  (re-exported)
     CURRENT_SCHEMA,
     MARKER,
@@ -30,22 +28,11 @@ from ai_workspace.threads.schema import (  # noqa: F401  (re-exported)
     read_schema,
     implementation,
 )
-from ai_workspace.threads.archives import (  # noqa: F401  (re-exported)
-    inspect_archive,
-    list_archived_threads,
-    purge_archive_tmp,
-    restore,
-)
 
 __all__ = [
-    "archive",
     "create",
-    "inspect_archive",
-    "list_archived_threads",
-    "list_threads",
-    "purge_archive_tmp",
-    "restore",
     "resume",
+    "names_one_directory",
     "validate_thread_name",
 ]
 
@@ -79,34 +66,20 @@ def validate_thread_name(name: str) -> bool:
     return True
 
 
-def names_one_directory(thread_name: str) -> bool:
-    """Whether a name refers to a single directory inside threads/.
-
-    All an existing thread needs. Deliberately not validate_thread_name: that
-    enforces the kebab-case convention, which is right for a name being chosen
-    and wrong for one already on disk. Workspaces predate the convention and
-    hold directories like Q3_planning, and refusing to open them would strand
-    the thread while list_threads still advertised it.
-    """
-    if not thread_name or thread_name in {".", ".."}:
-        return False
-    if thread_name.startswith(("/", "~")) or "\\" in thread_name:
-        return False
-    return len(PurePosixPath(thread_name).parts) == 1 and ".." not in thread_name
-
-
 def _locate(workspace_dir: str, thread_name: str) -> tuple[Thread | None, str | None]:
     """Resolve an existing thread and read its schema."""
     if not names_one_directory(thread_name):
-        return None, (
-            f"Error: Invalid thread name '{thread_name}'. "
-            "A thread name is a single directory inside threads/."
-        )
+        return None, ws._bad_name(thread_name)
 
     workspace, directory, error = ws.thread_dir(workspace_dir, thread_name)
     if error:
         return None, error
     if not (directory / "README.md").exists():
+        if (workspace / "archive" / thread_name).is_dir():
+            return None, (
+                f"Error: Thread '{thread_name}' is archived, and an archived thread is "
+                f"read-only.\nRestore it before working on it."
+            )
         return None, f"Error: Thread '{thread_name}' not found."
     return at(workspace, thread_name, directory)
 
@@ -119,33 +92,6 @@ def _focus(thread: Thread, body: str) -> str:
     follow-up calls.
     """
     return f"Workspace: {thread.workspace}\nThread: {thread.dir}\n\n{body}"
-
-
-def list_threads(workspace_dir: str) -> str:
-    """List all discussion threads sorted by most recent activity.
-
-    Enumerates rather than opening any thread, so it is the same for every
-    schema.
-    """
-    workspace, directory, error = ws.threads_dir(workspace_dir)
-    if error:
-        return error
-
-    if not directory.exists():
-        return "No threads directory found. Use /threads create to start one."
-
-    entries = []
-    for item in directory.iterdir():
-        if item.is_dir():
-            readme = item / "README.md"
-            if readme.exists():
-                entries.append((item.name, readme.stat().st_mtime))
-
-    if not entries:
-        return "No threads found. Use /threads create to start one."
-
-    entries.sort(key=lambda x: x[1], reverse=True)
-    return "\n".join(f"{i}. {name}" for i, (name, _) in enumerate(entries, 1))
 
 
 def resume(workspace_dir: str, thread_name: str) -> str:
@@ -173,10 +119,3 @@ def create(workspace_dir: str, thread_name: str) -> str:
 
     thread = Thread(workspace, thread_name, directory, CURRENT_SCHEMA)
     return _focus(thread, implementation(thread).create(thread))
-
-
-def archive(workspace_dir: str, thread_name: str, summary: str, keywords: list,
-            body: str) -> str:
-    """Archive a thread, the way its own schema knows how to."""
-    thread, error = _locate(workspace_dir, thread_name)
-    return error or implementation(thread).archive(thread, summary, keywords, body)

@@ -6,7 +6,8 @@ in threads/.
 """
 
 import json
-from pathlib import Path
+import shutil
+from pathlib import Path, PurePosixPath
 
 from ai_workspace.config import read_config, write_config
 
@@ -154,3 +155,177 @@ def resolve_for_create(workspace_dir: str) -> tuple[Path | None, str | None]:
         f'- If "elsewhere", get the path from the user, call '
         f"set_default_workspace, then retry."
     )
+
+
+def names_one_directory(thread_name: str) -> bool:
+    """Whether a name refers to a single directory inside threads/.
+
+    All an existing thread needs. Deliberately not validate_thread_name: that
+    enforces the kebab-case convention, which is right for a name being chosen
+    and wrong for one already on disk. Workspaces predate the convention and
+    hold directories like Q3_planning, and refusing to open them would strand
+    the thread while list_threads still advertised it.
+    """
+    if not thread_name or thread_name in {".", ".."}:
+        return False
+    if thread_name.startswith(("/", "~")) or "\\" in thread_name:
+        return False
+    return len(PurePosixPath(thread_name).parts) == 1 and ".." not in thread_name
+
+
+def _bad_name(thread_name: str) -> str:
+    return (
+        f"Error: Invalid thread name '{thread_name}'. "
+        "A thread name is a single directory inside threads/."
+    )
+
+
+LEGACY_ARCHIVE_DOC = "skills/threads/commands/unpack-legacy-archive.md"
+
+
+def _thread_name_of(tarball: Path) -> str:
+    """The thread name inside a pre-3.0 archive filename.
+
+    Those were named {year}-{thread}.tar.gz. The year prefix existed to keep two
+    archives of one thread apart, which a move makes impossible.
+    """
+    stem = tarball.name[: -len(".tar.gz")]
+    head, sep, rest = stem.partition("-")
+    return rest if sep and head.isdigit() else stem
+
+
+def _legacy_archives(archives: Path, threads_root: Path) -> list[Path]:
+    """Pre-3.0 tarballs that do not already exist as a thread somewhere.
+
+    A tarball survives being restored, because extracting is a copy where a
+    directory restore is a move. Listing it beside the thread it produced is
+    the confusing state, so it is hidden once the thread exists either live or
+    as a directory archive.
+    """
+    if not archives.is_dir():
+        return []
+    out = []
+    for tarball in sorted(archives.glob("*.tar.gz")):
+        name = _thread_name_of(tarball)
+        if (threads_root / name).is_dir() or (archives / name).is_dir():
+            continue
+        out.append(tarball)
+    return out
+
+
+def _move(source: Path, target: Path, what: str) -> str | None:
+    """Move a directory, or explain why it did not happen. None on success.
+
+    shutil.move rather than os.rename so a symlinked archive/ degrades to a
+    copy instead of failing with EXDEV, and the destination is checked first
+    because moving onto an existing directory nests inside it rather than
+    failing.
+    """
+    if target.exists():
+        return f"Error: {what} already exists at {target}."
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(source), str(target))
+    except OSError as e:
+        return (
+            f"Error: Could not move {source.name}: {e}. Nothing was moved and "
+            f"{source.name} is untouched. On a network volume this usually means "
+            f"something still has a file in it open."
+        )
+    return None
+
+
+def archive(workspace_dir: str, thread_name: str) -> str:
+    """Move a thread out of threads/ and into archive/."""
+    if not names_one_directory(thread_name):
+        return _bad_name(thread_name)
+    workspace, source, error = thread_dir(workspace_dir, thread_name)
+    if error:
+        return error
+    if not source.is_dir():
+        return f"Error: Thread '{thread_name}' not found."
+
+    _, archives, _ = archive_dir(workspace_dir)
+    failure = _move(source, archives / thread_name, f"An archived thread '{thread_name}'")
+    return failure or (
+        f"Archived '{thread_name}' to archive/{thread_name}/. "
+        f"It is read-only there; restore it to work on it again."
+    )
+
+
+def restore(workspace_dir: str, thread_name: str) -> str:
+    """Move an archived thread back into threads/."""
+    if not names_one_directory(thread_name):
+        return _bad_name(thread_name)
+    workspace, archives, error = archive_dir(workspace_dir)
+    if error:
+        return error
+
+    source = archives / thread_name
+    if not source.is_dir():
+        legacy = [t for t in _legacy_archives(archives, workspace / "threads")
+                  if _thread_name_of(t) == thread_name]
+        if legacy:
+            return (
+                f"Status: LEGACY_ARCHIVE\n"
+                f"'{thread_name}' is archived as {legacy[0].name}, a tarball from before 3.0, "
+                f"which this plugin no longer unpacks.\n"
+                f"Read {LEGACY_ARCHIVE_DOC} and follow it."
+            )
+        return f"Error: No archived thread named '{thread_name}'."
+
+    failure = _move(source, thread_path(workspace, thread_name), f"A thread '{thread_name}'")
+    return failure or f"Restored '{thread_name}' to threads/{thread_name}/."
+
+
+def list_archived_threads(workspace_dir: str) -> str:
+    """List archived threads. Read-only; restore one to work on it."""
+    workspace, archives, error = archive_dir(workspace_dir)
+    if error:
+        return error
+    if not archives.is_dir():
+        return "No archived threads."
+
+    names = sorted(p.name for p in archives.iterdir() if p.is_dir() and p.name != "tmp")
+    legacy = _legacy_archives(archives, workspace / "threads")
+    if not names and not legacy:
+        return "No archived threads."
+
+    lines = [f"{i}. {name}" for i, name in enumerate(names, 1)]
+    for tarball in legacy:
+        lines.append(
+            f"{len(lines) + 1}. {_thread_name_of(tarball)} "
+            f"(tarball from before 3.0; see {LEGACY_ARCHIVE_DOC} to restore it)"
+        )
+    lines.append("")
+    lines.append("Archived threads are read-only. Restore one before working on it.")
+    return "\n".join(lines)
+
+
+def list_threads(workspace_dir: str) -> str:
+    """List threads, most recently touched first.
+
+    Ordering is the README's modification time, which is an approximation and
+    is allowed to be. It is wrong after a workspace is copied and after a bulk
+    migration, and it repairs itself the moment a thread is saved, so what stays
+    wrong is the tail nobody reads. Asking each schema instead would cost an
+    operation on every schema forever to be exact where nobody looks.
+    """
+    workspace, directory, error = threads_dir(workspace_dir)
+    if error:
+        return error
+
+    if not directory.exists():
+        return "No threads directory found. Use /threads create to start one."
+
+    entries = []
+    for item in sorted(directory.iterdir()):
+        readme = item / "README.md"
+        if item.is_dir() and readme.exists():
+            entries.append((item.name, readme.stat().st_mtime))
+
+    if not entries:
+        return "No threads found. Use /threads create to start one."
+
+    entries.sort(key=lambda pair: pair[1], reverse=True)
+    return "\n".join(f"{i}. {name}" for i, (name, _) in enumerate(entries, 1))

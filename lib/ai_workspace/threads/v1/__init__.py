@@ -6,6 +6,6 @@ against the files below it. A later schema imports what it keeps from here and
 defines only what it changes.
 """
 
-from ai_workspace.threads.v1.thread import archive, create, note_restore, resume
+from ai_workspace.threads.v1.thread import create, resume
 
-__all__ = ["archive", "create", "note_restore", "resume"]
+__all__ = ["create", "resume"]

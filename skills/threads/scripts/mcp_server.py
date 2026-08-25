@@ -33,7 +33,7 @@ def list_threads(workspace_dir: str) -> str:
             a fresh invocation. The tool probes this directory for threads/,
             falls back to the configured default, and returns NO_WORKSPACE if neither works.
     """
-    return _threads.list_threads(workspace_dir)
+    return _ws.list_threads(workspace_dir)
 
 
 @mcp.tool()
@@ -118,45 +118,41 @@ def set_default_workspace(workspace_path: str) -> str:
 
 
 @mcp.tool()
-def archive_thread(
-    workspace_dir: str,
-    thread_name: str,
-    summary: str,
-    keywords: list,
-    body: str,
-) -> str:
-    """Archive a thread: compress its directory, write a searchable summary, delete the original.
+def archive_thread(workspace_dir: str, thread_name: str) -> str:
+    """Archive a thread: move it out of threads/ and into archive/.
+
+    Nothing is compressed and nothing is summarised. The thread keeps its shape
+    and stays readable and greppable where it lands, which is why no summary is
+    written for it. An archived thread is read-only; restore it to work on it.
 
     Args:
         workspace_dir: Directory hint for locating the workspace; typically the
             tracked workspace path from session context, or the caller's cwd on
             a fresh invocation. The tool probes this directory for threads/,
             falls back to the configured default, and returns NO_WORKSPACE if neither works.
-        thread_name: Name of the thread to archive (kebab-case).
-        summary: One-line summary; goes into frontmatter `summary:` field.
-        keywords: List of short keyword strings for search; normalised (lowercased, deduped).
-        body: Topic-rich markdown narrative — the embedding payload. Cover what was discussed,
-              decisions made, systems/files/people touched, key vocabulary and synonyms.
+        thread_name: Name of the thread to archive.
     """
-    return _threads.archive(workspace_dir, thread_name, summary, keywords, body)
+    return _ws.archive(workspace_dir, thread_name)
+
 
 
 @mcp.tool()
-def restore_thread(workspace_dir: str, archive_base: str) -> str:
-    """Restore an archived thread back into threads/, deleting the archive on success.
+def restore_thread(workspace_dir: str, thread_name: str) -> str:
+    """Restore an archived thread: move it back from archive/ into threads/.
 
-    Writes a sessions/{YYYYMMDD}-restored.md file inside the restored thread
-    capturing the archive-time summary and body, so the LLM's interpretation
-    survives as thread history.
+    Takes the thread's own name. Archives created before 3.0 are tarballs and
+    are not unpacked by this tool; it returns `Status: LEGACY_ARCHIVE` naming
+    the reference to follow.
 
     Args:
         workspace_dir: Directory hint for locating the workspace; typically the
             tracked workspace path from session context, or the caller's cwd on
             a fresh invocation. The tool probes this directory for threads/,
             falls back to the configured default, and returns NO_WORKSPACE if neither works.
-        archive_base: Filename stem of the archive (e.g. '2026-last-months-project').
+        thread_name: Name of the archived thread.
     """
-    return _threads.restore(workspace_dir, archive_base)
+    return _ws.restore(workspace_dir, thread_name)
+
 
 
 @mcp.tool()
@@ -169,37 +165,9 @@ def list_archived_threads(workspace_dir: str) -> str:
             a fresh invocation. The tool probes this directory for threads/,
             falls back to the configured default, and returns NO_WORKSPACE if neither works.
     """
-    return _threads.list_archived_threads(workspace_dir)
+    return _ws.list_archived_threads(workspace_dir)
 
 
-@mcp.tool()
-def inspect_archive(workspace_dir: str, archive_base: str) -> str:
-    """Extract an archive into archive/tmp/{base}/ for inspection without restoring.
-
-    The original .md and .tar.gz are left in place. Repeated calls overwrite cleanly.
-    Use /threads purge-tmp when done. The extraction target stays inside the workspace.
-
-    Args:
-        workspace_dir: Directory hint for locating the workspace; typically the
-            tracked workspace path from session context, or the caller's cwd on
-            a fresh invocation. The tool probes this directory for threads/,
-            falls back to the configured default, and returns NO_WORKSPACE if neither works.
-        archive_base: Filename stem of the archive (e.g. '2026-last-months-project').
-    """
-    return _threads.inspect_archive(workspace_dir, archive_base)
-
-
-@mcp.tool()
-def purge_archive_tmp(workspace_dir: str) -> str:
-    """Wipe archive/tmp/ entirely. Safe — every file in it is regeneratable from sibling archives.
-
-    Args:
-        workspace_dir: Directory hint for locating the workspace; typically the
-            tracked workspace path from session context, or the caller's cwd on
-            a fresh invocation. The tool probes this directory for threads/,
-            falls back to the configured default, and returns NO_WORKSPACE if neither works.
-    """
-    return _threads.purge_archive_tmp(workspace_dir)
 
 
 if __name__ == "__main__":

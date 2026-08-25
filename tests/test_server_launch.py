@@ -133,7 +133,7 @@ def test_server_starts_and_completes_a_handshake():
 
 
 def test_server_lists_its_tools(tools):
-    assert len(tools) >= 10, sorted(tools)
+    assert len(tools) >= 9, sorted(tools)
 
 
 def test_every_tool_describes_itself(tools):
