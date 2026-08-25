@@ -46,15 +46,13 @@ ai-workspace-plugin/                # Plugin repository
 │       ├── SKILL.md
 │       └── scripts/mcp_server.py   # Tool declarations; delegates to lib/ai_workspace/
 ├── lib/ai_workspace/               # Where the server's work happens
-│   ├── workspace.py                # which workspace, and where things live in it
+│   ├── workspace.py                # which workspace, where things live, archive/restore
 │   ├── config.py                   # the user-global config.json
 │   ├── plugin.py                   # plugin root, templates, get_skill_file
 │   ├── text.py                     # frontmatter and YAML helpers
 │   └── threads/                    # the thread concept
 │       ├── __init__.py             # the API: one function per operation
-│       ├── _schema.py              # schema -> module, and the two counters
-│       ├── archives.py             # restore, list, inspect, purge of archive/
-│       ├── tarball.py              # tar/extract plumbing
+│       ├── schema.py               # schema -> module, and the two counters
 │       └── v1/                     # schema 1: the README is the thread
 ├── templates/
 │   ├── AGENTS.md.template          # Workspace instructions, read by both CLIs
@@ -149,7 +147,7 @@ keeps from the schema immediately below it and defines only what it changes:
 
 ```python
 # lib/ai_workspace/threads/v2/__init__.py
-from ai_workspace.threads.v1 import archive      # unchanged from v1
+from ai_workspace.threads.v1 import create       # unchanged from v1
 from ai_workspace.threads.v2.thread import resume  # changed in v2
 ```
 
@@ -160,10 +158,13 @@ its successor still uses into that successor, and nothing above it changes.
 A package is a **concept**, not a version axis. `threads/` owns everything about
 threads, including the parts that are not versioned. Two separate questions:
 
-- *Is it about threads?* Decides `threads/` membership. `archives.py` and
-  `tarball.py` pass; only threads are ever tarred.
+- *Is it about threads?* Decides `threads/` membership. `validate_thread_name`
+  passes without being versioned.
 - *Does it read or write one thread's on-disk layout?* Decides `threads/vN/`
   membership. Only this one is about versioning.
+
+Archiving passes neither. Moving a thread between `threads/` and `archive/`
+never opens it, so it is workspace work and lives in `workspace.py`.
 
 Locating a thread is the workspace's job, not the thread's. `workspace.py`
 answers *where* (`thread_path`, `thread_dir`, `threads_dir`, `archive_dir`);
@@ -176,9 +177,9 @@ workspace get versioned on its own axis later.
 return _threads.resume(workspace_dir, thread_name)
 ```
 
-**Watch the name collision.** `threads/__init__.py` defines a function
-`archive`, which shadows any sibling module of that name. That is why the
-archive-directory operations live in `archives.py`.
+**Watch the name collision.** A function defined in `threads/__init__.py`
+shadows any sibling module of the same name, so an operation and a submodule
+may never share one.
 
 ### Thread Structure
 

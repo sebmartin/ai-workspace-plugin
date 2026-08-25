@@ -36,15 +36,13 @@ ai-workspace-plugin/
 │       ├── SKILL.md
 │       └── scripts/mcp_server.py    # Tool declarations; delegates to lib/ai_workspace/
 ├── lib/ai_workspace/                # Where the server's work happens
-│   ├── workspace.py                 # which workspace, and where things live in it
+│   ├── workspace.py                 # which workspace, where things live, archive/restore
 │   ├── config.py                    # the user-global config.json
 │   ├── plugin.py                    # plugin root, templates
 │   ├── text.py                      # frontmatter and YAML helpers
 │   └── threads/                     # the thread concept
 │       ├── __init__.py              # the API: one function per operation
-│       ├── _schema.py               # schema -> module
-│       ├── archives.py              # operations on archive/
-│       ├── tarball.py               # tar/extract plumbing
+│       ├── schema.py                # schema -> module
 │       └── v1/                      # schema 1: the README is the thread
 ├── templates/
 │   ├── AGENTS.md.template           # Workspace instructions (vendor-neutral)

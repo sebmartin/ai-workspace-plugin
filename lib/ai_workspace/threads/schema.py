@@ -10,8 +10,8 @@ silently as soon as a second does, in the worst direction, where an older
 plugin sees a marker it does not understand and hands the thread to the wrong
 reader.
 
-Separate from __init__.py so that threads/archive.py can resolve a schema
-without importing the package that imports it.
+Separate from __init__.py so the registry, the Thread record and the counters
+stay one readable unit and __init__.py stays the API.
 """
 
 from pathlib import Path

@@ -2,8 +2,7 @@
 """Threads MCP Server - the tool surface.
 
 Implementations live in lib/ai_workspace/. This module declares the tools, their
-docstrings and their arguments, and delegates. Archive-related tools require
-Python 3.12+ (tarfile filter="data" support).
+docstrings and their arguments, and delegates.
 """
 
 import sys
@@ -157,7 +156,11 @@ def restore_thread(workspace_dir: str, thread_name: str) -> str:
 
 @mcp.tool()
 def list_archived_threads(workspace_dir: str) -> str:
-    """List archived threads with metadata for quick search.
+    """List the threads under archive/, numbered.
+
+    Archived threads are read-only; restoring one is what makes it writable
+    again. A thread archived before 3.0 is listed as a tarball, with the
+    reference to follow for unpacking it.
 
     Args:
         workspace_dir: Directory hint for locating the workspace; typically the
