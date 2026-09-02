@@ -12,6 +12,7 @@ model's per-response output cap.
 from datetime import date
 from pathlib import Path
 
+from ai_workspace.text import yaml_value
 from ai_workspace.threads.v2 import ids as ids_mod
 from ai_workspace.threads.v2 import index as idx
 from ai_workspace.threads.v2 import render, session
@@ -99,9 +100,9 @@ def log_decision(thread, title: str, summary: str, body: str,
     path.parent.mkdir(parents=True, exist_ok=True)
     front = [
         "---",
-        f"title: {title}",
+        f"title: {yaml_value(title)}",
         f"status: {status}",
-        f"summary: {summary}",
+        f"summary: {yaml_value(summary)}",
         f"supersedes: [{', '.join(supersedes)}]",
         "---",
         "",

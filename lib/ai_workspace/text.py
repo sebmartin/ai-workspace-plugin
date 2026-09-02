@@ -25,3 +25,15 @@ def split_frontmatter(text: str, source: Path | str | None = None) -> tuple[dict
         raise ValueError(f"Frontmatter{where} is not valid YAML. {e}") from e
     fields = post.metadata if isinstance(post.metadata, dict) else {}
     return fields, post.content
+
+
+def yaml_value(text: str) -> str:
+    """A scalar safe to interpolate into a frontmatter line.
+
+    Always quoted, rather than quoted only when it has to be. The rules for
+    when a bare YAML scalar is safe are long enough that getting them wrong is
+    likelier than anyone minding the quotes, and getting them wrong writes a
+    file the reader then refuses.
+    """
+    escaped = str(text).replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
