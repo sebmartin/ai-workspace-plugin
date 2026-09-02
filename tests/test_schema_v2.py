@@ -1,6 +1,7 @@
 """Schema 2 primitives: schema detection, indexes, rendering, sessions, dates."""
 
 import sys
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -9,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
 sys.path.insert(0, str(Path(__file__).parent.parent / "skills" / "threads" / "scripts"))
 
 from ai_workspace.threads import schema, marker
+from ai_workspace.threads.v2 import ids, render, session
 from ai_workspace.threads.v2 import index as idx
 from ai_workspace.threads.v2 import thread as v2
 
@@ -186,6 +188,93 @@ class TestIndex:
         idx.set_window(d, "todos", "next_steps", ["20260101-a"])
         entries, _ = idx.read(d, "todos")
         assert len(entries) == 1
+
+
+class TestRender:
+    def test_only_next_steps_is_replaced(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        idx.add(d, "todos", idx.Entry("20260101-a", "active", "Do a thing", "./todos/a.md"))
+        idx.set_window(d, "todos", "next_steps", ["20260101-a"])
+        render.render(d)
+        text = (d / "README.md").read_text()
+        assert "Do a thing" in text
+        assert "**Started**: 2026-01-01" in text
+        assert "**Related Threads**: None" in text
+        assert "Where things stand." in text
+        assert "What this is." in text
+
+    def test_hand_edits_outside_next_steps_survive(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        p = d / "README.md"
+        p.write_text(p.read_text().replace("Where things stand.", "HAND EDITED"))
+        idx.add(d, "todos", idx.Entry("20260101-a", "active", "A", "./todos/a.md"))
+        idx.set_window(d, "todos", "next_steps", ["20260101-a"])
+        render.render(d)
+        assert "HAND EDITED" in p.read_text()
+
+    def test_render_is_idempotent(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        idx.add(d, "todos", idx.Entry("20260101-a", "active", "A", "./todos/a.md"))
+        idx.set_window(d, "todos", "next_steps", ["20260101-a"])
+        render.render(d)
+        once = (d / "README.md").read_text()
+        render.render(d)
+        assert (d / "README.md").read_text() == once
+
+    def test_window_order_is_preserved_not_index_order(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        for i in "ab":
+            idx.add(d, "todos", idx.Entry(f"20260101-{i}", "active", i.upper(), f"./todos/{i}.md"))
+        idx.set_window(d, "todos", "next_steps", ["20260101-b", "20260101-a"])
+        render.render(d)
+        body = (d / "README.md").read_text()
+        assert body.index("20260101-b") < body.index("20260101-a")
+
+    def test_empty_window_renders_a_placeholder(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        render.render(d)
+        assert "## Next steps\n\n- None" in (d / "README.md").read_text()
+
+    def test_index_links_are_added_once(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        render.render(d)
+        render.render(d)
+        assert (d / "README.md").read_text().count("**Indexes**:") == 1
+
+
+class TestSessionStub:
+    def test_stub_created_with_index_entry(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        sid = session.ensure_stub(d, "my-topic", today=date(2026, 5, 4))
+        assert sid == "20260504-my-topic"
+        assert session.session_path(d, sid).exists()
+        entries, _ = idx.read(d, "sessions")
+        assert entries[0].id == sid
+
+    def test_stub_is_created_once(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        session.ensure_stub(d, "topic", today=date(2026, 5, 4))
+        session.ensure_stub(d, "topic", today=date(2026, 5, 4))
+        entries, _ = idx.read(d, "sessions")
+        assert len(entries) == 1
+
+    def test_dead_session_still_records_what_it_touched(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        sid = session.ensure_stub(d, "topic", today=date(2026, 5, 4))
+        session.note_created(d, sid, "todo 20260504-a")
+        assert "todo 20260504-a" in session.session_path(d, sid).read_text()
+
+
+class TestIds:
+    def test_id_shape(self):
+        assert ids.make_id(date(2026, 7, 23), "Prep Ladder!") == "20260723-prep-ladder"
+
+    def test_collisions_get_a_suffix(self):
+        assert ids.unique_id("20260101-a", {"20260101-a"}) == "20260101-a-2"
+        assert ids.unique_id("20260101-a", {"20260101-a", "20260101-a-2"}) == "20260101-a-3"
+
+    def test_ids_sort_chronologically(self):
+        assert sorted(["20260301-b", "20260101-a"])[0] == "20260101-a"
 
 
 class TestCompose:

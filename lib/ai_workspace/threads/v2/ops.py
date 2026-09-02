@@ -17,13 +17,9 @@ from ai_workspace.threads.v2 import index as idx
 from ai_workspace.threads.v2 import render, session
 
 
-def _today() -> str:
-    return date.today().isoformat()
-
-
-def _new_id(thread_dir: Path, kind: str, title: str, when: str | None = None) -> str:
+def _new_id(thread_dir: Path, kind: str, title: str, when: date | None = None) -> str:
     return ids_mod.unique_id(
-        ids_mod.make_id(when or _today(), title), idx.taken_ids(thread_dir, kind)
+        ids_mod.make_id(when or date.today(), title), idx.taken_ids(thread_dir, kind)
     )
 
 
@@ -41,7 +37,7 @@ def add_todo(thread, title: str, link: str, state: str = "active",
         return ("Error: a todo needs a link. Use the session it came out of when it "
                 "has no file or issue of its own — a bare line cannot be expanded later.")
     todo_id = _new_id(thread.dir, "todos", title)
-    idx.append(thread.dir, "todos", idx.Entry(todo_id, state, title, link))
+    idx.add(thread.dir, "todos", idx.Entry(todo_id, state, title, link))
     render.render(thread.dir)
     _record(thread.dir, session_id, f"todo {todo_id}")
     return f"Added todo {todo_id} ({state})."
@@ -111,7 +107,7 @@ def log_decision(thread, title: str, summary: str, body: str,
         "",
     ]
     path.write_text("\n".join(front) + body.rstrip() + "\n")
-    idx.append(thread.dir, "decisions",
+    idx.add(thread.dir, "decisions",
                idx.Entry(decision_id, status, title, f"./decisions/{decision_id}.md"))
 
     # `supersedes` on the live decision is the only direction that gets followed:
@@ -150,7 +146,7 @@ def retire_decision(thread, decision_id: str, state: str) -> str:
 def add_artifact(thread, title: str, link: str,
                  session_id: str | None = None) -> str:
     artifact_id = _new_id(thread.dir, "artifacts", title)
-    idx.append(thread.dir, "artifacts", idx.Entry(artifact_id, "current", title, link))
+    idx.add(thread.dir, "artifacts", idx.Entry(artifact_id, "current", title, link))
     render.render(thread.dir)
     _record(thread.dir, session_id, f"artifact {artifact_id}")
     return f"Added artifact {artifact_id}."
