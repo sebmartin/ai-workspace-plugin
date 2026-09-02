@@ -21,6 +21,8 @@ says what it means.
 import re
 from pathlib import Path
 
+from ai_workspace.text import split_frontmatter
+
 TYPES = ("sessions", "decisions", "artifacts", "todos")
 RETIRED_TYPES = ("decisions", "artifacts", "todos")
 
@@ -38,7 +40,6 @@ RETIRED = {
 }
 
 _LINE_RE = re.compile(r"^- (?P<id>[^\s:]+)(?::(?P<state>[^\s]+))? \[(?P<title>[^\]]*)\]\((?P<link>[^)]*)\)\s*$")
-_FM_RE = re.compile(r"\A---\s*\n(?P<body>.*?)\n---\s*\n", re.DOTALL)
 
 
 class Entry:
@@ -71,44 +72,15 @@ def read(thread_dir: Path, kind: str, retired: bool = False) -> tuple[list[Entry
     path = index_path(thread_dir, kind, retired)
     if not path.exists():
         return [], {}
-    text = path.read_text()
-    fm: dict = {}
-    m = _FM_RE.match(text)
-    if m:
-        fm = _parse_windows(m.group("body"))
-        text = text[m.end():]
+    fields, body = split_frontmatter(path.read_text())
+    windows = fields.get("windows")
+    fm: dict = {"windows": windows} if isinstance(windows, dict) else {}
     entries = []
-    for line in text.splitlines():
+    for line in body.splitlines():
         hit = _LINE_RE.match(line)
         if hit:
             entries.append(Entry(hit["id"], hit["state"], hit["title"], hit["link"]))
     return entries, fm
-
-
-def _parse_windows(body: str) -> dict:
-    """Read the `windows:` block without a YAML dependency.
-
-    The codebase has no YAML parser and frontmatter is read with regex
-    elsewhere; this keeps that consistent rather than adding a dependency for
-    one nested mapping.
-    """
-    windows: dict[str, list[str]] = {}
-    in_windows = False
-    for line in body.splitlines():
-        if line.strip() == "windows:":
-            in_windows = True
-            continue
-        if in_windows:
-            if line.startswith("  ") and ":" in line:
-                name, _, value = line.strip().partition(":")
-                value = value.strip()
-                if value.startswith("[") and value.endswith("]"):
-                    ids = [i.strip() for i in value[1:-1].split(",") if i.strip()]
-                    windows[name] = ids
-                continue
-            if line.strip():
-                in_windows = False
-    return {"windows": windows} if windows else {}
 
 
 def _render(entries: list[Entry], fm: dict) -> str:
@@ -132,16 +104,22 @@ def write(thread_dir: Path, kind: str, entries: list[Entry], fm: dict,
     return path
 
 
-def append(thread_dir: Path, kind: str, entry: Entry, retired: bool = False) -> Path:
-    """Add an entry to the end.
+def add(thread_dir: Path, kind: str, entry: Entry, retired: bool = False) -> Path:
+    """Insert an entry in id order.
 
-    Append rather than sorted insert: in normal use every new entry is the
-    newest one, so appending is correct and never rewrites an earlier line.
-    Migration is the only bulk writer and iterates in date order itself, which
-    is an instruction in its guidance rather than a cost paid on every write.
+    Ids are YYYYMMDD-slug, so id order is chronological and a string comparison
+    places the entry without parsing a date. Usually the new entry is the newest
+    and this is an append, but not always: a session recovered from a transcript
+    after later ones were already saved belongs where its date puts it.
+
+    Scanning back from the end leaves an index that is already out of order in
+    the order it was, rather than silently reordering lines nobody asked about.
     """
     entries, fm = read(thread_dir, kind, retired)
-    entries.append(entry)
+    at = len(entries)
+    while at and entries[at - 1].id > entry.id:
+        at -= 1
+    entries.insert(at, entry)
     return write(thread_dir, kind, entries, fm, retired)
 
 
@@ -169,7 +147,7 @@ def retire(thread_dir: Path, kind: str, entry_id: str, state: str) -> str | None
     entries.remove(entry)
     entry.state = state
     write(thread_dir, kind, entries, fm)
-    append(thread_dir, kind, entry, retired=True)
+    add(thread_dir, kind, entry, retired=True)
     return None
 
 

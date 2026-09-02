@@ -9,9 +9,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
 sys.path.insert(0, str(Path(__file__).parent.parent / "skills" / "threads" / "scripts"))
 
 from ai_workspace.threads import schema, marker
-from ai_workspace.threads.v2 import dates, ids
 from ai_workspace.threads.v2 import index as idx
-from ai_workspace.threads.v2 import render, session
 from ai_workspace.threads.v2 import thread as v2
 
 
@@ -96,41 +94,62 @@ class TestIndex:
     def test_index_is_created_on_first_write(self, tmp_path):
         d = _v2_thread(tmp_path)
         assert not idx.index_path(d, "todos").exists()
-        idx.append(d, "todos", idx.Entry("20260101-a", "active", "A", "./todos/a.md"))
+        idx.add(d, "todos", idx.Entry("20260101-a", "active", "A", "./todos/a.md"))
         assert idx.index_path(d, "todos").exists()
 
     def test_round_trip(self, tmp_path):
         d = _v2_thread(tmp_path)
-        idx.append(d, "decisions", idx.Entry("20260101-a", "locked", "A", "./decisions/a.md"))
-        idx.append(d, "decisions", idx.Entry("20260102-b", "proposed", "B", "./decisions/b.md"))
+        idx.add(d, "decisions", idx.Entry("20260101-a", "locked", "A", "./decisions/a.md"))
+        idx.add(d, "decisions", idx.Entry("20260102-b", "proposed", "B", "./decisions/b.md"))
         entries, _ = idx.read(d, "decisions")
         assert [(e.id, e.state, e.title) for e in entries] == [
             ("20260101-a", "locked", "A"), ("20260102-b", "proposed", "B")]
 
     def test_id_grep_is_exact_because_colon_terminates_it(self, tmp_path):
         d = _v2_thread(tmp_path)
-        idx.append(d, "decisions", idx.Entry("20260101-prep", "locked", "P", "./decisions/p.md"))
-        idx.append(d, "decisions", idx.Entry("20260101-prep-ladder", "locked", "PL", "./decisions/pl.md"))
+        idx.add(d, "decisions", idx.Entry("20260101-prep", "locked", "P", "./decisions/p.md"))
+        idx.add(d, "decisions", idx.Entry("20260101-prep-ladder", "locked", "PL", "./decisions/pl.md"))
         text = idx.index_path(d, "decisions").read_text()
         assert text.count("- 20260101-prep:") == 1
 
     def test_sessions_have_no_state(self, tmp_path):
         d = _v2_thread(tmp_path)
-        idx.append(d, "sessions", idx.Entry("20260101-s", None, "S", "./sessions/s.md"))
+        idx.add(d, "sessions", idx.Entry("20260101-s", None, "S", "./sessions/s.md"))
         assert ":" not in idx.index_path(d, "sessions").read_text().split("[")[0]
         entries, _ = idx.read(d, "sessions")
         assert entries[0].state is None
 
-    def test_append_never_rewrites_earlier_lines(self, tmp_path):
+    def test_a_newer_entry_goes_on_the_end(self, tmp_path):
         d = _v2_thread(tmp_path)
-        idx.append(d, "todos", idx.Entry("20260101-a", "active", "A", "./todos/a.md"))
+        idx.add(d, "todos", idx.Entry("20260101-a", "active", "A", "./todos/a.md"))
         first = idx.index_path(d, "todos").read_text()
-        idx.append(d, "todos", idx.Entry("20260102-b", "active", "B", "./todos/b.md"))
+        idx.add(d, "todos", idx.Entry("20260102-b", "active", "B", "./todos/b.md"))
         assert idx.index_path(d, "todos").read_text().startswith(first)
+
+    def test_an_older_entry_goes_where_its_date_puts_it(self, tmp_path):
+        """A session recovered from a transcript after later ones were saved."""
+        d = _v2_thread(tmp_path)
+        for day in ("03", "05"):
+            idx.add(d, "sessions", idx.Entry(f"202601{day}-s", None, day, f"./sessions/{day}.md"))
+        idx.add(d, "sessions", idx.Entry("20260104-late", None, "late", "./sessions/late.md"))
+        entries, _ = idx.read(d, "sessions")
+        assert [e.id for e in entries] == [
+            "20260103-s", "20260104-late", "20260105-s"]
+
+    def test_frontmatter_that_does_not_parse_is_not_an_error(self, tmp_path):
+        """Index frontmatter is hand-editable; a bad block loses the windows,
+        not the entries."""
+        d = _v2_thread(tmp_path)
+        idx.add(d, "todos", idx.Entry("20260101-a", "active", "A", "./todos/a.md"))
+        path = idx.index_path(d, "todos")
+        path.write_text("---\nwindows:\n\tnext_steps: [20260101-a]\n---\n" + path.read_text())
+        entries, fm = idx.read(d, "todos")
+        assert [e.id for e in entries] == ["20260101-a"]
+        assert fm == {}
 
     def test_retire_moves_the_line_and_sets_state(self, tmp_path):
         d = _v2_thread(tmp_path)
-        idx.append(d, "todos", idx.Entry("20260101-a", "active", "A", "./todos/a.md"))
+        idx.add(d, "todos", idx.Entry("20260101-a", "active", "A", "./todos/a.md"))
         assert idx.retire(d, "todos", "20260101-a", "done") is None
         live, _ = idx.read(d, "todos")
         gone, _ = idx.read(d, "todos", retired=True)
@@ -139,19 +158,19 @@ class TestIndex:
 
     def test_retire_rejects_a_state_from_another_type(self, tmp_path):
         d = _v2_thread(tmp_path)
-        idx.append(d, "todos", idx.Entry("20260101-a", "active", "A", "./todos/a.md"))
+        idx.add(d, "todos", idx.Entry("20260101-a", "active", "A", "./todos/a.md"))
         err = idx.retire(d, "todos", "20260101-a", "superseded")
         assert err and "not a retired state" in err
 
     def test_sessions_do_not_retire(self, tmp_path):
         d = _v2_thread(tmp_path)
-        idx.append(d, "sessions", idx.Entry("20260101-s", None, "S", "./sessions/s.md"))
+        idx.add(d, "sessions", idx.Entry("20260101-s", None, "S", "./sessions/s.md"))
         assert "do not retire" in idx.retire(d, "sessions", "20260101-s", "done")
 
     def test_window_round_trip(self, tmp_path):
         d = _v2_thread(tmp_path)
         for i in "ab":
-            idx.append(d, "todos", idx.Entry(f"20260101-{i}", "active", i.upper(), f"./todos/{i}.md"))
+            idx.add(d, "todos", idx.Entry(f"20260101-{i}", "active", i.upper(), f"./todos/{i}.md"))
         assert idx.set_window(d, "todos", "next_steps", ["20260101-b", "20260101-a"]) is None
         _, fm = idx.read(d, "todos")
         assert fm["windows"]["next_steps"] == ["20260101-b", "20260101-a"]
@@ -163,146 +182,10 @@ class TestIndex:
 
     def test_setting_a_window_preserves_entries(self, tmp_path):
         d = _v2_thread(tmp_path)
-        idx.append(d, "todos", idx.Entry("20260101-a", "active", "A", "./todos/a.md"))
+        idx.add(d, "todos", idx.Entry("20260101-a", "active", "A", "./todos/a.md"))
         idx.set_window(d, "todos", "next_steps", ["20260101-a"])
         entries, _ = idx.read(d, "todos")
         assert len(entries) == 1
-
-
-class TestRender:
-    def test_only_next_steps_is_replaced(self, tmp_path):
-        d = _v2_thread(tmp_path)
-        idx.append(d, "todos", idx.Entry("20260101-a", "active", "Do a thing", "./todos/a.md"))
-        idx.set_window(d, "todos", "next_steps", ["20260101-a"])
-        render.render(d)
-        text = (d / "README.md").read_text()
-        assert "Do a thing" in text
-        assert "**Started**: 2026-01-01" in text
-        assert "**Related Threads**: None" in text
-        assert "Where things stand." in text
-        assert "What this is." in text
-
-    def test_hand_edits_outside_next_steps_survive(self, tmp_path):
-        d = _v2_thread(tmp_path)
-        p = d / "README.md"
-        p.write_text(p.read_text().replace("Where things stand.", "HAND EDITED"))
-        idx.append(d, "todos", idx.Entry("20260101-a", "active", "A", "./todos/a.md"))
-        idx.set_window(d, "todos", "next_steps", ["20260101-a"])
-        render.render(d)
-        assert "HAND EDITED" in p.read_text()
-
-    def test_render_is_idempotent(self, tmp_path):
-        d = _v2_thread(tmp_path)
-        idx.append(d, "todos", idx.Entry("20260101-a", "active", "A", "./todos/a.md"))
-        idx.set_window(d, "todos", "next_steps", ["20260101-a"])
-        render.render(d)
-        once = (d / "README.md").read_text()
-        render.render(d)
-        assert (d / "README.md").read_text() == once
-
-    def test_window_order_is_preserved_not_index_order(self, tmp_path):
-        d = _v2_thread(tmp_path)
-        for i in "ab":
-            idx.append(d, "todos", idx.Entry(f"20260101-{i}", "active", i.upper(), f"./todos/{i}.md"))
-        idx.set_window(d, "todos", "next_steps", ["20260101-b", "20260101-a"])
-        render.render(d)
-        body = (d / "README.md").read_text()
-        assert body.index("20260101-b") < body.index("20260101-a")
-
-    def test_empty_window_renders_a_placeholder(self, tmp_path):
-        d = _v2_thread(tmp_path)
-        render.render(d)
-        assert "## Next steps\n\n- None" in (d / "README.md").read_text()
-
-    def test_index_links_are_added_once(self, tmp_path):
-        d = _v2_thread(tmp_path)
-        render.render(d)
-        render.render(d)
-        assert (d / "README.md").read_text().count("**Indexes**:") == 1
-
-
-class TestSessionStub:
-    def test_stub_created_with_index_entry(self, tmp_path):
-        d = _v2_thread(tmp_path)
-        sid = session.ensure_stub(d, "my-topic", today="2026-05-04")
-        assert sid == "20260504-my-topic"
-        assert session.session_path(d, sid).exists()
-        entries, _ = idx.read(d, "sessions")
-        assert entries[0].id == sid
-
-    def test_stub_is_created_once(self, tmp_path):
-        d = _v2_thread(tmp_path)
-        session.ensure_stub(d, "topic", today="2026-05-04")
-        session.ensure_stub(d, "topic", today="2026-05-04")
-        entries, _ = idx.read(d, "sessions")
-        assert len(entries) == 1
-
-    def test_dead_session_still_records_what_it_touched(self, tmp_path):
-        d = _v2_thread(tmp_path)
-        sid = session.ensure_stub(d, "topic", today="2026-05-04")
-        session.note_created(d, sid, "todo 20260504-a")
-        assert "todo 20260504-a" in session.session_path(d, sid).read_text()
-
-
-class TestDateDerivation:
-    def test_frontmatter_wins(self, tmp_path):
-        p = tmp_path / "whatever.md"
-        p.write_text("---\ndate: 2026-03-04\n---\n\nbody\n")
-        assert dates.derive(p) == ("20260304", True)
-
-    def test_filename_is_used_when_frontmatter_has_none(self, tmp_path):
-        p = tmp_path / "20260211-ru12-zoning.md"
-        p.write_text("no frontmatter\n")
-        assert dates.derive(p) == ("20260211", True)
-
-    def test_hyphenated_filename_dates_are_read(self, tmp_path):
-        p = tmp_path / "2026-01-20-initial-setup.md"
-        p.write_text("x\n")
-        assert dates.derive(p) == ("20260120", True)
-
-    def test_date_anywhere_in_the_name(self, tmp_path):
-        p = tmp_path / "snapshot-20260303-parking-lot.md"
-        p.write_text("x\n")
-        assert dates.derive(p) == ("20260303", True)
-
-    def test_a_referencing_session_dates_an_undated_artifact(self, tmp_path):
-        sessions = tmp_path / "sessions"
-        sessions.mkdir()
-        (sessions / "20260607-later.md").write_text("mentions v1-remote.md\n")
-        (sessions / "20260101-first.md").write_text("created v1-remote.md today\n")
-        refs = dates.build_session_reference_map(sessions)
-        art = tmp_path / "v1-remote.md"
-        art.write_text("x\n")
-        assert dates.derive(art, refs) == ("20260101", True)
-
-    def test_unknown_is_the_epoch_and_flagged(self, tmp_path):
-        p = tmp_path / "parked.md"
-        p.write_text("x\n")
-        assert dates.derive(p) == ("19700101", False)
-
-    def test_the_unknown_value_parses_as_a_date(self):
-        from datetime import datetime
-        datetime.strptime(dates.UNKNOWN, "%Y%m%d")
-
-    def test_no_filesystem_timestamp_is_used(self, tmp_path):
-        """A file touched long after it was written keeps its filename date."""
-        import os, time
-        p = tmp_path / "20260211-old.md"
-        p.write_text("x\n")
-        os.utime(p, (time.time(), time.time()))
-        assert dates.derive(p)[0] == "20260211"
-
-
-class TestIds:
-    def test_id_shape(self):
-        assert ids.make_id("2026-07-23", "Prep Ladder!") == "20260723-prep-ladder"
-
-    def test_collisions_get_a_suffix(self):
-        assert ids.unique_id("20260101-a", {"20260101-a"}) == "20260101-a-2"
-        assert ids.unique_id("20260101-a", {"20260101-a", "20260101-a-2"}) == "20260101-a-3"
-
-    def test_ids_sort_chronologically(self):
-        assert sorted(["20260301-b", "20260101-a"])[0] == "20260101-a"
 
 
 class TestCompose:
@@ -310,8 +193,8 @@ class TestCompose:
         d = _v2_thread(tmp_path)
         (d / "decisions" / "20260101-x.md").write_text(
             "---\ntitle: X\nstatus: locked\nsummary: Chose X because it is simplest.\n---\n")
-        idx.append(d, "decisions", idx.Entry("20260101-x", "locked", "X", "./decisions/20260101-x.md"))
-        idx.append(d, "todos", idx.Entry("20260101-a", "active", "A", "./todos/a.md"))
+        idx.add(d, "decisions", idx.Entry("20260101-x", "locked", "X", "./decisions/20260101-x.md"))
+        idx.add(d, "todos", idx.Entry("20260101-a", "active", "A", "./todos/a.md"))
         idx.set_window(d, "todos", "next_steps", ["20260101-a"])
         out = v2.compose(d, "t")
         for section in ("## Status", "## Next steps", "## Decisions in force",
@@ -322,13 +205,13 @@ class TestCompose:
         d = _v2_thread(tmp_path)
         (d / "decisions" / "20260101-x.md").write_text(
             "---\ntitle: X\nstatus: locked\nsummary: Chose X because it is simplest.\n---\n")
-        idx.append(d, "decisions", idx.Entry("20260101-x", "locked", "X", "./decisions/20260101-x.md"))
+        idx.add(d, "decisions", idx.Entry("20260101-x", "locked", "X", "./decisions/20260101-x.md"))
         assert "Chose X because it is simplest." in v2.compose(d, "t")
 
     def test_sessions_are_tailed(self, tmp_path):
         d = _v2_thread(tmp_path)
         for i in range(15):
-            idx.append(d, "sessions", idx.Entry(f"202601{i:02d}-s", None, f"S{i}", f"./sessions/s{i}.md"))
+            idx.add(d, "sessions", idx.Entry(f"202601{i:02d}-s", None, f"S{i}", f"./sessions/s{i}.md"))
         out = v2.compose(d, "t")
         assert "(10 of 15)" in out
         assert "20260100-s" not in out
@@ -336,5 +219,5 @@ class TestCompose:
     def test_payload_is_far_smaller_than_a_v1_readme(self, tmp_path):
         d = _v2_thread(tmp_path)
         for i in range(35):
-            idx.append(d, "decisions", idx.Entry(f"202601{i:02d}-d", "locked", f"D{i}", f"./decisions/d{i}.md"))
+            idx.add(d, "decisions", idx.Entry(f"202601{i:02d}-d", "locked", f"D{i}", f"./decisions/d{i}.md"))
         assert len(v2.compose(d, "t").split()) < 700

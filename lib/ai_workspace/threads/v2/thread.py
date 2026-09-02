@@ -3,7 +3,7 @@
 import re
 from pathlib import Path
 
-from ai_workspace.text import _extract_yaml_field
+from ai_workspace.text import split_frontmatter
 from ai_workspace.threads import marker, v1
 from ai_workspace.threads.v2 import index as idx
 
@@ -112,6 +112,7 @@ def _decision_summary(thread_dir: Path, entry: idx.Entry) -> str:
     if not path.is_file():
         return ""
     try:
-        return _extract_yaml_field(path.read_text(errors="ignore")[:2000], "summary") or ""
+        fields, _ = split_frontmatter(path.read_text(errors="ignore")[:2000])
+        return str(fields.get("summary") or "")
     except OSError:
         return ""
