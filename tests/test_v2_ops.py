@@ -8,6 +8,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
 sys.path.insert(0, str(Path(__file__).parent.parent / "skills" / "threads" / "scripts"))
 
+from ai_workspace.text import split_frontmatter
 from ai_workspace.threads import marker
 from ai_workspace.threads.v2 import index as idx
 from ai_workspace.threads.v2 import ops
@@ -208,7 +209,8 @@ class TestSaveSession:
         assert "Saved" in out
         sid = _only_id(d, "sessions")
         text = (d / "sessions" / f"{sid}.md").read_text()
-        assert "summary: Prepped the round." in text
+        fields, _ = split_frontmatter(text)
+        assert fields["summary"] == "Prepped the round."
         assert "What happened." in text
         readme = (d / "README.md").read_text()
         assert "Round 3 booked for Friday." in readme
@@ -224,7 +226,7 @@ class TestSaveSession:
         save_session(str(tmp_path), "t", "topic", "s", "k", "n")
         text = p.read_text()
         assert "Written incrementally by hand." in text
-        assert "summary: s" in text
+        assert split_frontmatter(text)[0]["summary"] == "s"
 
     def test_saving_clears_the_unsaved_marker(self, tmp_path):
         d = _thread(tmp_path)
