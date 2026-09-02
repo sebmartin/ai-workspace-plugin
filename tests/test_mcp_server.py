@@ -13,21 +13,21 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
 sys.path.insert(0, str(Path(__file__).parent.parent / "skills" / "threads" / "scripts"))
 
-import mcp_server
+import mcp_server  # noqa: F401  (imported for its sys.path side effect)
+from ai_workspace.threads.v1 import thread as v1_thread
+from ai_workspace import workspace as ws_module
 from mcp_server import (
     archive_thread,
     create_thread,
     resume_thread,
     get_skill_file,
-    inspect_archive,
     list_archived_threads,
     list_threads,
-    purge_archive_tmp,
     resolve_workspace,
     restore_thread,
     set_default_workspace,
 )
-from workspace_utils import get_config_dir, read_config, write_config
+from ai_workspace.config import get_config_dir, read_config, write_config
 
 
 @pytest.fixture(autouse=True)
@@ -218,6 +218,22 @@ class TestCreateThread:
         assert not result.startswith("Workspace:")
         assert "already exists" in result
 
+    def test_an_archived_name_is_not_free(self, tmp_path):
+        """Taking it would strand the archive: no restore, no re-archive."""
+        _make_thread(tmp_path, "shelved")
+        archive_thread(str(tmp_path), "shelved")
+        result = create_thread(str(tmp_path), "shelved")
+        assert "archived thread" in result
+        assert not result.startswith("Workspace:")
+        assert "Restored 'shelved'" in restore_thread(str(tmp_path), "shelved")
+
+    def test_a_name_held_by_a_pre_3_0_tarball_is_not_free(self, tmp_path):
+        """Otherwise one name ends up with two archives in two formats."""
+        (tmp_path / "threads").mkdir()
+        (tmp_path / "archive").mkdir()
+        (tmp_path / "archive" / "2026-shelved.tar.gz").write_bytes(b"stand-in")
+        assert "archived thread" in create_thread(str(tmp_path), "shelved")
+
     def test_invalid_name_rejected_before_resolution(self, tmp_path):
         # Bare dir, but name validation runs first so we should see name error,
         # not NO_WORKSPACE.
@@ -385,246 +401,117 @@ class TestConfigHelpers:
 
 
 class TestArchiveThread:
-    def test_success_tar_gz(self, tmp_path):
-        _make_thread(tmp_path, "scratch")
-        result = archive_thread(
-            str(tmp_path), "scratch",
-            summary="Quick test thread.",
-            keywords=["test", "scratch"],
-            body="## Topics\n\nTest body content.\n",
-        )
-        assert "Archived 'scratch'" in result
-        assert (tmp_path / "archive" / "2026-scratch.tar.gz").exists()
-        assert (tmp_path / "archive" / "2026-scratch.md").exists()
-        assert not (tmp_path / "threads" / "scratch").exists()
+    def test_moves_the_directory(self, tmp_path):
+        _make_thread(tmp_path, "old-work")
+        result = archive_thread(str(tmp_path), "old-work")
+        assert "Archived 'old-work'" in result
+        assert not (tmp_path / "threads" / "old-work").exists()
+        assert (tmp_path / "archive" / "old-work" / "README.md").exists()
 
-        summary = (tmp_path / "archive" / "2026-scratch.md").read_text()
-        assert "thread: scratch" in summary
-        assert "started: 2026-01-15" in summary
-        assert "last_active: 2026-04-22" in summary
-        assert 'summary: "Quick test thread."' in summary
-        assert "keywords:" in summary
-        assert '- "test"' in summary
-        assert "Test body content." in summary
+    def test_says_the_archive_is_read_only(self, tmp_path):
+        _make_thread(tmp_path, "old-work")
+        assert "read-only" in archive_thread(str(tmp_path), "old-work")
 
-    def test_invalid_thread_name(self, tmp_path):
-        result = archive_thread(str(tmp_path), "Bad Name", "s", [], "b")
-        assert "Invalid thread name" in result
+    def test_contents_survive_untouched(self, tmp_path):
+        d = _make_thread(tmp_path, "old-work")
+        (d / "sessions" / "20260101-a.md").write_text("kept\n")
+        archive_thread(str(tmp_path), "old-work")
+        assert (tmp_path / "archive" / "old-work" / "sessions" / "20260101-a.md").read_text() == "kept\n"
 
     def test_missing_thread(self, tmp_path):
         (tmp_path / "threads").mkdir()
-        result = archive_thread(str(tmp_path), "ghost", "s", [], "b")
-        assert "not found" in result
+        assert "not found" in archive_thread(str(tmp_path), "nope")
 
-    def test_conflict_blocks_archive(self, tmp_path):
-        _make_thread(tmp_path, "scratch")
-        archive_thread(str(tmp_path), "scratch", "s", [], "b")
-        _make_thread(tmp_path, "scratch")
-        result = archive_thread(str(tmp_path), "scratch", "s", [], "b")
+    def test_traversal_name_is_refused(self, tmp_path):
+        (tmp_path / "threads").mkdir()
+        for name in ("../escape", "a/b", "/abs", ".."):
+            assert "Invalid thread name" in archive_thread(str(tmp_path), name), name
+
+    def test_unconventional_name_is_not_refused(self, tmp_path):
+        """A thread already on disk is archived whatever it is called."""
+        _make_thread(tmp_path, "Q3_planning")
+        assert "Archived 'Q3_planning'" in archive_thread(str(tmp_path), "Q3_planning")
+
+    def test_occupied_destination_refuses_rather_than_nesting(self, tmp_path):
+        """shutil.move onto an existing directory would nest inside it."""
+        _make_thread(tmp_path, "dupe")
+        archive_thread(str(tmp_path), "dupe")
+        _make_thread(tmp_path, "dupe")
+        result = archive_thread(str(tmp_path), "dupe")
         assert "already exists" in result
+        assert not (tmp_path / "archive" / "dupe" / "dupe").exists()
+        assert (tmp_path / "threads" / "dupe").is_dir()
 
-    def test_mtime_fallback_when_readme_lacks_dates(self, tmp_path):
-        thread = tmp_path / "threads" / "no-dates"
-        thread.mkdir(parents=True)
-        (thread / "README.md").write_text("# Thread\n\n**Status**: Active\n")
-        result = archive_thread(str(tmp_path), "no-dates", "s", [], "b")
-        assert "Archived" in result
-        summary = (tmp_path / "archive" / "2026-no-dates.md").read_text()
-        # Both dates present (ISO format YYYY-MM-DD), came from mtime fallback
-        assert "started: " in summary
-        assert "last_active: " in summary
-
-    def test_schema_version_in_frontmatter(self, tmp_path):
-        _make_thread(tmp_path, "ver")
-        archive_thread(str(tmp_path), "ver", "s", [], "b")
-        summary = (tmp_path / "archive" / "2026-ver.md").read_text()
-        assert "schema_version: 1" in summary
-
-    def test_symlink_in_thread_rejected(self, tmp_path):
-        thread = _make_thread(tmp_path, "linky")
-        (thread / "danger").symlink_to(tmp_path)
-        result = archive_thread(str(tmp_path), "linky", "s", [], "b")
-        assert "Error" in result
-        assert "symlinks" in result.lower()
-        # Original intact, no archive written
-        assert thread.exists()
-        assert not (tmp_path / "archive" / "2026-linky.tar.gz").exists()
-        assert not (tmp_path / "archive" / "2026-linky.md").exists()
-
-    def test_keyword_normalisation(self, tmp_path):
-        _make_thread(tmp_path, "norm")
-        archive_thread(
-            str(tmp_path), "norm", "s",
-            ["Auth", "  auth ", "OAuth", "oauth", ""],
-            "b",
-        )
-        summary = (tmp_path / "archive" / "2026-norm.md").read_text()
-        # Preserve order of first-seen, lowercase, dedup
-        idx_auth = summary.index('- "auth"')
-        idx_oauth = summary.index('- "oauth"')
-        assert idx_auth < idx_oauth
-        # No "Auth" or "OAuth" variants
-        assert '- "Auth"' not in summary
-        assert '- "OAuth"' not in summary
-
-    def test_empty_keywords_emits_inline_list(self, tmp_path):
-        _make_thread(tmp_path, "nokw")
-        archive_thread(str(tmp_path), "nokw", "s", [], "b")
-        summary = (tmp_path / "archive" / "2026-nokw.md").read_text()
-        assert "keywords: []" in summary
-
-    def test_summary_with_special_chars_escaped(self, tmp_path):
-        _make_thread(tmp_path, "esc")
-        archive_thread(
-            str(tmp_path), "esc",
-            'has: colons and "quotes"',
-            [], "b",
-        )
-        summary = (tmp_path / "archive" / "2026-esc.md").read_text()
-        assert 'summary: "has: colons and \\"quotes\\""' in summary
-
-    def test_integrity_guard_rollback(self, tmp_path, monkeypatch):
-        """If verify fails, archive deleted, original intact, no summary."""
-        _make_thread(tmp_path, "guard")
+    def test_failure_leaves_the_thread_in_place(self, tmp_path, monkeypatch):
+        """A rename either happens or does not; there is no half-moved thread."""
+        _make_thread(tmp_path, "stuck")
         monkeypatch.setattr(
-            mcp_server, "_verify_archive",
-            lambda *a, **kw: "fake integrity failure",
+            Path, "rename",
+            lambda *a, **kw: (_ for _ in ()).throw(OSError("Device or resource busy")),
         )
-        result = archive_thread(str(tmp_path), "guard", "s", [], "b")
-        assert "Error" in result and "fake integrity failure" in result
-        assert (tmp_path / "threads" / "guard").exists()
-        assert (tmp_path / "threads" / "guard" / "README.md").exists()
-        assert not (tmp_path / "archive" / "2026-guard.tar.gz").exists()
-        assert not (tmp_path / "archive" / "2026-guard.md").exists()
+        result = archive_thread(str(tmp_path), "stuck")
+        assert "untouched" in result and "busy" in result
+        assert (tmp_path / "threads" / "stuck" / "README.md").exists()
+        assert not (tmp_path / "archive" / "stuck").exists()
 
-    def test_summary_write_failure_rollback(self, tmp_path, monkeypatch):
-        """If summary write fails, archive deleted, original intact."""
-        _make_thread(tmp_path, "sumfail")
+    def test_already_archived_says_so(self, tmp_path):
+        """Checking only threads/ made this report the thread as missing."""
+        _make_thread(tmp_path, "gone")
+        archive_thread(str(tmp_path), "gone")
+        assert "already archived" in archive_thread(str(tmp_path), "gone")
 
-        original_write_text = Path.write_text
-        def boom(self, *args, **kwargs):
-            if self.name.endswith(".md") and "archive" in self.parts:
-                raise OSError("simulated disk full")
-            return original_write_text(self, *args, **kwargs)
-        monkeypatch.setattr(Path, "write_text", boom)
-
-        result = archive_thread(str(tmp_path), "sumfail", "s", [], "b")
-        assert "Error" in result
-        assert (tmp_path / "threads" / "sumfail").exists()
-        assert not (tmp_path / "archive" / "2026-sumfail.tar.gz").exists()
+    def test_a_thread_named_tmp_is_archived_like_any_other(self, tmp_path):
+        """archive/tmp was a staging directory nothing creates any more."""
+        _make_thread(tmp_path, "tmp")
+        assert "Archived 'tmp'" in archive_thread(str(tmp_path), "tmp")
+        assert "tmp" in list_archived_threads(str(tmp_path))
 
 
 class TestRestoreThread:
-    def _archive(self, tmp_path, name="rt"):
-        _make_thread(tmp_path, name)
-        archive_thread(str(tmp_path), name, "s", ["k"], "b")
-        return f"2026-{name}"
+    def test_round_trip(self, tmp_path):
+        d = _make_thread(tmp_path, "back")
+        (d / "sessions" / "20260101-a.md").write_text("kept\n")
+        archive_thread(str(tmp_path), "back")
+        assert "Restored 'back'" in restore_thread(str(tmp_path), "back")
+        assert (tmp_path / "threads" / "back" / "sessions" / "20260101-a.md").read_text() == "kept\n"
+        assert not (tmp_path / "archive" / "back").exists()
 
-    def test_round_trip_tar_gz(self, tmp_path):
-        base = self._archive(tmp_path, "rt")
-        result = restore_thread(str(tmp_path), base)
-        assert "Restored to threads/rt" in result
-        assert (tmp_path / "threads" / "rt" / "README.md").exists()
-        assert (tmp_path / "threads" / "rt" / "sessions" / "20260415-first.md").exists()
-        assert not (tmp_path / "archive" / f"{base}.tar.gz").exists()
-        assert not (tmp_path / "archive" / f"{base}.md").exists()
-
-    def test_restored_session_written(self, tmp_path):
-        _make_thread(tmp_path, "rs")
-        archive_thread(
-            str(tmp_path), "rs",
-            summary="The original summary.",
-            keywords=["k1", "k2"],
-            body="## Topics\n\nOriginal body content here.\n",
-        )
-        restore_thread(str(tmp_path), "2026-rs")
-        sessions = list((tmp_path / "threads" / "rs" / "sessions").glob("*-restored.md"))
-        assert len(sessions) == 1, f"expected exactly one restored-session, got {sessions}"
-        text = sessions[0].read_text()
-        assert "Restored from archive" in text
-        assert "The original summary." in text
-        assert "Original body content here." in text
-        # Pre-existing sessions are preserved
-        assert (tmp_path / "threads" / "rs" / "sessions" / "20260415-first.md").exists()
-
-    def test_collision_appends_restored(self, tmp_path):
-        base = self._archive(tmp_path, "coll")
-        # Create a conflicting thread before restoring
-        _make_thread(tmp_path, "coll")
-        result = restore_thread(str(tmp_path), base)
-        assert "threads/coll-restored" in result
-        assert (tmp_path / "threads" / "coll-restored" / "README.md").exists()
-
-    def test_double_collision_uses_numeric_suffix(self, tmp_path):
-        base = self._archive(tmp_path, "dbl")
-        _make_thread(tmp_path, "dbl")
-        _make_thread(tmp_path, "dbl-restored")
-        result = restore_thread(str(tmp_path), base)
-        assert "threads/dbl-restored-2" in result
-        assert (tmp_path / "threads" / "dbl-restored-2" / "README.md").exists()
-
-    def test_triple_collision_keeps_incrementing(self, tmp_path):
-        base = self._archive(tmp_path, "tri")
-        _make_thread(tmp_path, "tri")
-        _make_thread(tmp_path, "tri-restored")
-        _make_thread(tmp_path, "tri-restored-2")
-        result = restore_thread(str(tmp_path), base)
-        assert "threads/tri-restored-3" in result
+    def test_nothing_is_recorded_about_the_restore(self, tmp_path):
+        """A move returns the thread as it was, so there is nothing to note."""
+        _make_thread(tmp_path, "back")
+        sessions = tmp_path / "threads" / "back" / "sessions"
+        before = sorted(p.name for p in sessions.iterdir())
+        archive_thread(str(tmp_path), "back")
+        restore_thread(str(tmp_path), "back")
+        assert sorted(p.name for p in sessions.iterdir()) == before
 
     def test_missing_archive(self, tmp_path):
         (tmp_path / "threads").mkdir()
-        result = restore_thread(str(tmp_path), "2026-ghost")
-        assert "not found" in result
+        assert "No archived thread" in restore_thread(str(tmp_path), "nope")
 
-    def test_invalid_archive_base_rejected(self, tmp_path):
-        for bad in ["../../etc/passwd", "/abs/path", "no-year", "2026-Bad"]:
-            result = restore_thread(str(tmp_path), bad)
-            assert "Invalid archive base" in result, f"failed for {bad!r}"
+    def test_a_live_thread_of_that_name_blocks_the_restore(self, tmp_path):
+        _make_thread(tmp_path, "clash")
+        archive_thread(str(tmp_path), "clash")
+        _make_thread(tmp_path, "clash")
+        result = restore_thread(str(tmp_path), "clash")
+        assert "already in threads/" in result
+        assert (tmp_path / "archive" / "clash").is_dir()
 
-    def test_malicious_tar_member_rejected(self, tmp_path):
+    def test_a_restored_tarball_leaves_the_thread_reachable(self, tmp_path):
+        """Extracting is a copy, so the tarball outlives the restore it produced."""
+        _make_thread(tmp_path, "ancient")
+        (tmp_path / "archive").mkdir()
+        (tmp_path / "archive" / "2026-ancient.tar.gz").write_bytes(b"stand-in")
+        assert ws_module.thread_state(tmp_path, "ancient") == ws_module.ACTIVE
+        assert "Quick Resume" in resume_thread(str(tmp_path), "ancient")
+
+    def test_legacy_tarball_points_at_the_reference(self, tmp_path):
         (tmp_path / "threads").mkdir()
-        archive_dir = tmp_path / "archive"
-        archive_dir.mkdir()
-        tar_path = archive_dir / "2026-evil.tar.gz"
-        with tarfile.open(tar_path, "w:gz") as t:
-            # Add a benign top-level dir so single-top-level check passes
-            info = tarfile.TarInfo("evil/")
-            info.type = tarfile.DIRTYPE
-            t.addfile(info)
-            # Now a traversal member
-            info = tarfile.TarInfo("evil/../../escape.txt")
-            data = b"pwned"
-            info.size = len(data)
-            t.addfile(info, io.BytesIO(data))
-
-        result = restore_thread(str(tmp_path), "2026-evil")
-        # Either the multi-top-level check or the traversal guard catches it.
-        # In any case: no file written outside archive/tmp/_restore_*/
-        # and no thread restored to threads/.
-        assert "Error" in result
-        assert not (tmp_path / "escape.txt").exists()
-        assert not (tmp_path.parent / "escape.txt").exists()
-        assert not (tmp_path / "threads" / "evil").exists()
-
-    def test_multi_top_level_archive_rejected(self, tmp_path):
-        (tmp_path / "threads").mkdir()
-        archive_dir = tmp_path / "archive"
-        archive_dir.mkdir()
-        tar_path = archive_dir / "2026-multi.tar.gz"
-        with tarfile.open(tar_path, "w:gz") as t:
-            for top in ("a", "b"):
-                info = tarfile.TarInfo(f"{top}/file.txt")
-                data = b"x"
-                info.size = len(data)
-                t.addfile(info, io.BytesIO(data))
-        result = restore_thread(str(tmp_path), "2026-multi")
-        assert "single top-level" in result
-
-    def test_staging_cleaned_up(self, tmp_path):
-        base = self._archive(tmp_path, "clean")
-        restore_thread(str(tmp_path), base)
-        staging = tmp_path / "archive" / "tmp" / f"_restore_{base}"
-        assert not staging.exists()
+        (tmp_path / "archive").mkdir()
+        (tmp_path / "archive" / "2026-ancient.tar.gz").write_bytes(b"not really a tarball")
+        result = restore_thread(str(tmp_path), "ancient")
+        assert "LEGACY_ARCHIVE" in result
+        assert "unpack-legacy-archive.md" in result
 
 
 class TestListArchivedThreads:
@@ -632,131 +519,42 @@ class TestListArchivedThreads:
         (tmp_path / "threads").mkdir()
         assert "No archived threads" in list_archived_threads(str(tmp_path))
 
-    def test_missing_archive_dir(self, tmp_path):
-        (tmp_path / "threads").mkdir()
-        assert "No archived threads" in list_archived_threads(str(tmp_path))
-
-    def test_lists_archives_sorted_newest_first(self, tmp_path, monkeypatch):
-        # Create two archives with different `archived:` dates
-        _make_thread(tmp_path, "older")
-        archive_thread(str(tmp_path), "older", "old", ["a", "b"], "x")
-        # Tweak the older summary to backdate its archived: field
-        older_md = tmp_path / "archive" / "2026-older.md"
-        older_md.write_text(
-            older_md.read_text().replace(
-                "archived: ", "archived: 2025-01-01\n# was: "
-            )
-        )
-
-        _make_thread(tmp_path, "newer")
-        archive_thread(str(tmp_path), "newer", "new", ["c"], "y")
-
+    def test_lists_directories_and_says_they_are_read_only(self, tmp_path):
+        _make_thread(tmp_path, "one")
+        archive_thread(str(tmp_path), "one")
         result = list_archived_threads(str(tmp_path))
-        lines = result.strip().split("\n")
-        assert lines[0].startswith("2026-newer")
-        assert lines[1].startswith("2026-older")
-        assert "keywords: a, b" in lines[1]
-        assert "keywords: c" in lines[0]
+        assert "one" in result
+        assert "read-only" in result
 
-    def test_tmp_subdir_skipped(self, tmp_path):
-        archive_dir = tmp_path / "archive"
-        (archive_dir / "tmp" / "2026-extracted").mkdir(parents=True)
-        # Create a stray .md in tmp that should be ignored (glob is non-recursive,
-        # but just to be safe assert the result doesn't include tmp entries)
-        (archive_dir / "tmp" / "stray.md").write_text("---\n---\n")
+    def test_legacy_tarball_listed(self, tmp_path):
+        (tmp_path / "threads").mkdir()
+        (tmp_path / "archive").mkdir()
+        (tmp_path / "archive" / "2026-ancient.tar.gz").write_bytes(b"x")
         result = list_archived_threads(str(tmp_path))
-        assert "stray" not in result
+        assert "ancient" in result and "before 3.0" in result
 
-    def test_orphan_md_without_archive_skipped(self, tmp_path):
-        (tmp_path / "threads").mkdir()
-        archive_dir = tmp_path / "archive"
-        archive_dir.mkdir()
-        (archive_dir / "2026-orphan.md").write_text(
-            "---\nthread: orphan\n---\n"
-        )
+    def test_legacy_tarball_hidden_once_its_thread_exists(self, tmp_path):
+        """Extracting is a copy, so the tarball outlives a legacy restore.
+
+        Listing it beside the thread it produced is the confusing state.
+        """
+        _make_thread(tmp_path, "ancient")
+        (tmp_path / "archive").mkdir()
+        (tmp_path / "archive" / "2026-ancient.tar.gz").write_bytes(b"x")
+        assert "ancient" not in list_archived_threads(str(tmp_path))
+
+        archive_thread(str(tmp_path), "ancient")
         result = list_archived_threads(str(tmp_path))
-        assert "orphan" not in result
-
-class TestInspectArchive:
-    def _archive(self, tmp_path, name="ins"):
-        _make_thread(tmp_path, name)
-        archive_thread(str(tmp_path), name, "s", [], "b")
-        return f"2026-{name}"
-
-    def test_success(self, tmp_path):
-        base = self._archive(tmp_path, "ins")
-        result = inspect_archive(str(tmp_path), base)
-        assert "Extracted to" in result
-        assert (tmp_path / "archive" / "tmp" / base / "ins" / "README.md").exists()
-        # Original archive + summary still in place
-        assert (tmp_path / "archive" / f"{base}.tar.gz").exists()
-        assert (tmp_path / "archive" / f"{base}.md").exists()
-
-    def test_repeated_inspect_overwrites_cleanly(self, tmp_path):
-        base = self._archive(tmp_path, "twice")
-        inspect_archive(str(tmp_path), base)
-        # Leave a stray file in the extract dir
-        stray = tmp_path / "archive" / "tmp" / base / "stray.txt"
-        stray.write_text("garbage")
-        assert stray.exists()
-        inspect_archive(str(tmp_path), base)
-        assert not stray.exists()
-        assert (tmp_path / "archive" / "tmp" / base / "twice" / "README.md").exists()
-
-    def test_missing_archive(self, tmp_path):
-        (tmp_path / "threads").mkdir()
-        result = inspect_archive(str(tmp_path), "2026-ghost")
-        assert "not found" in result
-
-    def test_invalid_archive_base_rejected(self, tmp_path):
-        result = inspect_archive(str(tmp_path), "../etc/passwd")
-        assert "Invalid archive base" in result
-
-    def test_malicious_archive_rejected(self, tmp_path):
-        (tmp_path / "threads").mkdir()
-        archive_dir = tmp_path / "archive"
-        archive_dir.mkdir()
-        tar_path = archive_dir / "2026-bad.tar.gz"
-        with tarfile.open(tar_path, "w:gz") as t:
-            info = tarfile.TarInfo("bad/")
-            info.type = tarfile.DIRTYPE
-            t.addfile(info)
-            info = tarfile.TarInfo("bad/../../escape.txt")
-            data = b"x"
-            info.size = len(data)
-            t.addfile(info, io.BytesIO(data))
-        result = inspect_archive(str(tmp_path), "2026-bad")
-        assert "Error" in result
-        assert not (tmp_path / "escape.txt").exists()
+        assert result.count("ancient") == 1
 
 
-class TestPurgeArchiveTmp:
-    def test_no_op_when_missing(self, tmp_path):
-        (tmp_path / "threads").mkdir()
-        result = purge_archive_tmp(str(tmp_path))
-        assert "already clean" in result
-
-    def test_removes_tmp_subtree(self, tmp_path):
-        (tmp_path / "threads").mkdir()
-        tmp_dir = tmp_path / "archive" / "tmp" / "2026-x" / "thread"
-        tmp_dir.mkdir(parents=True)
-        (tmp_dir / "file.txt").write_text("content")
-        result = purge_archive_tmp(str(tmp_path))
-        assert "Purged" in result
-        assert not (tmp_path / "archive" / "tmp").exists()
-
-    def test_does_not_touch_siblings(self, tmp_path):
-        (tmp_path / "threads").mkdir()
-        archive_dir = tmp_path / "archive"
-        archive_dir.mkdir()
-        (archive_dir / "2026-keep.md").write_text("---\nthread: keep\n---\n")
-        (archive_dir / "2026-keep.tar.gz").write_bytes(b"fake-but-untouched")
-        (archive_dir / "tmp").mkdir()
-        (archive_dir / "tmp" / "x.txt").write_text("scratch")
-        purge_archive_tmp(str(tmp_path))
-        assert (archive_dir / "2026-keep.md").exists()
-        assert (archive_dir / "2026-keep.tar.gz").exists()
-        assert not (archive_dir / "tmp").exists()
+class TestArchivedThreadsAreReadOnly:
+    def test_resume_says_archived_not_missing(self, tmp_path):
+        _make_thread(tmp_path, "shelved")
+        archive_thread(str(tmp_path), "shelved")
+        result = resume_thread(str(tmp_path), "shelved")
+        assert "is archived" in result and "read-only" in result
+        assert "not found" not in result
 
 
 class TestGetSkillFile:

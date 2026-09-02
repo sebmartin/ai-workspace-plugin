@@ -34,6 +34,18 @@ Cases that are easy to miss:
 - **A repo's own `AGENTS.md` or `CLAUDE.md`.** Pointing one at a `decisions/` or `threads/` directory that exists only in the workspace reads as valid until someone tries to follow it.
 - **Names, not just paths.** "Per the vendor-keyed-auth decision" is as unfollowable as a file path, and reads as more authoritative.
 
+## Archived threads are read-only
+
+Archiving moves `threads/{name}` to `archive/{name}`. The thread keeps its shape, so an
+archived thread looks exactly like a live one and nothing stops you writing to it.
+
+**Read an archived thread when asked. Never write to one.** No sessions, no decisions, no
+edits, not even a correction. To work on an archived thread, restore it first, which moves
+it back into `threads/`.
+
+The MCP tools cannot reach into `archive/` at all, so this only binds when you are reading
+and writing files directly.
+
 ## Workspace Resolution
 
 This skill is part of the `ai-workspace` plugin. On Claude Code it is invoked via the `/ai-workspace:threads` slash command. On Codex CLI it is invoked via `$threads` or natural language.
@@ -78,7 +90,7 @@ The README is a lean index — the complete map of a thread. It must be short en
 **Use case**: Starting a new session or switching threads within an active session.
 
 - If thread name provided: resume it. If not: list threads with numbers, ask which, wait for reply.
-- **Archive fallback**: If not found among active threads, call `list_archived_threads` and scan for a match. If found, tell the user it's archived and offer to restore.
+- **Archive fallback**: If not found among active threads, call `list_archived_threads` and scan for a match. If found, say it is archived and offer to restore. Do not read it in place and carry on: an archived thread is read-only.
 - Read the thread's README.md **in full** — every section. This is the complete map.
 - From the sessions listed in the README, load context using a recency gradient — do not surface this in the output. Use this context to decide whether a full session read is warranted later: if the user asks about something covered in a recent session, you already know enough to answer or to know which session to read in full.
   - **Most recent session**: read frontmatter (`summary`, `keywords`, `next_context`)
@@ -139,7 +151,8 @@ For trivial commands, instructions are inline. For complex commands, read the re
 | `create-thread` | Create a new thread | `commands/create-thread.md` |
 | `park-topic` | Park topics, pop them, list parked | `commands/park-topic.md` |
 | `link-thread` | Link parent, child, or related threads | `commands/link-thread.md` |
-| `archive-thread` | Archive, restore, list, inspect, and purge archive tmp | `commands/archive-thread.md` |
+| `archive-thread` | Archive, restore, and list archived threads | `commands/archive-thread.md` |
+| `unpack-legacy-archive` | Restore a `.tar.gz` archive from before 3.0 | `commands/unpack-legacy-archive.md` |
 | `open` | `open threads/{name}` or `open threads`; confirm | inline |
 | `set-workspace` | Call `set_default_workspace` with provided path, then offer to install global permissions | inline |
 | `status` | Read thread README.md, show Quick Resume | inline |
@@ -157,7 +170,7 @@ Reference files are loaded via `mcp__plugin_ai-workspace_threads__get_skill_file
 - "Create a thread" / "New thread about [topic]"
 - "Park [topic]" / "Pop" / "What's parked?"
 - "Link parent [name]" / "Create child [name]" / "Link related [name]"
-- "Archive [name]" / "Restore [base]" / "List archived" / "Inspect [base]"
+- "Archive [name]" / "Restore [name]" / "List archived"
 - "Open [name] in Finder" / "Set workspace to [path]"
 - Just a number like "2" (when responding to a selection prompt)
 
@@ -171,19 +184,17 @@ Server: `threads`, exposed under the plugin's vendor-prefixed bridge.
 - `mcp__plugin_ai-workspace_threads__resume_thread(workspace_dir, thread_name)` — Resolve workspace + thread path, return full README
 - `mcp__plugin_ai-workspace_threads__create_thread(workspace_dir, thread_name)`
 - `mcp__plugin_ai-workspace_threads__get_skill_file(relative_path)` — Read any file from the plugin directory; use for templates (`templates/foo.md`) and command references (`skills/threads/commands/foo.md`)
-- `mcp__plugin_ai-workspace_threads__archive_thread(workspace_dir, thread_name, summary, keywords, body)`
-- `mcp__plugin_ai-workspace_threads__restore_thread(workspace_dir, archive_base)`
+- `mcp__plugin_ai-workspace_threads__archive_thread(workspace_dir, thread_name)`
+- `mcp__plugin_ai-workspace_threads__restore_thread(workspace_dir, thread_name)`
 - `mcp__plugin_ai-workspace_threads__list_archived_threads(workspace_dir)`
-- `mcp__plugin_ai-workspace_threads__inspect_archive(workspace_dir, archive_base)`
-- `mcp__plugin_ai-workspace_threads__purge_archive_tmp(workspace_dir)`
 
 Pass the caller's current working directory as `workspace_dir` (literal path, not `$(pwd)`).
 
 **If MCP tools are unavailable:** The threads MCP server failed to start. Two likely causes:
 
 1. **`uv` not installed** — direct the user to https://docs.astral.sh/uv/getting-started/installation/
-2. **Dependency or version mismatch** — the server needs `mcp>=2` on Python 3.12+. Have the user run the launch command by hand to see the real error:
+2. **Dependency or version mismatch** — the server declares what it needs in a `# /// script` block at the top of `skills/threads/scripts/mcp_server.py`. Have the user run the launch command by hand to see the real error:
    ```
-   uv run --python '>=3.12' --with 'mcp>=2' python3 <plugin-root>/skills/threads/scripts/mcp_server.py
+   uv run --script <plugin-root>/skills/threads/scripts/mcp_server.py
    ```
    An `ImportError`/`ModuleNotFoundError` on `mcp.server.*` means the resolved `mcp` version doesn't match what the server imports.
