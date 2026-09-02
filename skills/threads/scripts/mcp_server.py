@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.12"
-# dependencies = ["mcp>=2"]
+# dependencies = ["mcp>=2", "python-frontmatter"]
 # ///
 """Threads MCP Server - the tool surface.
 
