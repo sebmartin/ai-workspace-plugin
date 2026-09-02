@@ -14,17 +14,42 @@ REPO = Path(__file__).resolve().parent.parent
 SERVER = REPO / "skills" / "threads" / "scripts" / "mcp_server.py"
 sys.path.insert(0, str(REPO / "lib"))
 
-_VERSION_REF = re.compile(r"\bv\d+\b|\b_v\d+\w*\b")
+_SCHEMA_MODULE = re.compile(r"^_?v\d+$")
 
 
 def test_tool_surface_names_no_schema_version():
-    offenders = [
-        f"{n}: {line.strip()}"
-        for n, line in enumerate(SERVER.read_text().splitlines(), 1)
-        if _VERSION_REF.search(line)
-    ]
+    """No tool reaches for a schema directly; they all go through the API.
+
+    Parses the module rather than grepping lines, so a version that appears in
+    prose is not mistaken for one that appears in code. Docstrings legitimately
+    name things like my-thread-v1 when explaining a migration to the model.
+    """
+    import ast
+
+    tree = ast.parse(SERVER.read_text())
+    offenders = []
+
+    def _flag(node, text):
+        offenders.append(f"line {node.lineno}: {text}")
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            if _SCHEMA_MODULE.search(node.module):
+                _flag(node, f"from {node.module} import ...")
+            for alias in node.names:
+                if _SCHEMA_MODULE.search(alias.name):
+                    _flag(node, f"from {node.module} import {alias.name}")
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                if _SCHEMA_MODULE.search(alias.name):
+                    _flag(node, f"import {alias.name}")
+        elif isinstance(node, ast.Attribute) and _SCHEMA_MODULE.search(node.attr):
+            _flag(node, f"...{node.attr}")
+        elif isinstance(node, ast.Name) and _SCHEMA_MODULE.search(node.id):
+            _flag(node, node.id)
+
     assert not offenders, (
-        "mcp_server.py names a schema version directly. Call the threads API "
+        "mcp_server.py names a schema version in code. Call the threads API "
         "instead, which resolves the schema itself:\n  " + "\n  ".join(offenders)
     )
 
@@ -119,9 +144,9 @@ def _dispatched_operations() -> set[str]:
 
     Both call shapes count, and reading only one of them is how a guard stops
     guarding: `_for(..., "add_todo")` in the API, and `implementation(thread).op`
-    wherever a caller already holds a resolved thread. note_restore and
-    last_active are dispatched only the second way, so a list built from
-    __all__ or from _for alone would never have covered them.
+    wherever a caller already holds a resolved thread. `create` is dispatched
+    only the second way, because a thread being created has no marker to read
+    and so is never resolved through `_for`.
     """
     import ast
 
@@ -184,3 +209,82 @@ def test_dispatched_operations_are_declared_on_every_schema_that_has_them():
             if hasattr(module, op) and op not in surface:
                 undeclared.append(f"schema {version} provides {op!r} but omits it from __all__")
     assert not undeclared, "\n  ".join([""] + undeclared)
+
+def _threads_pkg() -> Path:
+    return REPO / "lib" / "ai_workspace" / "threads"
+
+
+def _names_defined_in(init: Path) -> set[str]:
+    import ast
+
+    names = set()
+    for node in ast.parse(init.read_text()).body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            names.add(node.name)
+        elif isinstance(node, ast.Assign):
+            names.update(t.id for t in node.targets if isinstance(t, ast.Name))
+    return names
+
+
+def test_no_module_imports_a_name_from_the_package_that_imports_it():
+    """Inside threads/, import sibling modules, never names from __init__.py.
+
+    threads/__init__.py imports schema.py, which imports every schema, so a
+    schema is loaded while the package is only partly initialised. Python
+    resolves a submodule import at that point; an attribute of the package does
+    not exist yet, and the failure is an ImportError at server start rather
+    than anything a unit test would notice.
+    """
+    import ast
+
+    pkg = _threads_pkg()
+    init_only = _names_defined_in(pkg / "__init__.py") - {
+        p.stem for p in pkg.iterdir()
+    }
+    offenders = []
+    for module in sorted(pkg.rglob("*.py")):
+        if module == pkg / "__init__.py":
+            continue
+        for node in ast.walk(ast.parse(module.read_text())):
+            if isinstance(node, ast.ImportFrom) and node.module == "ai_workspace.threads":
+                for alias in node.names:
+                    if alias.name in init_only:
+                        offenders.append(
+                            f"{module.relative_to(REPO)}:{node.lineno} imports "
+                            f"{alias.name!r}, which is defined in threads/__init__.py"
+                        )
+    assert not offenders, "\n  ".join(["import cycle waiting to happen:"] + offenders)
+
+
+def test_a_schema_imports_only_the_one_directly_below_it():
+    """v3 names v2, never v1, even for a function whose body is v1's.
+
+    That is what keeps retiring a schema to one hop: move what its successor
+    still uses into that successor, and nothing above it changes.
+    """
+    import ast
+
+    pkg = _threads_pkg()
+    versions = sorted(
+        (int(p.name[1:]), p) for p in pkg.iterdir()
+        if p.is_dir() and re.fullmatch(r"v\d+", p.name)
+    )
+    assert versions, "no schema packages found"
+
+    offenders = []
+    for n, (version, directory) in enumerate(versions):
+        allowed = f"v{versions[n - 1][0]}" if n else None
+        for module in sorted(directory.rglob("*.py")):
+            for node in ast.walk(ast.parse(module.read_text())):
+                if not isinstance(node, ast.ImportFrom) or not node.module:
+                    continue
+                m = re.search(r"ai_workspace\.threads\.(v\d+)", node.module)
+                if not m or m.group(1) == f"v{version}":
+                    continue
+                if m.group(1) != allowed:
+                    offenders.append(
+                        f"{module.relative_to(REPO)}:{node.lineno} imports "
+                        f"{m.group(1)}; v{version} may import only "
+                        f"{allowed or 'nothing'}"
+                    )
+    assert not offenders, "\n  ".join(["schema import skipped a level:"] + offenders)

@@ -35,6 +35,8 @@ __all__ = [
     "add_todo",
     "create",
     "log_decision",
+    "audit_migration",
+    "migration_safety_check",
     "names_one_directory",
     "resume",
     "retire_artifact",
@@ -222,3 +224,30 @@ def save_session(workspace_dir: str, thread_name: str, slug: str, summary: str,
     """Write the session log and the Status paragraph in one call."""
     thread, fn, error = _for(workspace_dir, thread_name, "save_session")
     return error or fn(thread, slug, summary, keywords, next_context, body, status)
+
+
+def migration_safety_check(workspace_dir: str, thread_name: str) -> str:
+    """Report whether a thread is safe to convert in place.
+
+    Not dispatched on a schema: it asks whether the workspace can recover if
+    the conversion goes wrong, which is the same question for any schema.
+    """
+    from ai_workspace.threads import migrate
+
+    workspace, _, error = ws.thread_dir(workspace_dir, thread_name)
+    return error or migrate.safety_check(workspace, thread_name)
+
+
+def audit_migration(workspace_dir: str, original_thread: str,
+                    converted_thread: str) -> str:
+    """Compare a converted copy against its original and report what it lost."""
+    from ai_workspace.threads import migrate
+
+    workspace, original, error = ws.thread_dir(workspace_dir, original_thread)
+    if error:
+        return error
+    converted = ws.thread_path(workspace, converted_thread)
+    for path, label in ((original, original_thread), (converted, converted_thread)):
+        if not path.is_dir():
+            return f"Error: Thread '{label}' not found."
+    return migrate.audit(original, converted)

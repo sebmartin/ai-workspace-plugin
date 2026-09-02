@@ -117,9 +117,11 @@ One source tree serves both CLIs. Maximum deduplication:
 1. **Read before modifying** - Always read files before editing them
 2. **Follow existing patterns** - Match the style and structure of existing code
 3. **Regenerate Codex agents after editing `agents/*.md`** - Run `python3 scripts/sync-codex-agents.py` and commit both the `.md` source and the `.toml` mirror together
-4. **Test changes** - Load locally with `claude --plugin-dir .` on the Claude side. Codex doesn't have a `--plugin-dir` flag; testing on Codex requires a local marketplace stub.
-5. **Bump the version in every PR** - Merging to `main` ships the plugin to users, so there is no separate release step. Bump `version` in both `.claude-plugin/plugin.json` and `.codex-plugin/plugin.json`, in sync, as part of the PR. Patch for fixes, minor for new capability, major for breaking changes.
-6. **Keep it simple** - Avoid over-engineering, only change what's needed
+4. **Run the tests** - `uv run --with pytest --with-requirements skills/threads/scripts/mcp_server.py python3 -m pytest tests/ -q`. That reads the server's own dependency block, so a bare `pytest` will not work and neither will a hand-written package list that drifts from it.
+5. **Verify a guard by breaking it** - A test that enforces an invariant is worth only what it catches. Introduce the violation, watch it fail, revert. Several tests in `tests/test_layering.py` exist because the thing they check went wrong once.
+6. **Test changes** - Load locally with `claude --plugin-dir .` on the Claude side. Codex doesn't have a `--plugin-dir` flag; testing on Codex requires a local marketplace stub.
+7. **Bump the version in every PR** - Merging to `main` ships the plugin to users, so there is no separate release step. Bump `version` in both `.claude-plugin/plugin.json` and `.codex-plugin/plugin.json`, in sync, as part of the PR. Patch for fixes, minor for new capability, major for breaking changes.
+8. **Keep it simple** - Avoid over-engineering, only change what's needed
 
 See CONTRIBUTING.md for testing procedures and PR guidelines.
 
@@ -177,9 +179,108 @@ workspace get versioned on its own axis later.
 return _threads.resume(workspace_dir, thread_name)
 ```
 
+### Writing a schema operation
+
+Every operation takes the resolved `Thread` record as its first argument, so it
+can reach `.dir`, `.workspace`, `.name` and `.schema` without a different
+signature per operation.
+
+```python
+# threads/v2/thread.py
+def resume(thread) -> str: ...
+```
+
+The API in `threads/__init__.py` is one named function per operation. Each
+resolves the thread, finds its schema's implementation, and hands off:
+
+```python
+def add_todo(workspace_dir, thread_name, title, link, state="active"):
+    thread, fn, error = _for(workspace_dir, thread_name, "add_todo")
+    return error or fn(thread, title, link, state)
+```
+
+**The absence of the attribute is the refusal.** A schema that predates an
+operation simply does not define it, `_for` returns `NEEDS_MIGRATION`, and no
+version number is ever compared. Never paper over that with a default:
+
+```python
+fn = getattr(implementation(thread), "create", None)   # NO
+result = fn(thread) if fn else ""                      # silently wrong
+```
+
+That exact pattern shipped once and sorted every workspace alphabetically
+without complaining. If an operation is on the shared surface, every schema
+declares it in `__all__` and provides it, and a missing one fails loudly.
+
+**Adding an operation is not the same as adding a schema.** Adding a schema
+must touch no older one. Adding an operation that every schema has to answer
+necessarily touches all of them, because there is no sensible default. Both are
+fine; only the first is the rule.
+
+### Import direction
+
+Cycles here are easy to create and annoying to unpick, so the layout forbids
+them rather than avoiding them by luck.
+
+`threads/__init__.py` imports `schema.py`, which imports every schema, so
+anything those schemas reach for is loaded while `threads` is only partly
+initialised. One rule follows:
+
+**Inside `threads/`, import sibling modules, never names defined in
+`threads/__init__.py`.**
+
+```python
+from ai_workspace.threads import marker          # fine, a submodule
+from ai_workspace.threads.schema import at      # fine, a submodule
+from ai_workspace.threads import _focus          # ImportError, defined in __init__
+```
+
+Python resolves a submodule import even mid-initialisation; an attribute of the
+package itself does not exist yet. That is why:
+
+- `marker.py` is a leaf holding only the read and write of `schema-version`. A
+  schema needs to write a marker, and importing `schema.py` for that would
+  close a loop, since `schema.py` imports every schema.
+- `schema.py` is separate from `threads/__init__.py` so the registry, the
+  `Thread` record and the counters stay one readable unit and `__init__.py`
+  stays the API.
+
+Every module under `ai_workspace/` is importable first, in any order. If a
+change breaks that, the import points at a name in `__init__.py`.
+
 **Watch the name collision.** A function defined in `threads/__init__.py`
 shadows any sibling module of the same name, so an operation and a submodule
-may never share one.
+may never share one. This has broken a test twice.
+
+### The two counters, and per-schema assets
+
+`CURRENT_SCHEMA` is what the plugin **creates**. What it can **read** is
+whatever is registered in `SCHEMAS`. These diverge on purpose: a schema can be
+readable before it is the default. Messages about what is supported quote the
+registered range, never `CURRENT_SCHEMA`.
+
+Assets are per schema too, and getting this wrong is silent:
+
+| | |
+|---|---|
+| templates | `templates/thread-template.md` is v1's; v2 uses `templates/v2/` |
+| skill prose | `skills/threads/v1/`, `skills/threads/v2/` |
+
+Never repurpose a shared asset for the newest schema. Add one under `vN/`
+instead. Editing `templates/thread-template.md` to suit schema 2 would leave
+v1's `create` quietly writing a schema 2 README, which no test would catch.
+
+### The tool surface
+
+`mcp_server.py` declares tools and delegates; it holds no logic. Two rules:
+
+- **Docstrings and signatures are the model-facing API.** Changing one changes
+  behaviour for every user. When refactoring underneath, compare them against
+  the previous revision programmatically rather than by eye.
+- **Convert at the boundary.** MCP needs concrete defaults, so a tool takes
+  `body: str = ""` while the operation distinguishes "not given" from "set it
+  to nothing". The tool passes `body or None`. Dropping that conversion once
+  wiped session files that had been written incrementally.
 
 ### Thread Structure
 
