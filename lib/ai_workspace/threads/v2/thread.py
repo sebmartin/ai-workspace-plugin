@@ -112,7 +112,7 @@ def _decision_summary(thread_dir: Path, entry: idx.Entry) -> str:
     if not path.is_file():
         return ""
     try:
-        fields, _ = split_frontmatter(path.read_text(errors="ignore")[:2000])
+        fields, _ = split_frontmatter(path.read_text(errors="ignore")[:2000], path)
         return str(fields.get("summary") or "")
     except OSError:
         return ""

@@ -1,20 +1,27 @@
 """Reading a markdown file's YAML frontmatter. Independent of any schema."""
 
+from pathlib import Path
+
 import frontmatter
 import yaml
 
 
-def split_frontmatter(text: str) -> tuple[dict, str]:
+def split_frontmatter(text: str, source: Path | str | None = None) -> tuple[dict, str]:
     """The frontmatter mapping and the body that follows it.
 
-    Hand-edited frontmatter is normal in a workspace, so a block that will not
-    parse degrades to "no fields" rather than failing whatever operation
-    happened to read the file. A block that parses to something other than a
-    mapping, such as a bare list, is treated the same way.
+    Frontmatter that does not parse raises. Returning no fields would be worse
+    than failing: the fields are what a thread is indexed and resumed by, so a
+    decision would come back without its summary, or an index without its
+    windows, and nothing would say why. An error names the file, and whoever
+    reads it can open that file and fix it.
+
+    `source` is only for the message. Pass the path when there is one, since a
+    YAML error reports a line and column against an anonymous string.
     """
     try:
         post = frontmatter.loads(text)
-    except yaml.YAMLError:
-        return {}, text
+    except yaml.YAMLError as e:
+        where = f" in {source}" if source else ""
+        raise ValueError(f"Frontmatter{where} is not valid YAML. {e}") from e
     fields = post.metadata if isinstance(post.metadata, dict) else {}
     return fields, post.content

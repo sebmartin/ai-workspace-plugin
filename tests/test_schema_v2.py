@@ -136,16 +136,16 @@ class TestIndex:
         assert [e.id for e in entries] == [
             "20260103-s", "20260104-late", "20260105-s"]
 
-    def test_frontmatter_that_does_not_parse_is_not_an_error(self, tmp_path):
-        """Index frontmatter is hand-editable; a bad block loses the windows,
-        not the entries."""
+    def test_frontmatter_that_does_not_parse_names_the_file(self, tmp_path):
+        """Loud, because the windows are what the README's Next steps is built
+        from and a silent empty dict would just drop them."""
         d = _v2_thread(tmp_path)
         idx.add(d, "todos", idx.Entry("20260101-a", "active", "A", "./todos/a.md"))
         path = idx.index_path(d, "todos")
         path.write_text("---\nwindows:\n\tnext_steps: [20260101-a]\n---\n" + path.read_text())
-        entries, fm = idx.read(d, "todos")
-        assert [e.id for e in entries] == ["20260101-a"]
-        assert fm == {}
+        with pytest.raises(ValueError) as e:
+            idx.read(d, "todos")
+        assert "todos-index.md" in str(e.value)
 
     def test_retire_moves_the_line_and_sets_state(self, tmp_path):
         d = _v2_thread(tmp_path)

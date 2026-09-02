@@ -72,7 +72,7 @@ def read(thread_dir: Path, kind: str, retired: bool = False) -> tuple[list[Entry
     path = index_path(thread_dir, kind, retired)
     if not path.exists():
         return [], {}
-    fields, body = split_frontmatter(path.read_text())
+    fields, body = split_frontmatter(path.read_text(), path)
     windows = fields.get("windows")
     fm: dict = {"windows": windows} if isinstance(windows, dict) else {}
     entries = []
