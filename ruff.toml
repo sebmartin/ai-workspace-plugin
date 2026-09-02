@@ -1,0 +1,24 @@
+# Tool config lives here rather than in a pyproject.toml on purpose: uv treats a
+# directory containing one as a project and tries to build it, which would change
+# what every documented `uv run --with ...` command in AGENTS.md does.
+
+target-version = "py312"
+line-length = 100
+
+[lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+ignore = [
+    # Dates here are human-facing calendar dates in the user's own timezone: a
+    # session's date, a thread's Last Session line, the YYYYMMDD in a filename.
+    # Making them timezone-aware would file an evening session under tomorrow
+    # and put the wrong day in a filename, so these rules are wrong for this
+    # codebase rather than unmet.
+    "DTZ001", "DTZ005", "DTZ007", "DTZ011", "DTZ012",
+    # Tool docstrings are the model-facing API and are deliberately long prose.
+    "E501",
+]
+
+[lint.per-file-ignores]
+# Tests assert on their own scaffolding and import inside tests to keep each
+# case self-contained.
+"tests/*" = ["E402", "E702"]

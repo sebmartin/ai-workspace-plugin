@@ -208,7 +208,7 @@ def test_dispatched_operations_are_declared_on_every_schema_that_has_them():
         for op in sorted(_dispatched_operations()):
             if hasattr(module, op) and op not in surface:
                 undeclared.append(f"schema {version} provides {op!r} but omits it from __all__")
-    assert not undeclared, "\n  ".join([""] + undeclared)
+    assert not undeclared, "\n  ".join(["", *undeclared])
 
 def _threads_pkg() -> Path:
     return REPO / "lib" / "ai_workspace" / "threads"
@@ -253,7 +253,7 @@ def test_no_module_imports_a_name_from_the_package_that_imports_it():
                             f"{module.relative_to(REPO)}:{node.lineno} imports "
                             f"{alias.name!r}, which is defined in threads/__init__.py"
                         )
-    assert not offenders, "\n  ".join(["import cycle waiting to happen:"] + offenders)
+    assert not offenders, "\n  ".join(["import cycle waiting to happen:", *offenders])
 
 
 def test_a_schema_imports_only_the_one_directly_below_it():
@@ -287,4 +287,4 @@ def test_a_schema_imports_only_the_one_directly_below_it():
                         f"{m.group(1)}; v{version} may import only "
                         f"{allowed or 'nothing'}"
                     )
-    assert not offenders, "\n  ".join(["schema import skipped a level:"] + offenders)
+    assert not offenders, "\n  ".join(["schema import skipped a level:", *offenders])

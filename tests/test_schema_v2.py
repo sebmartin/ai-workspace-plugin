@@ -9,7 +9,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
 sys.path.insert(0, str(Path(__file__).parent.parent / "skills" / "threads" / "scripts"))
 
-from ai_workspace.threads import schema, marker
+from ai_workspace.threads import marker, schema
 from ai_workspace.threads.v2 import ids, render, session
 from ai_workspace.threads.v2 import index as idx
 from ai_workspace.threads.v2 import thread as v2
@@ -49,8 +49,8 @@ class TestSchemaDetection:
 
     def test_registered_schema_resolves_to_its_module(self, tmp_path):
         d = _v2_thread(tmp_path)
-        thread, err = schema.at(tmp_path, "t", d)
-        assert err is None
+        thread = schema.at(tmp_path, "t", d)
+        assert not isinstance(thread, str)
         assert thread.schema == 2
         assert schema.implementation(thread) is schema.SCHEMAS[2]
 
@@ -58,23 +58,24 @@ class TestSchemaDetection:
         d = tmp_path / "t"
         d.mkdir()
         (d / "schema-version").write_text("99\n")
-        thread, err = schema.at(tmp_path, "t", d)
-        assert thread is None
+        err = schema.at(tmp_path, "t", d)
+        assert isinstance(err, str)
         assert "SCHEMA_TOO_NEW" in err and "99" in err
 
     def test_refusal_names_schemas_never_a_plugin_version(self, tmp_path):
         d = tmp_path / "t"
         d.mkdir()
         (d / "schema-version").write_text("99\n")
-        _, err = schema.at(tmp_path, "t", d)
+        err = schema.at(tmp_path, "t", d)
+        assert isinstance(err, str)
         assert "3.0" not in err and "plugin version" not in err.lower()
 
     def test_garbage_marker_is_an_error_not_a_guess(self, tmp_path):
         d = tmp_path / "t"
         d.mkdir()
         (d / "schema-version").write_text("banana\n")
-        thread, err = schema.at(tmp_path, "t", d)
-        assert thread is None and "UNREADABLE_SCHEMA" in err
+        err = schema.at(tmp_path, "t", d)
+        assert isinstance(err, str) and "UNREADABLE_SCHEMA" in err
 
     def test_readable_range_covers_every_registered_schema(self):
         """The refusal quotes what is registered, not the create-time counter.
@@ -176,7 +177,8 @@ class TestIndex:
     def test_sessions_do_not_retire(self, tmp_path):
         d = _v2_thread(tmp_path)
         idx.add(d, "sessions", idx.Entry("20260101-s", None, "S", "./sessions/s.md"))
-        assert "do not retire" in idx.retire(d, "sessions", "20260101-s", "done")
+        err = idx.retire(d, "sessions", "20260101-s", "done")
+        assert err and "do not retire" in err
 
     def test_window_round_trip(self, tmp_path):
         d = _v2_thread(tmp_path)

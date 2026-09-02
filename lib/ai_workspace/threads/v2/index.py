@@ -43,7 +43,7 @@ _LINE_RE = re.compile(r"^- (?P<id>[^\s:]+)(?::(?P<state>[^\s]+))? \[(?P<title>[^
 
 
 class Entry:
-    __slots__ = ("id", "state", "title", "link")
+    __slots__ = ("id", "link", "state", "title")
 
     def __init__(self, id: str, state: str | None, title: str, link: str):
         self.id, self.state, self.title, self.link = id, state, title, link
