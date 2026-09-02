@@ -150,6 +150,27 @@ class TestDecisions:
         assert "not an in-force decision status" in ops.log_decision(d, "T", "s", "b", "locked-ish")
 
 
+    @pytest.mark.parametrize("summary", [
+        "Chose piles: soil ruled out footings",
+        "[unresolved] pending the survey",
+        'Kept the "temporary" name',
+        r"Path is C:\notes\x",
+    ])
+    def test_a_summary_that_is_not_bare_yaml_reads_back(self, tmp_path, summary):
+        """The reader refuses invalid frontmatter, so the writer must emit none.
+
+        Every one of these was written unquoted once and came back as an
+        unparseable file, which cost the decision its title and status too.
+        """
+        from ai_workspace.text import split_frontmatter
+
+        d = _thread(tmp_path)
+        log_decision(str(tmp_path), "t", "T", summary, "body", "locked")
+        path = next((d / "decisions").glob("*.md"))
+        fields, _ = split_frontmatter(path.read_text(), path)
+        assert fields["summary"] == summary
+
+
 class TestArtifacts:
     def test_add_and_retire(self, tmp_path):
         d = _thread(tmp_path)
