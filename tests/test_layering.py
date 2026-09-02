@@ -29,6 +29,72 @@ def test_tool_surface_names_no_schema_version():
     )
 
 
+def test_every_schema_directory_is_registered():
+    """SCHEMAS and the vN/ directories say the same thing.
+
+    Nothing derives the registry from the filesystem, because importing by
+    name is what lets a type checker follow dispatch into a schema. The cost
+    is that adding or deleting a directory without editing the dict goes
+    unnoticed, so this is the thing that notices.
+    """
+    from ai_workspace.threads import schema
+
+    threads_dir = REPO / "lib" / "ai_workspace" / "threads"
+    on_disk = {
+        int(d.name[1:]) for d in threads_dir.iterdir()
+        if d.is_dir() and re.fullmatch(r"v\d+", d.name)
+    }
+    assert on_disk == set(schema.SCHEMAS), (
+        f"directories {sorted(on_disk)} but SCHEMAS registers "
+        f"{sorted(schema.SCHEMAS)}"
+    )
+
+
+def test_every_module_in_a_schema_is_reachable_from_its_surface():
+    """A schema ships no module its own __init__.py cannot reach.
+
+    An unreachable module is either dead or filed in the wrong place, and
+    both are invisible: the tests import it directly, so it passes CI while
+    nothing in the product ever calls it. Written after this PR shipped four
+    such modules, three of which belonged one PR later and one of which had
+    been superseded by prose in a command reference.
+    """
+    import ast
+
+    threads_dir = REPO / "lib" / "ai_workspace" / "threads"
+    for vdir in sorted(threads_dir.glob("v*")):
+        if not (vdir / "__init__.py").exists():
+            continue
+        present = {p.stem for p in vdir.glob("*.py")} - {"__init__"}
+
+        def imports(mod, vdir=vdir, present=present):
+            tree = ast.parse((vdir / f"{mod}.py").read_text())
+            out = set()
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.ImportFrom) or not node.module:
+                    continue
+                if vdir.name not in node.module.split("."):
+                    continue
+                tail = node.module.split(f".{vdir.name}")[-1].lstrip(".")
+                if tail:
+                    out.add(tail)
+                out |= {a.name for a in node.names if a.name in present}
+            return out & present
+
+        seen, stack = set(), ["__init__"]
+        while stack:
+            mod = stack.pop()
+            if mod in seen:
+                continue
+            seen.add(mod)
+            stack.extend(imports(mod) - seen)
+
+        assert not present - seen, (
+            f"{vdir.name}/ ships {sorted(present - seen)}, which nothing "
+            f"reachable from {vdir.name}/__init__.py imports"
+        )
+
+
 def test_every_registered_schema_declares_its_surface():
     """A schema's __all__ is its surface, and dispatch resolves against it.
 
