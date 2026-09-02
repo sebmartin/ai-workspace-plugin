@@ -75,9 +75,9 @@ class TestAudit:
     def test_clean_conversion_reports_no_problems(self, tmp_path):
         v1 = _v1(tmp_path)
         conv = _converted_from(v1, tmp_path)
-        idx.append(conv, "sessions", idx.Entry("20260101-first", None, "First",
+        idx.add(conv, "sessions", idx.Entry("20260101-first", None, "First",
                                                "./sessions/20260101-first.md"))
-        idx.append(conv, "decisions", idx.Entry("20260202-choice", "locked", "Choice",
+        idx.add(conv, "decisions", idx.Entry("20260202-choice", "locked", "Choice",
                                                 "./decisions/20260202-choice.md"))
         out = migrate.audit(v1, conv)
         assert "No missing files" in out and "PROBLEMS" not in out
@@ -98,21 +98,28 @@ class TestAudit:
     def test_dangling_index_link_is_caught(self, tmp_path):
         v1 = _v1(tmp_path)
         conv = _converted_from(v1, tmp_path)
-        idx.append(conv, "artifacts", idx.Entry("20260101-x", "current", "X",
+        idx.add(conv, "artifacts", idx.Entry("20260101-x", "current", "X",
                                                 "./artifacts/nope.md"))
         assert "links to a missing file" in migrate.audit(v1, conv)
 
     def test_out_of_order_index_is_caught(self, tmp_path):
+        """Written directly, because idx.add would place them in order.
+
+        The audit checks the converted thread however it was produced, which
+        includes hand-edited index files.
+        """
         v1 = _v1(tmp_path)
         conv = _converted_from(v1, tmp_path)
-        idx.append(conv, "artifacts", idx.Entry("20260301-b", "current", "B", "./artifacts/"))
-        idx.append(conv, "artifacts", idx.Entry("20260101-a", "current", "A", "./artifacts/"))
+        idx.write(conv, "artifacts", [
+            idx.Entry("20260301-b", "current", "B", "./artifacts/"),
+            idx.Entry("20260101-a", "current", "A", "./artifacts/"),
+        ], {})
         assert "not in date order" in migrate.audit(v1, conv)
 
     def test_unknown_dates_are_counted(self, tmp_path):
         v1 = _v1(tmp_path)
         conv = _converted_from(v1, tmp_path)
-        idx.append(conv, "artifacts", idx.Entry("19700101-parked", "current", "Parked",
+        idx.add(conv, "artifacts", idx.Entry("19700101-parked", "current", "Parked",
                                                 "./artifacts/"))
         assert "no derivable date" in migrate.audit(v1, conv)
 

@@ -9,7 +9,7 @@ whether the converted copy actually kept everything.
 import subprocess
 from pathlib import Path
 
-from ai_workspace.threads.v2 import dates
+from ai_workspace.threads.v2 import ids
 from ai_workspace.threads.v2 import index as idx
 
 STAGING_SUFFIX = "-v2"
@@ -109,7 +109,7 @@ def audit(original: Path, converted: Path) -> str:
     unknown = sum(
         1 for kind in idx.TYPES
         for e in idx.read(converted, kind)[0]
-        if e.id.startswith(dates.UNKNOWN)
+        if e.id.startswith(ids.UNKNOWN)
     )
 
     lines = [f"Audit of {converted.name} against {original.name}:"]
