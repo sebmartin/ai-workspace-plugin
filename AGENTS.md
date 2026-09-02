@@ -192,6 +192,26 @@ threads/{thread-name}/
 └── artifacts/          # Output files (snapshots, reports)
 ```
 
+### Server dependencies
+
+Declared once, in a PEP 723 block at the top of `skills/threads/scripts/mcp_server.py`:
+
+```python
+# /// script
+# requires-python = ">=3.12"
+# dependencies = ["mcp>=2"]
+# ///
+```
+
+Both launch configs read it with `uv run --script`, and the test command reads
+the same block with `--with-requirements <that script>`. Adding a dependency is
+one line in one file.
+
+That is deliberate. The friction of naming a package in two manifests, three
+docs and a packaging test is what made hand-rolling a parser look cheap, and
+that produced two frontmatter regexes that disagreed with each other. Reach for
+a library.
+
 ### MCP Tool Invocation
 
 The threads MCP server is declared in both `.claude-plugin/plugin.json` and `.codex-plugin/plugin.json`. Tools are exposed under the `threads` server name with a vendor-prefixed bridge:

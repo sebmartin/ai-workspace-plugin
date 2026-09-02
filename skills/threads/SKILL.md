@@ -193,8 +193,8 @@ Pass the caller's current working directory as `workspace_dir` (literal path, no
 **If MCP tools are unavailable:** The threads MCP server failed to start. Two likely causes:
 
 1. **`uv` not installed** — direct the user to https://docs.astral.sh/uv/getting-started/installation/
-2. **Dependency or version mismatch** — the server needs `mcp>=2` on Python 3.12+. Have the user run the launch command by hand to see the real error:
+2. **Dependency or version mismatch** — the server declares what it needs in a `# /// script` block at the top of `skills/threads/scripts/mcp_server.py`. Have the user run the launch command by hand to see the real error:
    ```
-   uv run --python '>=3.12' --with 'mcp>=2' python3 <plugin-root>/skills/threads/scripts/mcp_server.py
+   uv run --script <plugin-root>/skills/threads/scripts/mcp_server.py
    ```
    An `ImportError`/`ModuleNotFoundError` on `mcp.server.*` means the resolved `mcp` version doesn't match what the server imports.

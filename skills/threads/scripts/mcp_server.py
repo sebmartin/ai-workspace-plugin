@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.12"
+# dependencies = ["mcp>=2"]
+# ///
 """Threads MCP Server - the tool surface.
 
 Implementations live in lib/ai_workspace/. This module declares the tools, their

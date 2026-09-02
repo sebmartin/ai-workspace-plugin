@@ -29,15 +29,35 @@ def test_codex_mcp_config_uses_relative_paths():
     assert "${CLAUDE_PLUGIN_DATA}" not in serialized
 
 
-def test_both_launch_configs_require_mcp_2x():
-    """The server imports mcp.server.mcpserver, which only exists on mcp>=2."""
+def _script_metadata() -> str:
+    """The PEP 723 block at the top of the server script."""
+    text = (PLUGIN_ROOT / "skills" / "threads" / "scripts" / "mcp_server.py").read_text()
+    start = text.index("# /// script")
+    return text[start:text.index("# ///", start + 1)]
+
+
+def test_the_script_declares_its_own_dependencies():
+    """One place names them, so adding one is one line rather than six."""
+    meta = _script_metadata()
+    assert 'requires-python = ">=3.12"' in meta, meta
+    assert "mcp>=2" in meta, meta
+
+
+def test_both_launch_configs_read_that_declaration():
+    """--script rather than --with, so neither manifest can drift from the script.
+
+    Explicit rather than relying on uv auto-detecting the block, because
+    --script also makes uv ignore any surrounding project.
+    """
     codex_args = json.loads((PLUGIN_ROOT / ".mcp.json").read_text())["mcpServers"]["threads"]["args"]
     claude_args = json.loads(
         (PLUGIN_ROOT / ".claude-plugin" / "plugin.json").read_text()
     )["mcpServers"]["threads"]["args"]
 
     for args in (codex_args, claude_args):
-        assert "mcp>=2" in args, args
+        assert "--script" in args, args
+        assert "--with" not in args, args
+        assert args[-1].endswith("skills/threads/scripts/mcp_server.py"), args
 
 
 def test_manifest_versions_stay_in_sync():

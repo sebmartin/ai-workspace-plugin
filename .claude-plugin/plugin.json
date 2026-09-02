@@ -14,9 +14,7 @@
       "command": "uv",
       "args": [
         "run",
-        "--python", ">=3.12",
-        "--with", "mcp>=2",
-        "python3",
+        "--script",
         "${CLAUDE_PLUGIN_ROOT}/skills/threads/scripts/mcp_server.py"
       ]
     }
