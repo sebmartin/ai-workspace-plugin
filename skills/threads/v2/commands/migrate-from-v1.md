@@ -58,9 +58,9 @@ each session mentions; that map dates artifacts that carry no date of their own,
 and it recovers most of them. Then walk `decisions/` and `artifacts/`, adding an
 entry per top-level file or directory with `add_artifact` and `log_decision`.
 
-Order matters and the tools append rather than insert, so feed them oldest
-first. A date comes from frontmatter, then from the filename, then from a
-session that references the file. Anything with none gets `19700101`, which
+The index places each entry by its id, so feeding them out of order is not
+itself a problem. A date comes from frontmatter, then from the filename, then
+from a session that references the file. Anything with none gets `19700101`, which
 means unknown — never invent a plausible date, and never use a filesystem
 timestamp, which records when bytes moved rather than when something was
 written.
