@@ -9,6 +9,7 @@ where previously nothing at all was written.
 from datetime import date
 from pathlib import Path
 
+from ai_workspace.text import yaml_value
 from ai_workspace.threads.v2 import ids as ids_mod
 from ai_workspace.threads.v2 import index as idx
 
@@ -90,9 +91,9 @@ def save(thread_dir: Path, slug: str, summary: str, keywords: str,
     front = (
         "---\n"
         f"date: {today.isoformat()}\n"
-        f"summary: {summary}\n"
-        f"keywords: {keywords}\n"
-        f"next_context: {next_context}\n"
+        f"summary: {yaml_value(summary)}\n"
+        f"keywords: {yaml_value(keywords)}\n"
+        f"next_context: {yaml_value(next_context)}\n"
         "---\n\n"
     )
     path.write_text(front + kept.rstrip() + "\n")
