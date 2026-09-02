@@ -29,6 +29,27 @@ def test_tool_surface_names_no_schema_version():
     )
 
 
+def test_every_schema_directory_is_registered():
+    """SCHEMAS and the vN/ directories say the same thing.
+
+    Nothing derives the registry from the filesystem, because importing by
+    name is what lets a type checker follow dispatch into a schema. The cost
+    is that adding or deleting a directory without editing the dict goes
+    unnoticed, so this is the thing that notices.
+    """
+    from ai_workspace.threads import schema
+
+    threads_dir = REPO / "lib" / "ai_workspace" / "threads"
+    on_disk = {
+        int(d.name[1:]) for d in threads_dir.iterdir()
+        if d.is_dir() and re.fullmatch(r"v\d+", d.name)
+    }
+    assert on_disk == set(schema.SCHEMAS), (
+        f"directories {sorted(on_disk)} but SCHEMAS registers "
+        f"{sorted(schema.SCHEMAS)}"
+    )
+
+
 def test_every_registered_schema_declares_its_surface():
     """A schema's __all__ is its surface, and dispatch resolves against it.
 
