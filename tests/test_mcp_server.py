@@ -203,7 +203,7 @@ class TestCreateThread:
         assert "Created thread 'my-feature'" in result
         thread = tmp_path / "threads" / "my-feature"
         assert (thread / "README.md").exists()
-        for sub in ("sessions", "decisions", "attachments", "artifacts"):
+        for sub in ("sessions", "decisions", "attachments", "artifacts", "todos"):
             assert (thread / sub).is_dir()
 
     def test_success_includes_workspace_and_thread_headers(self, tmp_path):
@@ -212,7 +212,7 @@ class TestCreateThread:
         assert result.startswith(
             f"Workspace: {tmp_path}\n"
             f"Thread: {tmp_path / 'threads' / 'headered'}\n"
-            f"Schema: 1\n\n"
+            f"Schema: 2\n\n"
         )
 
     def test_already_exists_error_has_no_headers(self, tmp_path):
@@ -563,7 +563,7 @@ class TestArchivedThreadsAreReadOnly:
 
 class TestGetSkillFile:
     def test_reads_existing_file(self):
-        result = get_skill_file("skills/threads/commands/save-thread.md")
+        result = get_skill_file("skills/threads/v1/commands/save-thread.md")
         assert "save-thread" in result
         assert "Step 1" in result
 

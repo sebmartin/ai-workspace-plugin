@@ -316,5 +316,40 @@ def retire_artifact(workspace_dir: str, thread_name: str, artifact_id: str,
     return _threads.retire_artifact(workspace_dir, thread_name, artifact_id, state)
 
 
+
+@mcp.tool()
+def save_session(workspace_dir: str, thread_name: str, slug: str, summary: str,
+                 keywords: str, next_context: str, body: str = "",
+                 status: str = "") -> str:
+    """Save the session log and the thread's Status paragraph.
+
+    Todos, decisions and artifacts are written when they happen, so a save is
+    only the two things that need synthesising. Everything else is already on
+    disk.
+
+    `body` is optional. Leave it empty when the session file has already been
+    written or extended directly — a long body in one tool call has to fit the
+    model's output budget in a single response, where writing the file
+    incrementally does not. With no body, this updates the frontmatter, the
+    index entry and the dates and leaves the prose alone.
+
+    Args:
+        workspace_dir: The tracked workspace path from session context.
+        thread_name: Name of the thread (kebab-case).
+        slug: Short kebab-case topic for the session, used in its id and filename.
+        summary: Up to 150 words on what was discussed and settled.
+        keywords: Comma-separated terms to search for later.
+        next_context: One or two sentences on where things stand and what is next.
+        body: Full markdown body. Omit to keep what the file already has.
+        status: The thread's Status paragraph. Omit to leave it unchanged.
+    """
+    # The tool surface takes "" because MCP needs a concrete default; the
+    # operation distinguishes "no body given" from "replace the body with
+    # nothing", so the empty string has to become None here.
+    return _threads.save_session(workspace_dir, thread_name, slug, summary,
+                                 keywords, next_context, body or None,
+                                 status or None)
+
+
 if __name__ == "__main__":
     mcp.run()

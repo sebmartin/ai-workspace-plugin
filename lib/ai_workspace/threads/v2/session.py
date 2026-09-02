@@ -9,6 +9,7 @@ where previously nothing at all was written.
 from datetime import date
 from pathlib import Path
 
+from ai_workspace.text import yaml_value
 from ai_workspace.threads.v2 import ids as ids_mod
 from ai_workspace.threads.v2 import index as idx
 
@@ -62,3 +63,44 @@ def note_created(thread_dir: Path, session_id: str, line: str) -> None:
     else:
         text = text.rstrip() + f"\n\n{marker}- {line}\n"
     path.write_text(text)
+
+
+def save(thread_dir: Path, slug: str, summary: str, keywords: str,
+         next_context: str, body: str | None = None,
+         today: date | None = None) -> tuple[str, str]:
+    """Write the session log. Returns (session_id, note).
+
+    `body` is optional on purpose. A tool call's arguments are tokens the model
+    emits, so a single call carrying a whole session log is all-or-nothing
+    against its output cap — where today the same file can be built with Write
+    and then Edits. Passing no body leaves whatever is already in the file and
+    does only the parts nothing else can do: the frontmatter, the index entry
+    and the dates.
+    """
+    today = today or date.today()
+    session_id = ensure_stub(thread_dir, slug, today=today)
+    path = session_path(thread_dir, session_id)
+    existing = path.read_text() if path.exists() else ""
+
+    kept = body
+    if kept is None:
+        _, _, after = existing.partition("---\n")
+        _, _, after = after.partition("---\n")
+        kept = after.lstrip("\n")
+
+    front = (
+        "---\n"
+        f"date: {today.isoformat()}\n"
+        f"summary: {yaml_value(summary)}\n"
+        f"keywords: {yaml_value(keywords)}\n"
+        f"next_context: {yaml_value(next_context)}\n"
+        "---\n\n"
+    )
+    path.write_text(front + kept.rstrip() + "\n")
+
+    entries, fm = idx.read(thread_dir, "sessions")
+    entry = idx.find(entries, session_id)
+    if entry is not None and slug and entry.title != slug:
+        entry.title = slug
+        idx.write(thread_dir, "sessions", entries, fm)
+    return session_id, "saved"

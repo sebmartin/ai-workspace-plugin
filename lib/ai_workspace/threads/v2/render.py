@@ -23,10 +23,10 @@ _SECTION_RE_TEMPLATE = r"(?m)^##[ \t]+{name}[ \t]*$.*?(?=^##[ \t]|\Z)"
 def _links_line(thread_dir: Path) -> str:
     parts = []
     for kind in idx.TYPES:
-        bits = [f"[{kind}](./{kind}-index.md)"]
+        entry = f"[{kind}](./{kind}-index.md)"
         if kind in idx.RETIRED_TYPES:
-            bits.append(f"[retired](./{kind}-retired.md)")
-        parts.append(" ".join(bits))
+            entry += f" ([retired](./{kind}-retired.md))"
+        parts.append(entry)
     return "**Indexes**: " + " · ".join(parts)
 
 

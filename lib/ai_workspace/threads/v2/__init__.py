@@ -10,6 +10,7 @@ from ai_workspace.threads.v2.ops import (
     retire_artifact,
     retire_decision,
     retire_todo,
+    save_session,
     set_state,
     set_window,
 )
@@ -23,6 +24,7 @@ __all__ = [
     "retire_artifact",
     "retire_decision",
     "retire_todo",
+    "save_session",
     "set_state",
     "set_window",
 ]

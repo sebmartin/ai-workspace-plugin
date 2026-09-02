@@ -8,6 +8,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
 sys.path.insert(0, str(Path(__file__).parent.parent / "skills" / "threads" / "scripts"))
 
+from ai_workspace.text import split_frontmatter
 from ai_workspace.threads import marker
 from ai_workspace.threads.v2 import index as idx
 from ai_workspace.threads.v2 import ops
@@ -195,3 +196,57 @@ class TestInvariant:
         expected = render.next_steps_body(d)
         section = (d / "README.md").read_text().split("## Next steps\n\n")[1].split("\n\n")[0]
         assert section.strip() == expected.strip()
+
+
+class TestSaveSession:
+    def test_writes_session_status_and_dates(self, tmp_path):
+        d = _thread(tmp_path)
+        from mcp_server import save_session
+        out = save_session(str(tmp_path), "t", "growcer-prep", "Prepped the round.",
+                           "growcer, interview", "Drill tomorrow.",
+                           body="# Session\n\nWhat happened.\n",
+                           status="Round 3 booked for Friday.")
+        assert "Saved" in out
+        sid = _only_id(d, "sessions")
+        text = (d / "sessions" / f"{sid}.md").read_text()
+        fields, _ = split_frontmatter(text)
+        assert fields["summary"] == "Prepped the round."
+        assert "What happened." in text
+        readme = (d / "README.md").read_text()
+        assert "Round 3 booked for Friday." in readme
+        assert "**Last Session**:" in readme
+
+    def test_body_is_optional_and_keeps_what_is_there(self, tmp_path):
+        d = _thread(tmp_path)
+        from mcp_server import save_session
+        from ai_workspace.threads.v2 import session
+        sid = session.ensure_stub(d, "topic")
+        p = session.session_path(d, sid)
+        p.write_text(p.read_text() + "\nWritten incrementally by hand.\n")
+        save_session(str(tmp_path), "t", "topic", "s", "k", "n")
+        text = p.read_text()
+        assert "Written incrementally by hand." in text
+        assert split_frontmatter(text)[0]["summary"] == "s"
+
+    def test_saving_clears_the_unsaved_marker(self, tmp_path):
+        d = _thread(tmp_path)
+        from mcp_server import save_session
+        from ai_workspace.threads.v2 import session
+        session.ensure_stub(d, "topic")
+        save_session(str(tmp_path), "t", "topic", "s", "k", "n")
+        sid = _only_id(d, "sessions")
+        assert session.STUB_MARKER not in (d / "sessions" / f"{sid}.md").read_text()
+
+    def test_last_session_survives_for_archive(self, tmp_path):
+        """archive_thread greps this line; a render must never drop it."""
+        d = _thread(tmp_path)
+        from mcp_server import save_session
+        save_session(str(tmp_path), "t", "topic", "s", "k", "n", status="x")
+        import re
+        assert re.search(r"(?m)^\*\*Last Session\*\*: \d{4}-\d{2}-\d{2}$",
+                         (d / "README.md").read_text())
+
+    def test_refused_on_schema_1(self, tmp_path):
+        _thread(tmp_path, "old", schema=1)
+        from mcp_server import save_session
+        assert "NEEDS_MIGRATION" in save_session(str(tmp_path), "old", "s", "s", "k", "n")

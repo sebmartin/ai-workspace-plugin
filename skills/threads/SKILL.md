@@ -61,6 +61,7 @@ Two tools shift session focus and surface paths to remember:
   ```
   Workspace: /path/to/workspace
   Thread: /path/to/workspace/threads/<thread-name>
+  Schema: 2
   ```
 
 When you see those headers, treat them as your tracked workspace and active thread. Pass `Workspace` as `workspace_dir` on every subsequent tool call.
@@ -71,50 +72,29 @@ When you see those headers, treat them as your tracked workspace and active thre
   - Tell the user what was written and that a restart may be required for changes to take effect.
 - **`Status: AMBIGUOUS_WORKSPACE`** / **`Status: NEEDS_INIT`** (from `create_thread` only) — Relay the embedded question and follow the suggested actions.
 
-## The README Model
+## Thread schemas
 
-The README is a lean index — the complete map of a thread. It must be short enough to read in full and retain entirely. Every line of inline content competes for context with the links that matter.
+Threads come in two on-disk schemas and you must know which one you are looking at before doing anything.
 
-**Read in full on resume.** Every section. Quick Resume gives current state. Decisions links tell you what constraints exist. Resources tell you what sessions, artifacts, and attachments are available. Missing any section means navigating with an incomplete map.
+`create_thread` and `resume_thread` return a `Schema:` line alongside `Workspace:` and `Thread:`. Track it for the session the same way you track the workspace path.
 
-**Pull linked files on demand.** Do not read linked files eagerly — pull them when work requires them.
+| Schema | Read | Then load |
+|---|---|---|
+| 1 | the README is the whole thread | `skills/threads/v1/model.md` |
+| 2 | indexes are the record, the README is a view | `skills/threads/v2/model.md` |
 
-**Write discipline.** Fixed sections only — do not add sections not in the template. If content doesn't fit, create a linked artifact or decision. The README holds the link and a one-line description; the file holds the content. When in doubt: artifact.
+Load exactly one, and only when you touch a thread of that schema. A workspace with no schema 1 threads never needs the schema 1 prose.
 
-**What does NOT belong inline:** workflow descriptions, architecture notes, directory trees, risk registers, design details, technology assessments, anything requiring more than a sentence to explain.
-
-**Quick Resume decay.** Keep "Recent progress" to the last 3–5 entries. On save, if "Next steps" exceeds 10 items, ask whether any should be removed or parked — ideal length is 5.
+Everything below this point applies to both.
 
 ## Resume a Thread
 
 **Use case**: Starting a new session or switching threads within an active session.
 
-- If thread name provided: resume it. If not: list threads with numbers, ask which, wait for reply.
-- **Archive fallback**: If not found among active threads, call `list_archived_threads` and scan for a match. If found, say it is archived and offer to restore. Do not read it in place and carry on: an archived thread is read-only.
-- Read the thread's README.md **in full** — every section. This is the complete map.
-- From the sessions listed in the README, load context using a recency gradient — do not surface this in the output. Use this context to decide whether a full session read is warranted later: if the user asks about something covered in a recent session, you already know enough to answer or to know which session to read in full.
-  - **Most recent session**: read frontmatter (`summary`, `keywords`, `next_context`)
-  - **Next 2–4 sessions**: read frontmatter (`summary` and `date` only)
-  - **Older sessions**: the README link is enough
-  - Skip sessions without frontmatter silently
-- Do not read linked files eagerly. Pull them on demand when work requires them.
-- Show Quick Resume and Locked Decisions (format below). Nothing else.
+- If a thread name was given, resume it. If not, call `list_threads`, show them numbered, ask which, and wait.
+- **Archive fallback**: if the name is not among active threads, call `list_archived_threads` and scan for a match. If it is there, say it is archived and offer to restore. Do not read it in place and carry on: an archived thread is read-only.
+- Call `resume_thread`. Read the `Schema:` header, load that schema's model file, and follow it. What to read and what to print both differ by schema.
 - End with: "**Working on thread: [thread-name]**"
-
-### Resume Response Format
-
-```
-Resumed: [Thread Name]
-
-[Quick Resume section from README — paste verbatim]
-
-## Locked Decisions
-[One line per decision: "**[title]** ([status]): [summary]"]
-```
-
-The Locked Decisions keep key constraints in context — without them, settled decisions get re-litigated.
-
-**Decision log summaries**: Read the frontmatter of every file in `threads/{name}/decisions/`. If a log is missing a `summary:` field, read the log, infer a one-sentence summary of WHAT was decided (no rationale), and add it to the frontmatter silently. Reference the decision template for format.
 
 ## Current Thread Tracking
 
@@ -144,22 +124,17 @@ For trivial commands, instructions are inline. For complex commands, read the re
 | Command | Description | Reference |
 |---|---|---|
 | `list` | Call `list_threads`, output directly, no commentary | inline |
-| `resume` | Resume a thread — full instructions above | inline |
-| `save-thread` | Save thread state | `commands/save-thread.md` |
-| `save-artifact` | Create a named artifact (summary, analysis, spec, diagram) | `commands/save-artifact.md` |
-| `log-decision` | Draft and log a decision document | `commands/log-decision.md` |
-| `create-thread` | Create a new thread | `commands/create-thread.md` |
-| `park-topic` | Park topics, pop them, list parked | `commands/park-topic.md` |
-| `link-thread` | Link parent, child, or related threads | `commands/link-thread.md` |
-| `archive-thread` | Archive, restore, and list archived threads | `commands/archive-thread.md` |
-| `unpack-legacy-archive` | Restore a `.tar.gz` archive from before 3.0 | `commands/unpack-legacy-archive.md` |
+| `resume` | Call `resume_thread`, then follow the model file for the schema it reports | inline |
 | `open` | `open threads/{name}` or `open threads`; confirm | inline |
 | `set-workspace` | Call `set_default_workspace` with provided path, then offer to install global permissions | inline |
-| `status` | Read thread README.md, show Quick Resume | inline |
+| `archive-thread` | Archive, restore, and list archived threads | `commands/archive-thread.md` |
+| `unpack-legacy-archive` | Restore a `.tar.gz` archive from before 3.0 | `commands/unpack-legacy-archive.md` |
+
+Everything else — saving, logging decisions, artifacts, todos, parking, linking — differs by schema and is listed in the model file for that schema.
 
 **Set workspace** (`set-workspace`): Call `set_default_workspace` with the provided path. Confirm it was saved. Then follow the same global permissions offer described in the `NO_WORKSPACE` handler above — detect the CLI, write the allowlist entries for the workspace path, tell the user what was written.
 
-Reference files are loaded via `mcp__plugin_ai-workspace_threads__get_skill_file(relative_path)`. Pass the path relative to the plugin root. Example: `get_skill_file("skills/threads/commands/save-thread.md")`.
+Reference files are loaded via `mcp__plugin_ai-workspace_threads__get_skill_file(relative_path)`. Pass the path relative to the plugin root. Example: `get_skill_file("skills/threads/v2/model.md")`.
 
 **Recognized phrases:**
 - "List my threads" / "What threads do I have?"
@@ -183,7 +158,21 @@ Server: `threads`, exposed under the plugin's vendor-prefixed bridge.
 - `mcp__plugin_ai-workspace_threads__list_threads(workspace_dir)`
 - `mcp__plugin_ai-workspace_threads__resume_thread(workspace_dir, thread_name)` — Resolve workspace + thread path, return full README
 - `mcp__plugin_ai-workspace_threads__create_thread(workspace_dir, thread_name)`
-- `mcp__plugin_ai-workspace_threads__get_skill_file(relative_path)` — Read any file from the plugin directory; use for templates (`templates/foo.md`) and command references (`skills/threads/commands/foo.md`)
+- `mcp__plugin_ai-workspace_threads__get_skill_file(relative_path)` — Read any file from the plugin directory; use for templates (`templates/foo.md`), model files (`skills/threads/v2/model.md`) and command references (`skills/threads/v1/commands/foo.md`)
+Schema 2 threads only, each writing one index line and re-rendering the README:
+
+- `mcp__plugin_ai-workspace_threads__add_todo(workspace_dir, thread_name, title, link, state)`
+- `mcp__plugin_ai-workspace_threads__retire_todo(workspace_dir, thread_name, todo_id, state)`
+- `mcp__plugin_ai-workspace_threads__set_todo_state(workspace_dir, thread_name, todo_id, state)`
+- `mcp__plugin_ai-workspace_threads__set_window(workspace_dir, thread_name, entry_ids, section, kind)`
+- `mcp__plugin_ai-workspace_threads__log_decision(workspace_dir, thread_name, title, summary, body, status, supersedes)`
+- `mcp__plugin_ai-workspace_threads__retire_decision(workspace_dir, thread_name, decision_id, state)`
+- `mcp__plugin_ai-workspace_threads__add_artifact(workspace_dir, thread_name, title, link)`
+- `mcp__plugin_ai-workspace_threads__retire_artifact(workspace_dir, thread_name, artifact_id, state)`
+- `mcp__plugin_ai-workspace_threads__save_session(workspace_dir, thread_name, slug, summary, keywords, next_context, body, status)`
+
+They return `Status: NEEDS_MIGRATION` on a schema 1 thread rather than falling back.
+
 - `mcp__plugin_ai-workspace_threads__archive_thread(workspace_dir, thread_name)`
 - `mcp__plugin_ai-workspace_threads__restore_thread(workspace_dir, thread_name)`
 - `mcp__plugin_ai-workspace_threads__list_archived_threads(workspace_dir)`

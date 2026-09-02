@@ -19,9 +19,9 @@ SCHEMAS = {1: v1, 2: v2}
 
 MIN_READABLE_SCHEMA = min(SCHEMAS)
 
-# What the plugin creates, which lags what it can read: schema 2 threads cannot
-# be saved until the write tools land, so create still produces schema 1.
-CURRENT_SCHEMA = 1
+# What the plugin creates. It lagged what the plugin could read while schema 2
+# had no way to save; now that it does, new threads get it.
+CURRENT_SCHEMA = 2
 
 
 class Thread(NamedTuple):
