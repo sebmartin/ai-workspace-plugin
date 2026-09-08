@@ -67,7 +67,9 @@ the rest. Status and About can be filled any time after.
 
 ### 2. Index the sessions
 
-`index_file` with each session's path. Nothing else, and nothing before it.
+`index_directory` with `./sessions`. One call, however many there are: a thread
+with sixty-six sessions is sixty-six round trips if you index them one at a
+time. Nothing else, and nothing before it.
 
 Sessions are self-dating, from a `YYYYMMDD-` prefix and a `date:` in their own
 frontmatter, so they need nothing looked up. Everything after this step can be
@@ -76,10 +78,20 @@ keeps schema 2 from ever reading a schema 1 file, so do not reorder these.**
 
 ### 3. Index the decisions and artifacts
 
-`index_file` again, one call per top-level file or directory. A subdirectory is
-one artifact. Artifacts take a description: carry across the one-line
-description from the v1 README's `### Artifacts` list, which is the only thing
-in that list worth keeping and has no other home.
+`index_directory` with `./decisions`, then artifacts.
+
+Decisions need their status vocabulary substituted first, in each file's own
+frontmatter, because `index_file` reads `status:` off the file and refuses
+anything this schema does not know. `index_directory` reports each refusal with
+its filename and indexes the rest, so running it, fixing what it names, and
+running it again is the expected loop; it never double-indexes what already
+went in.
+
+Artifacts split. Anything whose description you are carrying across from the v1
+README's `### Artifacts` list needs `index_file` one at a time, because the
+description is the only thing not read off the file and has no other home. Run
+`index_directory` with `./artifacts` afterwards for whatever is left. A
+subdirectory is one artifact either way.
 
 Everything else on the line is read off the file. The id takes a date found
 anywhere in the filename, so `2026-01-20-initial-setup.md` and
