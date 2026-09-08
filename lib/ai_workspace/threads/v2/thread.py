@@ -80,7 +80,14 @@ def compose(thread_dir: Path, thread_name: str) -> str:
 
     parked = [e for e in todos if e.state == "parked"]
     backlog = [e for e in todos if e.id not in window and e.state != "parked"]
-    out.append(f"\n## Todo backlog ({len(backlog)} active, {len(parked)} parked)\n")
+    # "beyond the window" earns its place: the count excludes what Next steps
+    # already showed, so a thread whose todos are all windowed reads as
+    # "0 active" directly under five active todos. A reader took that for a
+    # corrupt index rather than a heading that did not say what it counted.
+    out.append(
+        f"\n## Todo backlog, beyond the window "
+        f"({len(backlog)} active, {len(parked)} parked)\n"
+    )
     out.extend(e.render() for e in backlog + parked)
 
     decisions, _ = idx.read(thread_dir, "decisions")

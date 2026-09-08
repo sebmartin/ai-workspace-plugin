@@ -216,6 +216,17 @@ class TestCompose:
                         "## Artifacts", "## Recent sessions", "## Todo backlog"):
             assert section in out
 
+    def test_the_backlog_count_cannot_read_as_contradicting_the_window(self, tmp_path):
+        """Every todo windowed means the backlog is genuinely zero, and the
+        heading has to say so, or it reads as a lost index."""
+        d = _v2_thread(tmp_path)
+        for n in ("a", "b"):
+            idx.add(d, "todos", idx.Entry(f"20260101-{n}", "active", n.upper(), f"./todos/{n}.md"))
+        idx.set_window(d, "todos", "next_steps", ["20260101-a", "20260101-b"])
+        out = v2.compose(d, "t")
+        assert "beyond the window (0 active, 0 parked)" in out
+        assert out.index("## Next steps") < out.index("## Todo backlog")
+
     def test_decision_summaries_come_from_the_files(self, tmp_path):
         d = _v2_thread(tmp_path)
         (d / "decisions" / "20260101-x.md").write_text(
