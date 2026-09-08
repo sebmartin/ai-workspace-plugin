@@ -10,7 +10,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "skills" / "threads" / "sc
 
 from ai_workspace.threads import marker
 from ai_workspace.threads.v2 import index as idx
-from ai_workspace.threads.v2 import ops
 
 
 def _only_id(thread_dir, kind):
@@ -18,7 +17,7 @@ def _only_id(thread_dir, kind):
     entries, _ = idx.read(thread_dir, kind)
     return entries[-1].id
 from mcp_server import (
-    add_artifact, add_todo, log_decision, retire_artifact, retire_decision,
+    add_todo, index_file, log_decision, retire_artifact, retire_decision,
     retire_todo, set_todo_state, set_window,
 )
 
@@ -52,7 +51,7 @@ class TestRefusalOnSchema1:
             set_window(ws, "old", ["i"]),
             log_decision(ws, "old", "t", "s", "b"),
             retire_decision(ws, "old", "i", "superseded"),
-            add_artifact(ws, "old", "t", "./x.md"),
+            index_file(ws, "old", "./artifacts/x.md"),
             retire_artifact(ws, "old", "i", "stale"),
         ]
         assert all("NEEDS_MIGRATION" in c for c in calls), calls
@@ -68,8 +67,8 @@ class TestRefusalOnSchema1:
 
 class TestTodos:
     def test_add_requires_a_link(self, tmp_path):
-        d = _thread(tmp_path)
-        assert "needs a link" in ops.add_todo(d, "Email the contractor", "")
+        _thread(tmp_path)
+        assert "needs a link" in add_todo(str(tmp_path), "t", "Email the contractor", "")
 
     def test_add_then_window_then_render(self, tmp_path):
         d = _thread(tmp_path)
@@ -108,8 +107,8 @@ class TestTodos:
         assert entries[0].state == "active"
 
     def test_bad_state_is_rejected(self, tmp_path):
-        d = _thread(tmp_path)
-        assert "not a todo state" in ops.add_todo(d, "A", "./s.md", "banana")
+        _thread(tmp_path)
+        assert "not a todo state" in add_todo(str(tmp_path), "t", "A", "./s.md", "banana")
 
 
 class TestDecisions:
@@ -146,8 +145,9 @@ class TestDecisions:
         assert "status: withdrawn" in (d / "decisions" / f"{did}.md").read_text()
 
     def test_bad_status_rejected(self, tmp_path):
-        d = _thread(tmp_path)
-        assert "not an in-force decision status" in ops.log_decision(d, "T", "s", "b", "locked-ish")
+        _thread(tmp_path)
+        assert "not an in-force decision status" in log_decision(
+            str(tmp_path), "t", "T", "s", "b", "locked-ish")
 
 
     @pytest.mark.parametrize("summary", [
@@ -172,16 +172,84 @@ class TestDecisions:
 
 
 class TestArtifacts:
-    def test_add_and_retire(self, tmp_path):
+    def _artifact(self, d, name="20260101-notes.md"):
+        (d / "artifacts").mkdir(parents=True, exist_ok=True)
+        (d / "artifacts" / name).write_text("# notes\n")
+        return f"./artifacts/{name}"
+
+    def test_index_and_retire(self, tmp_path):
         d = _thread(tmp_path)
         ws = str(tmp_path)
-        add_artifact(ws, "t", "Notes", "./artifacts/20260101-notes.md"); aid = _only_id(d, "artifacts")
+        index_file(ws, "t", self._artifact(d)); aid = _only_id(d, "artifacts")
         entries, _ = idx.read(d, "artifacts")
         assert entries[0].state == "current"
         retire_artifact(ws, "t", aid, "stale")
         live, _ = idx.read(d, "artifacts")
         gone, _ = idx.read(d, "artifacts", retired=True)
         assert live == [] and gone[0].state == "stale"
+
+    def test_the_id_is_the_filename(self, tmp_path):
+        """The claim ids.py makes about itself, which a made-up title broke."""
+        d = _thread(tmp_path)
+        index_file(str(tmp_path), "t", self._artifact(d))
+        assert _only_id(d, "artifacts") == "20260101-notes"
+
+    def test_a_description_is_carried_and_an_absent_one_is_not_invented(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        index_file(ws, "t", self._artifact(d), "What the auth flow does")
+        index_file(ws, "t", self._artifact(d, "20260102-other.md"))
+        entries, _ = idx.read(d, "artifacts")
+        assert [e.description for e in entries] == ["What the auth flow does", ""]
+
+    def test_a_link_that_resolves_to_nothing_is_refused(self, tmp_path):
+        """The boundary: this indexes, it never authors."""
+        _thread(tmp_path)
+        out = index_file(str(tmp_path), "t", "./artifacts/never-written.md")
+        assert "Nothing at" in out
+
+    def test_traversal_is_refused(self, tmp_path):
+        _thread(tmp_path)
+        for link in ("../../etc/passwd", "/etc/passwd", "./artifacts/../../x.md"):
+            assert "not a path to a file inside the thread" in \
+                index_file(str(tmp_path), "t", link), link
+
+
+class TestReadmeShape:
+    def test_a_v1_readme_is_refused_rather_than_appended_to(self, tmp_path):
+        """The Frankenstein case: a real migration hit this and was told it worked.
+
+        A v1 README has `**Next steps**:` as bold text inside `## Quick Resume`,
+        not a heading, so the renderer used to staple a second next-step list
+        onto an intact v1 document and return success.
+        """
+        d = _thread(tmp_path)
+        (d / "README.md").write_text(
+            "# Thread: t\n\n## Quick Resume\n\n**Next steps**:\n- something v1\n\n"
+            "## Problem\n\nold format\n"
+        )
+        out = add_todo(str(tmp_path), "t", "New", "./todos/a.md")
+        assert "not a schema 2 README" in out
+        text = (d / "README.md").read_text()
+        assert "## Next steps" not in text
+        assert "**Indexes**:" not in text
+        assert "old format" in text
+
+    def test_a_refusal_writes_nothing_at_all(self, tmp_path):
+        """Checked before anything mutates, so retrying is clean.
+
+        Recording the entry and refusing the render left a real migration with
+        two identical todos: the assistant fixed the README and repeated the
+        call, which is what anyone would do.
+        """
+        d = _thread(tmp_path)
+        (d / "README.md").write_text("# Thread: t\n\n## Quick Resume\n\nv1\n")
+        add_todo(str(tmp_path), "t", "New", "./todos/a.md")
+        assert idx.read(d, "todos")[0] == []
+
+        (d / "README.md").write_text("# t\n\n## Next steps\n\n- None\n\n## About\n\nx\n")
+        add_todo(str(tmp_path), "t", "New", "./todos/a.md")
+        assert [e.title for e in idx.read(d, "todos")[0]] == ["New"]
 
 
 class TestInvariant:

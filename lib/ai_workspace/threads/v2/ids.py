@@ -23,20 +23,54 @@ UNKNOWN = "19700101"
 SLUG_RE = re.compile(r"[^a-z0-9]+")
 ID_RE = re.compile(r"^(\d{8})-([a-z0-9][a-z0-9-]*)$")
 
+# A date anywhere in a filename, dashed or not. Older plugin versions wrote it
+# in both forms and not always first, so neither the format nor the position is
+# fixed.
+_DATE_IN_NAME = re.compile(r"(\d{4})-?(\d{2})-?(\d{2})")
+
+# A trailing file extension, kept short and alphanumeric on purpose. An artifact
+# can be a directory, and `Path.stem` would cut `v1.2-notes` down to `v1`.
+_EXTENSION = re.compile(r"\.[A-Za-z0-9]{1,4}$")
+
 
 def slugify(text: str) -> str:
     slug = SLUG_RE.sub("-", text.lower()).strip("-")
     return slug or "untitled"
 
 
-def make_id(when: date, slug: str) -> str:
-    """The id for something dated `when`.
+def make_id(when: date | None, slug: str) -> str:
+    """The id for something dated `when`, or dated UNKNOWN when nothing is known.
 
     A date rather than a string: the caller has one, and taking text meant
     accepting two formats and normalising inside, which put the question of
-    what a valid date is in the wrong place.
+    what a valid date is in the wrong place. None is not a third format, it is
+    the absence of an answer, and it renders as the epoch so every downstream
+    parser handles it without a special case.
     """
-    return f"{when:%Y%m%d}-{slugify(slug)}"
+    prefix = f"{when:%Y%m%d}" if when is not None else UNKNOWN
+    return f"{prefix}-{slugify(slug)}"
+
+
+def from_filename(name: str) -> tuple[date | None, str]:
+    """The date a filename states, and what is left once it is taken out.
+
+    Splitting them is what lets an id be rebuilt with the date first whatever
+    order the name used. `snapshot-20260303-parking-lot.md` gives 2026-03-03 and
+    `snapshot-parking-lot`, so its id sorts with March rather than with `s`.
+
+    A name with no date gives None and the caller decides what that means. It
+    never guesses one: a plausible date is worse than a visible gap.
+    """
+    stem = _EXTENSION.sub("", name)
+    found = _DATE_IN_NAME.search(stem)
+    if not found:
+        return None, stem
+    y, m, d = found.groups()
+    try:
+        when = date(int(y), int(m), int(d))
+    except ValueError:
+        return None, stem
+    return when, stem[: found.start()] + stem[found.end():]
 
 
 def parse_id(entry_id: str) -> tuple[str, str] | None:

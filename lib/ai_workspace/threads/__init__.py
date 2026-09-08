@@ -30,9 +30,9 @@ from ai_workspace.threads.schema import (  # noqa: F401  (re-exported)
 )
 
 __all__ = [
-    "add_artifact",
     "add_todo",
     "create",
+    "index_file",
     "log_decision",
     "names_one_directory",
     "resume",
@@ -200,12 +200,11 @@ def retire_decision(workspace_dir: str, thread_name: str, decision_id: str,
     return error or fn(thread, decision_id, state)
 
 
-def add_artifact(workspace_dir: str, thread_name: str, title: str, link: str,
-                 session_id: str | None = None) -> str:
-    """Index a file the thread produced."""
-    thread, fn, error = _for(workspace_dir, thread_name, "add_artifact")
-    return error or fn(thread, title, link, session_id)
-
+def index_file(workspace_dir: str, thread_name: str, link: str,
+               description: str = "", session_id: str | None = None) -> str:
+    """Index a file that is already in the thread."""
+    thread, fn, error = _for(workspace_dir, thread_name, "index_file")
+    return error or fn(thread, link, description, session_id)
 
 def retire_artifact(workspace_dir: str, thread_name: str, artifact_id: str,
                     state: str) -> str:

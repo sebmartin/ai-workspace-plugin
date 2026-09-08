@@ -300,16 +300,30 @@ def retire_decision(workspace_dir: str, thread_name: str, decision_id: str,
 
 
 @mcp.tool()
-def add_artifact(workspace_dir: str, thread_name: str, title: str, link: str) -> str:
-    """Index an artifact that has been written into the thread.
+def index_file(workspace_dir: str, thread_name: str, link: str,
+               description: str = "") -> str:
+    """Index a file that is already in the thread.
+
+    Use this once a file exists on disk: an artifact you have written, or a
+    session, decision or artifact being brought into the index during a
+    migration. It refuses a link that does not resolve, so write the file first.
+
+    Everything on the index line is derived from the file. The kind comes from
+    the directory, the id from a date found in the filename, and a decision's
+    state from its `status:` frontmatter, which must already use this schema's
+    vocabulary. A file whose name states no date is dated from the earliest
+    session that names it, and failing that is marked unknown.
 
     Args:
         workspace_dir: The tracked workspace path from session context.
         thread_name: Name of the thread (kebab-case).
-        title: Short title for the artifact.
         link: Path relative to the thread, e.g. ./artifacts/20260813-notes-x.md.
+        description: One line saying what an artifact contains. Artifacts only,
+            and the only thing not read from the file: decisions and sessions
+            carry a `summary:` in their own frontmatter, artifacts have nowhere
+            to put one.
     """
-    return _threads.add_artifact(workspace_dir, thread_name, title, link)
+    return _threads.index_file(workspace_dir, thread_name, link, description)
 
 
 @mcp.tool()
