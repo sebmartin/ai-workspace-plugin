@@ -93,6 +93,12 @@ description is the only thing not read off the file and has no other home. Run
 `index_directory` with `./artifacts` afterwards for whatever is left. A
 subdirectory is one artifact either way.
 
+**Shorten those descriptions to one sentence as you carry them.** A v1 README
+holds them in a list nobody loads on resume; a schema 2 index line is read
+every single time. One migration carried sixteen across at an average of 255
+characters and they became 30% of the thread's resume. Say what the artifact
+is, not what is in it.
+
 Everything else on the line is read off the file. The id takes a date found
 anywhere in the filename, so `2026-01-20-initial-setup.md` and
 `snapshot-20260303-parking-lot.md` both sort correctly without being renamed. A
