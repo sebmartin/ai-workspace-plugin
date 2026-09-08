@@ -21,20 +21,40 @@ The README is a lean index — the complete map of a thread. It must be short en
 - Read the README in full — every section.
 - Load session context using a recency gradient, without surfacing it: most recent session's `summary`/`keywords`/`next_context`, then `summary`/`date` for the next 2–4, then nothing. Skip sessions without frontmatter silently.
 - Read the frontmatter of every file in `decisions/`. If one is missing `summary:`, read it, infer a one-sentence summary of WHAT was decided, and add it silently.
-- Show Quick Resume and Locked Decisions. Nothing else.
+- Show the migration banner, Quick Resume and Locked Decisions. Nothing else.
+- Close with the migration question, just above the **Working on thread** marker, and wait for an answer.
 
 ```
 Resumed: [Thread Name]
+
+> ⚠️ **This thread is schema 1 and cannot be saved.**
+> Every save, decision, artifact and todo tool refuses it with
+> `NEEDS_MIGRATION`. Migrating converts it to schema 2 and deletes nothing.
 
 [Quick Resume section, verbatim]
 
 ## Locked Decisions
 [One line per decision: "**[title]** ([status]): [summary]"]
+
+**Migrate this thread to schema 2 now?** It takes a few minutes and leaves the
+original in place. Saying no is fine; this session just cannot be saved.
 ```
+
+The banner goes above Quick Resume, not below the decisions. Below, it reads
+as a footnote to a wall of thread content and gets skipped, which is the whole
+failure it exists to prevent.
 
 ## Migration
 
-A schema 1 thread cannot be saved with the current tools; every schema 2 write tool returns `Status: NEEDS_MIGRATION`. Say so when the thread is resumed rather than when a save is attempted, so a long session does not end in a surprise.
+A schema 1 thread cannot be saved with the current tools; every schema 2 write tool returns `Status: NEEDS_MIGRATION`.
+
+**Raise it on resume, as a question, not at save time.** The resume format
+above carries both the banner and the ask. A session that discovers this at
+save time has already done the work it cannot keep.
+
+If the user declines, do not ask again unprompted, and do not migrate anything
+on your own initiative. Raise it once more if they later try to save, since
+that is the moment the refusal becomes concrete.
 
 See `skills/threads/v2/commands/migrate-from-v1.md` when the user agrees to convert.
 
