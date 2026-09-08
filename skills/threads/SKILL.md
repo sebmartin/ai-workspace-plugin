@@ -135,7 +135,7 @@ Never hand-edit an index or the README's Next steps section; both are rendered f
 | Choose what the README shows | `set_window` — about five, in priority order |
 | Record a decision | `log_decision` |
 | Retire one | `retire_decision` (`superseded` / `withdrawn`) |
-| Index a file that exists | `index_file` |
+| Index a file that exists | `index_file` — an artifact's description is one sentence; it is read on every resume |
 | Retire one | `retire_artifact` (`superseded` / `stale`) |
 | Save | `save_session` |
 
