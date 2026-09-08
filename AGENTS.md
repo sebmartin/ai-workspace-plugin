@@ -264,11 +264,27 @@ Assets are per schema too, and getting this wrong is silent:
 | | |
 |---|---|
 | templates | `templates/thread-template.md` is v1's; v2 uses `templates/v2/` |
-| skill prose | `skills/threads/v1/`, `skills/threads/v2/` |
+| skill prose | `SKILL.md` holds `CURRENT_SCHEMA`'s model; older ones are `skills/threads/vN/model.md` |
 
 Never repurpose a shared asset for the newest schema. Add one under `vN/`
 instead. Editing `templates/thread-template.md` to suit schema 2 would leave
 v1's `create` quietly writing a schema 2 README, which no test would catch.
+
+**Skill prose rotates when `CURRENT_SCHEMA` moves.** SKILL.md is always loaded,
+so the schema the plugin creates is described inline and costs no fetch, while
+older schemas are fetched only by a session that touches one. Shipping schema 3
+means moving SKILL.md's `## Working with a schema N thread` section out to
+`skills/threads/vN/model.md` verbatim and writing the new one in its place. The
+section is contiguous so the move is mechanical, and
+`test_only_the_schema_being_created_is_inlined_in_the_skill` fails if it is
+skipped. Skip it and SKILL.md documents the wrong default, which nothing else
+would notice.
+
+An older schema's file opens by naming the sections it overrides and warning
+that its rules destroy work if applied to a current thread. Restate that in
+each one, because the danger is asymmetric: the current schema's write tools
+refuse an older thread and say so, while an older schema's hand-editing habits
+are erased by the next render without a word.
 
 ### The tool surface
 
