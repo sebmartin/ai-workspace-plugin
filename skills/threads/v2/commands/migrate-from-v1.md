@@ -28,7 +28,8 @@ the pre-migration state is not recoverable if the answer is no.
 4. Convert the copy — below
 5. Call `audit_migration`, read what it reports, and resolve anything real
 6. Rename `{name}-v2` to `{name}`
-7. Tell the user `{name}-v1` is theirs to remove or archive when they are satisfied
+7. Record the backup as a todo, and tell the user `{name}-v1` is theirs to
+   remove or archive when they are satisfied
 
 Renaming first means every directory states its version at every instant, and
 there is never a `{name}` whose shape is ambiguous. The cutover is one rename
@@ -116,3 +117,24 @@ else it held is now a todo, a decision or a session.
 `attachments/` is copied across and left alone. It has no index, because an
 attachment is a file the user dropped in and there is no moment where a
 description gets authored.
+
+**Leave the backup as a todo, not as a sentence.** A migration ends with exactly
+one outstanding commitment, deciding what happens to `{name}-v1`, and saying it
+in conversation loses it the moment the session ends. Write a `todos/` file for
+it and put it in the window:
+
+```
+Title: Remove or archive threads/{name}-v1
+Link:  ./todos/{date}-retire-the-v1-backup.md
+```
+
+A file rather than a link to the backup itself, because a link pointing outside
+the thread is what `audit` reports as dangling. The todo is the user's decision
+to make, not yours: never delete either directory, and never offer to.
+
+**If the workspace is a git repository, say what a commit would include.** The
+migration leaves the tree dirty: the README reads as an edit, and `{name}-v1`,
+the indexes and the todos are untracked. Committing everything as-is puts a
+complete duplicate of the thread into history. Say so, and leave the choice
+alone — the recoverable state is the commit made before the migration started,
+and that one is already safe.
