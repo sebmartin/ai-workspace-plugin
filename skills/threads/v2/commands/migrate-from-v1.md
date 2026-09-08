@@ -53,29 +53,57 @@ choose. Say which is which and leave them both.
 Read `{name}-v1/README.md` — the original, not the copy, which you are about to
 overwrite.
 
-**Build the indexes in date order.** Walk `sessions/` first and note which files
-each session mentions; that map dates artifacts that carry no date of their own,
-and it recovers most of them. Then walk `decisions/` and `artifacts/`, adding an
-entry per top-level file or directory with `add_artifact` and `log_decision`.
+### 1. Replace the README first, before any write tool
 
-The index places each entry by its id, so feeding them out of order is not
-itself a problem. A date comes from frontmatter, then from the filename, then
-from a session that references the file. Anything with none gets `19700101`, which
-means unknown — never invent a plausible date, and never use a filesystem
-timestamp, which records when bytes moved rather than when something was
-written.
+Overwrite the copy's `README.md` from `templates/v2/thread-template.md`. Not the
+finished README; the skeleton. Every write tool re-renders `## Next steps` into
+whatever README is there, and a schema 1 README has next steps as bold text
+inside `## Quick Resume` rather than as a heading. Writing first and replacing
+after produces one document with two diverging next-step lists.
 
-**Do not rename any file.** The derived date mints the index id; the file keeps
-its name and the index line links to it. Renaming would break links from session
-logs into decisions, from decision bodies into artifacts, from the README and
-from other threads, none of which anything rewrites and none of which error when
-dangling.
+The tools refuse rather than let that happen, so this is the step that unblocks
+the rest. Status and About can be filled any time after.
 
-**Substitute the status vocabulary** as you go: `decided`, `active`,
-`confirmed`, `adopted` and `Accepted` become `locked`; `mostly-locked` becomes
-`partially-locked`; `open` becomes `proposed`. Decisions with no status need
-reading. So do any whose prose describes supersession, to tell which superseded
-which — the live one declares `supersedes`.
+### 2. Index the sessions
+
+`index_file` with each session's path. Nothing else, and nothing before it.
+
+Sessions are self-dating, from a `YYYYMMDD-` prefix and a `date:` in their own
+frontmatter, so they need nothing looked up. Everything after this step can be
+dated from them, and by then they have been migrated. **That ordering is what
+keeps schema 2 from ever reading a schema 1 file, so do not reorder these.**
+
+### 3. Index the decisions and artifacts
+
+`index_file` again, one call per top-level file or directory. A subdirectory is
+one artifact. Artifacts take a description: carry across the one-line
+description from the v1 README's `### Artifacts` list, which is the only thing
+in that list worth keeping and has no other home.
+
+Everything else on the line is read off the file. The id takes a date found
+anywhere in the filename, so `2026-01-20-initial-setup.md` and
+`snapshot-20260303-parking-lot.md` both sort correctly without being renamed. A
+file whose name states no date is dated from the earliest session that names it,
+and failing that is marked `19700101`, meaning unknown. Never invent a plausible
+date, and never use a filesystem timestamp, which records when bytes moved
+rather than when something was written.
+
+**Do not rename any file.** The id is derived; the file keeps its name and the
+index line links to it. Renaming would break links from session logs into
+decisions, from decision bodies into artifacts, from the README and from other
+threads, none of which anything rewrites and none of which error when dangling.
+
+**Substitute the status vocabulary before indexing a decision**, in the file's
+own frontmatter: `decided`, `active`, `confirmed`, `adopted` and `Accepted`
+become `locked`; `mostly-locked` becomes `partially-locked`; `open` becomes
+`proposed`. `index_file` reads `status:` off the file and refuses anything
+outside that vocabulary, so a decision you have not converted will say so.
+
+Decisions with no status need reading. So do any whose prose describes
+supersession, to tell which superseded which — the live one declares
+`supersedes`.
+
+### 4. The rest
 
 **Extract todos** from Next steps, Parked and Open Questions. Each needs a link:
 the session it came from when it has nothing of its own. Parked entries that are
