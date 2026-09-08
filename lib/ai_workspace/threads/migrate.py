@@ -56,12 +56,30 @@ def safety_check(workspace: Path, thread_name: str) -> str:
     return f"threads/{thread_name} is committed and clean. Safe to migrate."
 
 
-def _indexed_targets(thread_dir: Path) -> set[str]:
+# Sections a schema 1 README has and a schema 2 one does not. A half-converted
+# README is the likeliest way a migration goes wrong and the hardest to see,
+# since every index can be complete while the README is still the old document.
+V1_README_MARKERS = (
+    "## Quick Resume",
+    "**Next steps**:",
+    "## Open Questions",
+    "### Resources",
+)
+
+
+def _indexed_targets(thread_dir: Path, kind: str) -> set[str]:
+    """Filenames one kind's index accounts for, in force or retired.
+
+    Per kind, not across all of them. Unioning every index meant a todo linking
+    to ./sessions/foo.md vouched for foo.md being in the *sessions* index, and
+    the migration reference tells you to link an orphan todo to the session it
+    came from. So the false negative fired on exactly the threads that followed
+    the instructions, and a thread with no sessions index at all passed.
+    """
     names: set[str] = set()
-    for kind in idx.TYPES:
-        for retired in (False, True):
-            entries, _ = idx.read(thread_dir, kind, retired)
-            names.update(Path(e.link).name for e in entries)
+    for retired in (False, True):
+        entries, _ = idx.read(thread_dir, kind, retired)
+        names.update(Path(e.link).name for e in entries)
     return names
 
 
@@ -86,11 +104,11 @@ def audit(original: Path, converted: Path) -> str:
             problems.append(f"{kind}: {len(missing)} file(s) missing from the copy: "
                             + ", ".join(missing[:5]))
 
-    indexed = _indexed_targets(converted)
     for kind in ("sessions", "decisions", "artifacts"):
         src = original / kind
         if not src.is_dir():
             continue
+        indexed = _indexed_targets(converted, kind)
         # A subdirectory is one artifact, so compare top-level entries only.
         unindexed = sorted(p.name for p in src.iterdir() if p.name not in indexed)
         if unindexed:
@@ -105,6 +123,16 @@ def audit(original: Path, converted: Path) -> str:
         ordering = [e.id.split("-")[0] for e in entries]
         if ordering != sorted(ordering):
             problems.append(f"{kind}: index is not in date order")
+
+    readme = converted / "README.md"
+    residue = sorted(
+        marker for marker in V1_README_MARKERS
+        if readme.is_file() and marker in readme.read_text(errors="ignore")
+    )
+    if residue:
+        problems.append(
+            "README still holds schema 1 sections: " + ", ".join(residue)
+        )
 
     unknown = sum(
         1 for kind in idx.TYPES

@@ -141,7 +141,7 @@ def test_server_lists_its_tools(tools):
     "resolve_workspace", "set_default_workspace",
     "archive_thread", "restore_thread", "list_archived_threads",
     "add_todo", "retire_todo", "set_todo_state", "set_window",
-    "log_decision", "retire_decision", "add_artifact", "retire_artifact",
+    "log_decision", "retire_decision", "index_file", "retire_artifact",
     "save_session", "migration_safety_check", "audit_migration",
 ])
 def test_tool_is_registered(tools, name):

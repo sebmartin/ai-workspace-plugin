@@ -30,11 +30,21 @@ def _v1(ws, name="t"):
     return d
 
 
-def _converted_from(v1_dir, ws, name="t-v2"):
+def _converted_from(v1_dir, ws, name="t-v2", readme=True):
+    """The staging copy partway through a conversion.
+
+    The README is replaced first, as the reference instructs, because every
+    write tool renders into whatever README is there.
+    """
     import shutil
     d = ws / "threads" / name
     shutil.copytree(v1_dir, d)
     marker.write(d, 2)
+    if readme:
+        (d / "README.md").write_text(
+            "# Thread: t\n\n**Started**: 2026-01-01\n\n## Status\n\nx\n\n"
+            "## Next steps\n\n- None\n\n## About\n\nx\n"
+        )
     return d
 
 
@@ -72,6 +82,30 @@ class TestSafetyCheck:
 
 
 class TestAudit:
+    def test_a_todo_cannot_vouch_for_the_sessions_index(self, tmp_path):
+        """The union across indexes passed a thread with no sessions index at all.
+
+        The reference tells you to link an orphan todo to the session it came
+        from, so this fired on threads that followed the instructions.
+        """
+        v1 = _v1(tmp_path)
+        d = _converted_from(v1, tmp_path)
+        idx.add(d, "decisions", idx.Entry(
+            "20260202-choice", "locked", "20260202-choice",
+            "./decisions/20260202-choice.md"))
+        idx.add(d, "todos", idx.Entry(
+            "20260101-a", "active", "A", "./sessions/20260101-first.md"))
+        out = migrate.audit(v1, d)
+        assert "sessions: 1 entr" in out and "not in any index" in out
+
+    def test_a_half_converted_readme_is_reported(self, tmp_path):
+        """Every index can be complete while the README is still the old document."""
+        v1 = _v1(tmp_path)
+        d = _converted_from(v1, tmp_path, readme=False)
+        out = migrate.audit(v1, d)
+        assert "still holds schema 1 sections" in out
+        assert "## Quick Resume" in out
+
     def test_clean_conversion_reports_no_problems(self, tmp_path):
         v1 = _v1(tmp_path)
         conv = _converted_from(v1, tmp_path)
