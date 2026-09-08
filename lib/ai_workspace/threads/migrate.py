@@ -97,8 +97,8 @@ def audit(original: Path, converted: Path) -> str:
         src, dst = original / kind, converted / kind
         if not src.is_dir():
             continue
-        src_names = {p.name for p in src.iterdir()}
-        dst_names = {p.name for p in dst.iterdir()} if dst.is_dir() else set()
+        src_names = {p.name for p in src.iterdir() if idx.is_content(p)}
+        dst_names = {p.name for p in dst.iterdir() if idx.is_content(p)} if dst.is_dir() else set()
         missing = sorted(src_names - dst_names)
         if missing:
             problems.append(f"{kind}: {len(missing)} file(s) missing from the copy: "
@@ -109,8 +109,14 @@ def audit(original: Path, converted: Path) -> str:
         if not src.is_dir():
             continue
         indexed = _indexed_targets(converted, kind)
-        # A subdirectory is one artifact, so compare top-level entries only.
-        unindexed = sorted(p.name for p in src.iterdir() if p.name not in indexed)
+        # A subdirectory is one artifact, so compare top-level entries only, and
+        # `.DS_Store` and its `._name` siblings are not entries at all. A real
+        # thread had fifty of those, and reporting them as missing content is
+        # how an audit teaches its reader to stop reading it.
+        unindexed = sorted(
+            p.name for p in src.iterdir()
+            if idx.is_content(p) and p.name not in indexed
+        )
         if unindexed:
             problems.append(f"{kind}: {len(unindexed)} entr(y/ies) not in any index: "
                             + ", ".join(unindexed[:5]))

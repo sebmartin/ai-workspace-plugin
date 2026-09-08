@@ -98,6 +98,20 @@ class TestAudit:
         out = migrate.audit(v1, d)
         assert "sessions: 1 entr" in out and "not in any index" in out
 
+    def test_filesystem_metadata_is_not_reported_as_missing(self, tmp_path):
+        """A real audit reported fifty of these, which is how a gate gets ignored."""
+        v1 = _v1(tmp_path)
+        for name in (".DS_Store", "._20260101-first.md"):
+            (v1 / "sessions" / name).write_text("x\n")
+        d = _converted_from(v1, tmp_path)
+        idx.add(d, "sessions", idx.Entry(
+            "20260101-first", None, "20260101-first", "./sessions/20260101-first.md"))
+        idx.add(d, "decisions", idx.Entry(
+            "20260202-choice", "locked", "20260202-choice", "./decisions/20260202-choice.md"))
+        out = migrate.audit(v1, d)
+        assert "DS_Store" not in out
+        assert "PROBLEMS" not in out
+
     def test_a_half_converted_readme_is_reported(self, tmp_path):
         """Every index can be complete while the README is still the old document."""
         v1 = _v1(tmp_path)
