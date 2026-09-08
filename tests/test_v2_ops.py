@@ -202,6 +202,18 @@ class TestArtifacts:
         entries, _ = idx.read(d, "artifacts")
         assert [e.description for e in entries] == ["What the auth flow does", ""]
 
+    def test_a_directory_is_one_artifact(self, tmp_path):
+        """`audit` treats a subdirectory as a single artifact, so indexing must too."""
+        d = _thread(tmp_path)
+        shots = d / "artifacts" / "20260401-site-photos"
+        shots.mkdir(parents=True)
+        (shots / "a.png").write_bytes(b"x")
+        out = index_file(str(tmp_path), "t", "./artifacts/20260401-site-photos", "from the visit")
+        assert "20260401-site-photos" in out
+        entry = idx.read(d, "artifacts")[0][0]
+        assert entry.id == "20260401-site-photos"
+        assert entry.description == "from the visit"
+
     def test_a_link_that_resolves_to_nothing_is_refused(self, tmp_path):
         """The boundary: this indexes, it never authors."""
         _thread(tmp_path)

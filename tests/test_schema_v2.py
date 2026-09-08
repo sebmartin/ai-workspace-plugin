@@ -286,6 +286,21 @@ class TestIds:
     def test_id_shape(self):
         assert ids.make_id(date(2026, 7, 23), "Prep Ladder!") == "20260723-prep-ladder"
 
+    def test_a_long_title_is_capped_at_a_word_boundary(self):
+        """A todo titled from a sentence produced a 90-character id."""
+        long = "Restart Claude Code so the .claude/settings.json permission allowlist takes effect"
+        got = ids.make_id(date(2026, 9, 8), long)
+        assert len(got) <= 9 + ids.MAX_SLUG
+        assert got == "20260908-restart-claude-code-so-the-claude-settings-json"
+        assert not got.endswith("-")
+
+    def test_a_single_long_word_is_cut_rather_than_kept(self):
+        got = ids.make_id(date(2026, 9, 8), "a" * 90)
+        assert len(got) == 9 + ids.MAX_SLUG
+
+    def test_a_title_with_nothing_sluggable_still_gets_an_id(self):
+        assert ids.make_id(date(2026, 9, 8), "...") == "20260908-untitled"
+
     def test_collisions_get_a_suffix(self):
         assert ids.unique_id("20260101-a", {"20260101-a"}) == "20260101-a-2"
         assert ids.unique_id("20260101-a", {"20260101-a", "20260101-a-2"}) == "20260101-a-3"

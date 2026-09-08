@@ -21,6 +21,12 @@ from datetime import date
 UNKNOWN = "19700101"
 
 SLUG_RE = re.compile(r"[^a-z0-9]+")
+
+# An id is a handle, not a description: the title sits on the same index line
+# and says what the thing is. Long enough to stay recognisable, short enough to
+# read in a list and to retype into retire_todo without a slip. A todo titled
+# from a sentence produced a 90-character id before this.
+MAX_SLUG = 48
 ID_RE = re.compile(r"^(\d{8})-([a-z0-9][a-z0-9-]*)$")
 
 # A date anywhere in a filename, dashed or not. Older plugin versions wrote it
@@ -34,8 +40,12 @@ _EXTENSION = re.compile(r"\.[A-Za-z0-9]{1,4}$")
 
 
 def slugify(text: str) -> str:
+    """Kebab-case, capped at a word boundary so it never cuts mid-word."""
     slug = SLUG_RE.sub("-", text.lower()).strip("-")
-    return slug or "untitled"
+    if len(slug) > MAX_SLUG:
+        cut = slug[: MAX_SLUG + 1]
+        slug = cut.rsplit("-", 1)[0] if "-" in cut[1:] else cut[:MAX_SLUG]
+    return slug.strip("-") or "untitled"
 
 
 def make_id(when: date | None, slug: str) -> str:
