@@ -8,6 +8,7 @@ from ai_workspace.threads import marker, v1
 from ai_workspace.threads.v2 import index as idx
 
 SESSION_WINDOW = 10
+ATTACHMENT_WINDOW = 12
 
 _SECTION_RE = r"(?m)^##[ \t]+{name}[ \t]*$\n(.*?)(?=^##[ \t]|\Z)"
 
@@ -105,11 +106,16 @@ def compose(thread_dir: Path, thread_name: str) -> str:
     out.append(f"\n## Recent sessions ({len(tail)} of {len(sessions)})\n")
     out.extend(e.render() for e in tail)
 
+    # Listed while listing is cheap, counted once it is not. A few filenames
+    # save a call; eighty-six of them cost a real thread 15% of every resume.
+    # There is no index to window against, so the count is the whole choice.
     attachments = thread_dir / "attachments"
-    names = sorted(p.name for p in attachments.iterdir()) if attachments.is_dir() else []
+    names = sorted(p.name for p in attachments.iterdir() if idx.is_content(p)) \
+        if attachments.is_dir() else []
     if names:
         out.append(f"\n## Attachments ({len(names)})\n")
-        out.append(", ".join(names))
+        out.append(", ".join(names) if len(names) <= ATTACHMENT_WINDOW
+                   else "Not indexed. List `attachments/` when you need one.")
 
     return "\n".join(out).rstrip() + "\n"
 

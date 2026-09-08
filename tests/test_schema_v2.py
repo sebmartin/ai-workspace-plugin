@@ -227,6 +227,27 @@ class TestCompose:
         assert "beyond the window (0 active, 0 parked)" in out
         assert out.index("## Next steps") < out.index("## Todo backlog")
 
+    def test_a_few_attachments_are_listed(self, tmp_path):
+        """Cheap enough to be worth saving the caller a directory listing."""
+        d = _v2_thread(tmp_path)
+        for n in ("survey.pdf", "plan.png"):
+            (d / "attachments" / n).write_bytes(b"x")
+        (d / "attachments" / ".DS_Store").write_bytes(b"x")
+        out = v2.compose(d, "t")
+        assert "## Attachments (2)" in out
+        assert "plan.png, survey.pdf" in out
+        assert "DS_Store" not in out
+
+    def test_many_attachments_are_counted_instead(self, tmp_path):
+        """Eighty-six filenames was 15% of a real resume, and nobody read them."""
+        d = _v2_thread(tmp_path)
+        for i in range(30):
+            (d / "attachments" / f"survey-scan-{i}.pdf").write_bytes(b"x")
+        out = v2.compose(d, "t")
+        assert "## Attachments (30)" in out
+        assert "survey-scan-0.pdf" not in out
+        assert "List `attachments/`" in out
+
     def test_decision_summaries_come_from_the_files(self, tmp_path):
         d = _v2_thread(tmp_path)
         (d / "decisions" / "20260101-x.md").write_text(

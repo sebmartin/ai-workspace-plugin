@@ -71,6 +71,17 @@ class Entry:
         return f"Entry({self.id!r}, {self.state!r}, {self.title!r})"
 
 
+def is_content(path: Path) -> bool:
+    """Whether a directory entry is thread content rather than filesystem noise.
+
+    A leading dot means metadata. `.DS_Store`, and the `._name` AppleDouble
+    files macOS writes beside every file when copying to a filesystem with no
+    resource forks, which is what a NAS or a memory stick is. A real thread had
+    one of those per file: fifty across two directories.
+    """
+    return not path.name.startswith(".")
+
+
 def index_path(thread_dir: Path, kind: str, retired: bool = False) -> Path:
     suffix = "retired" if retired else "index"
     return thread_dir / f"{kind}-{suffix}.md"
