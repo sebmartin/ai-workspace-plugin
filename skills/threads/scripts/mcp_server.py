@@ -342,7 +342,10 @@ def index_file(workspace_dir: str, thread_name: str, link: str,
         description: One line saying what an artifact contains. Artifacts only,
             and the only thing not read from the file: decisions and sessions
             carry a `summary:` in their own frontmatter, artifacts have nowhere
-            to put one.
+            to put one. It is read on every resume, so it costs something
+            permanently, the same way a decision's summary does. One sentence.
+            A thread whose sixteen artifacts averaged 255 characters spent 30%
+            of its resume on them.
     """
     return _threads.index_file(workspace_dir, thread_name, link, description)
 
