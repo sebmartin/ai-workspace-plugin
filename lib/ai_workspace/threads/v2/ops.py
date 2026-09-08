@@ -11,6 +11,7 @@ model's per-response output cap.
 
 from datetime import date
 from pathlib import Path, PurePosixPath
+from typing import NamedTuple
 
 from ai_workspace.text import split_frontmatter, yaml_value
 from ai_workspace.threads.v2 import dates, render, session
@@ -37,14 +38,49 @@ _INDEXABLE = {
 }
 
 
-def _decision_state(path: Path) -> str | None:
-    """A decision's status, if the file states a valid one."""
+class Refusal(NamedTuple):
+    """Why one file could not be indexed.
+
+    Two parts so a batch can group them. `cause` is identical for every file
+    failing the same way; `detail` is what differs. Reporting the detail per
+    file made a report of twenty-four broken decisions ten thousand characters
+    long, nine tenths of it the same sentence with a different path in it.
+    """
+
+    cause: str
+    detail: str = ""
+
+    def render(self, link: str) -> str:
+        return f"Error: {link} {self.cause}." + (f"\n{self.detail}" if self.detail else "")
+
+
+def _decision_state(path: Path) -> tuple[str | None, Refusal | None]:
+    """A decision's status, or why it has none.
+
+    Two different faults, and reporting the wrong one sends the reader to the
+    wrong fix. A file whose frontmatter is invalid YAML usually states a
+    perfectly good status; it just cannot be read.
+    """
     try:
         fields, _ = split_frontmatter(path.read_text(errors="ignore")[:2000], path)
-    except (OSError, ValueError):
-        return None
+    except OSError as e:
+        return None, Refusal("cannot be read", str(e))
+    except ValueError as e:
+        # The parser's own complaint, which names a line and a column and the
+        # real fault. Guessing at a cause here would send the reader to the
+        # wrong fix whenever the guess was wrong.
+        return None, Refusal(
+            "has frontmatter that cannot be parsed, so its status cannot be read",
+            str(e),
+        )
     status = str(fields.get("status") or "").strip()
-    return status if status in idx.IN_FORCE["decisions"] else None
+    if status in idx.IN_FORCE["decisions"]:
+        return status, None
+    allowed = ", ".join(idx.IN_FORCE["decisions"])
+    return None, Refusal(
+        f"does not declare a status this schema uses. Use one of: {allowed}",
+        f"it says `{status}`" if status else "it declares none",
+    )
 
 
 def _inside(link: str) -> PurePosixPath | None:
@@ -59,7 +95,7 @@ def _inside(link: str) -> PurePosixPath | None:
     return relative
 
 
-def _index_one(thread, link: str, description: str = "") -> tuple[str, str | None]:
+def _index_one(thread, link: str, description: str = "") -> tuple[str, Refusal | None]:
     """Derive an entry for one existing file and add it. `(entry_id, error)`.
 
     No render: the caller does that once, so indexing sixty-six sessions
@@ -67,28 +103,24 @@ def _index_one(thread, link: str, description: str = "") -> tuple[str, str | Non
     """
     relative = _inside(link)
     if relative is None or len(relative.parts) < 2:
-        return "", f"Error: '{link}' is not a path to a file inside the thread."
+        return "", Refusal("is not a path to a file inside the thread")
 
     kind = relative.parts[0]
     if kind not in _INDEXABLE:
         allowed = ", ".join(_INDEXABLE)
-        return "", f"Error: '{kind}' is not an indexable directory. Use one of: {allowed}."
+        return "", Refusal(f"is not in an indexable directory. Use one of: {allowed}")
 
     path = thread.dir / relative
     if not path.exists():
-        return "", f"Error: Nothing at {link}. Write the file before indexing it."
+        return "", Refusal("does not exist. Write the file before indexing it")
     if not idx.is_content(path):
-        return "", f"Error: {link} is filesystem metadata, not thread content."
+        return "", Refusal("is filesystem metadata, not thread content")
 
     default_state, takes_description = _INDEXABLE[kind]
     if default_state is _STATE_FROM_FILE:
-        state = _decision_state(path)
-        if state is None:
-            allowed = ", ".join(idx.IN_FORCE["decisions"])
-            return "", (
-                f"Error: {link} does not declare a status this schema knows.\n"
-                f"Set `status:` in its frontmatter to one of: {allowed}."
-            )
+        state, refusal = _decision_state(path)
+        if refusal is not None:
+            return "", refusal
     else:
         state = default_state
 
@@ -121,9 +153,9 @@ def index_file(thread, link: str, description: str = "",
     """
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
-    entry_id, error = _index_one(thread, link, description)
-    if error:
-        return error
+    entry_id, refusal = _index_one(thread, link, description)
+    if refusal is not None:
+        return refusal.render(link)
     render.render(thread.dir)
     _record(thread.dir, session_id, f"{PurePosixPath(link).parts[-2][:-1]} {entry_id}")
     unknown = entry_id.startswith(ids_mod.UNKNOWN)
@@ -171,11 +203,12 @@ def index_directory(thread, link: str, session_id: str | None = None) -> str:
     if not pending:
         return f"Every entry in {kind}/ is already indexed."
 
-    indexed, unknown, refused = [], [], []
+    indexed, unknown = [], []
+    refused: dict[str, list[str]] = {}
     for path in pending:
-        entry_id, error = _index_one(thread, f"./{kind}/{path.name}")
-        if error:
-            refused.append(f"{path.name}: {error.replace(chr(10), ' ')}")
+        entry_id, refusal = _index_one(thread, f"./{kind}/{path.name}")
+        if refusal is not None:
+            refused.setdefault(refusal.cause, []).append(path.name)
             continue
         indexed.append(entry_id)
         if entry_id.startswith(ids_mod.UNKNOWN):
@@ -192,8 +225,16 @@ def index_directory(thread, link: str, session_id: str | None = None) -> str:
             + ", ".join(unknown[:5]) + ("..." if len(unknown) > 5 else "")
         )
     if refused:
-        lines.append(f"  {len(refused)} refused:")
-        lines.extend(f"    - {r}" for r in refused)
+        # Grouped by cause, and the files named rather than each carrying its
+        # own copy of the same sentence. Whoever fixes them wants the list of
+        # names; the parser's detail is one `index_file` call away.
+        total = sum(len(v) for v in refused.values())
+        lines.append(f"  {total} refused:")
+        for cause, names in refused.items():
+            lines.append(f"    {cause}:")
+            shown = ", ".join(names[:8]) + (f", and {len(names) - 8} more" if len(names) > 8 else "")
+            lines.append(f"      {shown}")
+        lines.append("    Call index_file on one of them for the full message.")
     return "\n".join(lines)
 
 

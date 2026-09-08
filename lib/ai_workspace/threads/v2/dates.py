@@ -17,6 +17,7 @@ from datetime import date
 from pathlib import Path
 
 from ai_workspace.threads.v2 import ids
+from ai_workspace.threads.v2 import index as idx
 
 
 def from_a_session_naming(thread_dir: Path, basename: str) -> date | None:
@@ -31,6 +32,8 @@ def from_a_session_naming(thread_dir: Path, basename: str) -> date | None:
 
     dated = []
     for path in sessions.iterdir():
+        if not idx.is_content(path):
+            continue
         when, _ = ids.from_filename(path.name)
         if when is not None:
             dated.append((when, path))

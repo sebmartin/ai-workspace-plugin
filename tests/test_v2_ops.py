@@ -218,7 +218,7 @@ class TestArtifacts:
         """The boundary: this indexes, it never authors."""
         _thread(tmp_path)
         out = index_file(str(tmp_path), "t", "./artifacts/never-written.md")
-        assert "Nothing at" in out
+        assert "does not exist" in out
 
     def test_traversal_is_refused(self, tmp_path):
         _thread(tmp_path)
@@ -269,6 +269,34 @@ class TestIndexDirectory:
         index_directory(str(tmp_path), "t", "./decisions")
         assert len(idx.read(d, "decisions")[0]) == 2
 
+    def test_refusals_are_grouped_by_cause(self, tmp_path):
+        """Per-file detail made a report of twenty-four broken decisions
+        10,463 characters, nine tenths of it one sentence repeated."""
+        d = _thread(tmp_path)
+        (d / "decisions").mkdir(parents=True, exist_ok=True)
+        for i in range(24):
+            (d / "decisions" / f"202602{i + 1:02d}-broken-{i}.md").write_text(
+                f"---\nstatus: locked\nsummary: Lot {i}: subdivides.\n---\nx\n")
+        for i in range(3):
+            (d / "decisions" / f"202603{i + 1:02d}-old-{i}.md").write_text(
+                "---\nstatus: decided\n---\nx\n")
+        out = index_directory(str(tmp_path), "t", "./decisions")
+
+        assert "27 refused" in out
+        assert out.count("cannot be parsed") == 1
+        assert out.count("does not declare a status") == 1
+        assert "and 16 more" in out
+        assert len(out) < 1000, len(out)
+
+    def test_one_file_still_gets_the_whole_message(self, tmp_path):
+        """The batch names the files; index_file is where the detail lives."""
+        d = _thread(tmp_path)
+        (d / "decisions").mkdir(parents=True, exist_ok=True)
+        (d / "decisions" / "20260201-x.md").write_text(
+            "---\nstatus: locked\nsummary: Lot: subdivides.\n---\nx\n")
+        out = index_file(str(tmp_path), "t", "./decisions/20260201-x.md")
+        assert "cannot be parsed" in out and "line 3" in out
+
     def test_undated_entries_are_named_rather_than_buried(self, tmp_path):
         self._thread_with(tmp_path, "artifacts", ["orphan.md", "20260101-a.md"])
         out = index_directory(str(tmp_path), "t", "./artifacts")
@@ -294,6 +322,31 @@ class TestIndexDirectory:
         entries = idx.read(d, "sessions")[0]
         assert [(e.id, e.link) for e in entries] == [
             ("20260125-real", "./sessions/20260125-real.md")]
+
+    def test_an_appledouble_file_cannot_date_an_artifact(self, tmp_path):
+        """They are binary and their header can hold the original filename, so
+        reading them as a dating source is both wasteful and unsound."""
+        d = _thread(tmp_path)
+        (d / "sessions").mkdir(parents=True, exist_ok=True)
+        (d / "artifacts").mkdir(parents=True, exist_ok=True)
+        (d / "sessions" / "._20260101-early.md").write_bytes(b"\x00\x05orphan.md\xb0")
+        (d / "sessions" / "20260607-real.md").write_text("wrote orphan.md today\n")
+        (d / "artifacts" / "orphan.md").write_text("x\n")
+        index_file(str(tmp_path), "t", "./artifacts/orphan.md")
+        assert [e.id for e in idx.read(d, "artifacts")[0]] == ["20260607-orphan"]
+
+    def test_a_decision_with_invalid_yaml_is_told_what_is_wrong(self, tmp_path):
+        """Blaming a missing status sends the reader to the wrong fix: the
+        status is fine, the file just cannot be parsed."""
+        d = _thread(tmp_path)
+        (d / "decisions").mkdir(parents=True, exist_ok=True)
+        (d / "decisions" / "20260619-lot.md").write_text(
+            "---\nstatus: locked\nsummary: Lot 4 579 subdivides: 6 736 633.\n---\nx\n")
+        out = index_file(str(tmp_path), "t", "./decisions/20260619-lot.md")
+        assert "cannot be parsed" in out
+        assert "declares no status" not in out
+        # the parser's own complaint, with a position, rather than a guess
+        assert "line 3" in out
 
     def test_metadata_is_refused_even_when_named_explicitly(self, tmp_path):
         d = _thread(tmp_path)
