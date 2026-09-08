@@ -279,6 +279,28 @@ class TestIndexDirectory:
         for link in ("../../etc", "/etc", "./sessions/nested", "./"):
             assert "Error:" in index_directory(str(tmp_path), "t", link), link
 
+    def test_filesystem_metadata_is_not_content(self, tmp_path):
+        """A real thread carried fifty of these, and one took a session's id.
+
+        `._20260125-x.md` sorts before `20260125-x.md`, so the AppleDouble file
+        claimed that session's id and the real file was demoted to `-2`.
+        """
+        d = _thread(tmp_path)
+        (d / "sessions").mkdir(parents=True, exist_ok=True)
+        for n in ("20260125-real.md", ".DS_Store", "._20260125-real.md", "._.DS_Store"):
+            (d / "sessions" / n).write_text("x\n")
+        out = index_directory(str(tmp_path), "t", "./sessions")
+        assert "Indexed 1 of 1" in out
+        entries = idx.read(d, "sessions")[0]
+        assert [(e.id, e.link) for e in entries] == [
+            ("20260125-real", "./sessions/20260125-real.md")]
+
+    def test_metadata_is_refused_even_when_named_explicitly(self, tmp_path):
+        d = _thread(tmp_path)
+        (d / "sessions").mkdir(parents=True, exist_ok=True)
+        (d / "sessions" / ".DS_Store").write_text("x\n")
+        assert "metadata" in index_file(str(tmp_path), "t", "./sessions/.DS_Store")
+
     def test_a_bad_kind_is_refused(self, tmp_path):
         _thread(tmp_path)
         assert "not an indexable directory" in index_directory(str(tmp_path), "t", "./todos")

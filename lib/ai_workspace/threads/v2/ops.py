@@ -77,6 +77,8 @@ def _index_one(thread, link: str, description: str = "") -> tuple[str, str | Non
     path = thread.dir / relative
     if not path.exists():
         return "", f"Error: Nothing at {link}. Write the file before indexing it."
+    if not idx.is_content(path):
+        return "", f"Error: {link} is filesystem metadata, not thread content."
 
     default_state, takes_description = _INDEXABLE[kind]
     if default_state is _STATE_FROM_FILE:
@@ -162,7 +164,10 @@ def index_directory(thread, link: str, session_id: str | None = None) -> str:
         for retired in (False, True)
         for e in idx.read(thread.dir, kind, retired)[0]
     }
-    pending = sorted(p for p in directory.iterdir() if p.name not in already)
+    pending = sorted(
+        p for p in directory.iterdir()
+        if idx.is_content(p) and p.name not in already
+    )
     if not pending:
         return f"Every entry in {kind}/ is already indexed."
 

@@ -77,7 +77,11 @@ def is_content(path: Path) -> bool:
     A leading dot means metadata. `.DS_Store`, and the `._name` AppleDouble
     files macOS writes beside every file when copying to a filesystem with no
     resource forks, which is what a NAS or a memory stick is. A real thread had
-    one of those per file: fifty across two directories.
+    one of those per file: fifty in two directories.
+
+    They cannot merely be skipped as an afterthought, because `._20260125-x.md`
+    sorts before `20260125-x.md` and would otherwise take that session's id and
+    leave the real file holding `-2`.
     """
     return not path.name.startswith(".")
 
