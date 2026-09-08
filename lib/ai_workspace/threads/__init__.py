@@ -32,6 +32,7 @@ from ai_workspace.threads.schema import (  # noqa: F401  (re-exported)
 __all__ = [
     "add_todo",
     "create",
+    "index_directory",
     "index_file",
     "log_decision",
     "names_one_directory",
@@ -198,6 +199,13 @@ def retire_decision(workspace_dir: str, thread_name: str, decision_id: str,
     """Retire a decision that was neither superseded nor is still in force."""
     thread, fn, error = _for(workspace_dir, thread_name, "retire_decision")
     return error or fn(thread, decision_id, state)
+
+
+def index_directory(workspace_dir: str, thread_name: str, link: str,
+                    session_id: str | None = None) -> str:
+    """Index everything in one directory that is not indexed yet."""
+    thread, fn, error = _for(workspace_dir, thread_name, "index_directory")
+    return error or fn(thread, link, session_id)
 
 
 def index_file(workspace_dir: str, thread_name: str, link: str,

@@ -17,8 +17,8 @@ def _only_id(thread_dir, kind):
     entries, _ = idx.read(thread_dir, kind)
     return entries[-1].id
 from mcp_server import (
-    add_todo, index_file, log_decision, retire_artifact, retire_decision,
-    retire_todo, set_todo_state, set_window,
+    add_todo, index_directory, index_file, log_decision, retire_artifact,
+    retire_decision, retire_todo, set_todo_state, set_window,
 )
 
 
@@ -225,6 +225,63 @@ class TestArtifacts:
         for link in ("../../etc/passwd", "/etc/passwd", "./artifacts/../../x.md"):
             assert "not a path to a file inside the thread" in \
                 index_file(str(tmp_path), "t", link), link
+
+
+class TestIndexDirectory:
+    def _thread_with(self, tmp_path, kind, names):
+        d = _thread(tmp_path)
+        (d / kind).mkdir(parents=True, exist_ok=True)
+        for n in names:
+            (d / kind / n).write_text("---\nstatus: locked\n---\nx\n")
+        return d
+
+    def test_indexes_a_whole_directory_in_one_call(self, tmp_path):
+        """Sixty-six sessions was sixty-six round trips before this."""
+        d = self._thread_with(tmp_path, "sessions",
+                              [f"202601{i:02d}-s{i}.md" for i in range(1, 13)])
+        out = index_directory(str(tmp_path), "t", "./sessions")
+        assert "Indexed 12 of 12" in out
+        assert len(idx.read(d, "sessions")[0]) == 12
+
+    def test_the_readme_is_rendered_once_not_per_file(self, tmp_path):
+        d = self._thread_with(tmp_path, "sessions", ["20260101-a.md", "20260102-b.md"])
+        before = (d / "README.md").stat().st_mtime_ns
+        index_directory(str(tmp_path), "t", "./sessions")
+        assert (d / "README.md").stat().st_mtime_ns != before
+
+    def test_running_it_twice_adds_nothing(self, tmp_path):
+        d = self._thread_with(tmp_path, "sessions", ["20260101-a.md"])
+        index_directory(str(tmp_path), "t", "./sessions")
+        out = index_directory(str(tmp_path), "t", "./sessions")
+        assert "already indexed" in out
+        assert len(idx.read(d, "sessions")[0]) == 1
+
+    def test_a_refusal_reports_and_does_not_stop_the_rest(self, tmp_path):
+        """A migrated thread full of v1 statuses is the reason this matters."""
+        d = self._thread_with(tmp_path, "decisions", ["20260101-good.md"])
+        (d / "decisions" / "20260102-old.md").write_text("---\nstatus: decided\n---\nx\n")
+        out = index_directory(str(tmp_path), "t", "./decisions")
+        assert "Indexed 1 of 2" in out
+        assert "1 refused" in out and "20260102-old.md" in out
+        assert [e.id for e in idx.read(d, "decisions")[0]] == ["20260101-good"]
+
+        (d / "decisions" / "20260102-old.md").write_text("---\nstatus: locked\n---\nx\n")
+        index_directory(str(tmp_path), "t", "./decisions")
+        assert len(idx.read(d, "decisions")[0]) == 2
+
+    def test_undated_entries_are_named_rather_than_buried(self, tmp_path):
+        self._thread_with(tmp_path, "artifacts", ["orphan.md", "20260101-a.md"])
+        out = index_directory(str(tmp_path), "t", "./artifacts")
+        assert "had no derivable date" in out and "19700101-orphan" in out
+
+    def test_a_path_outside_the_thread_is_refused(self, tmp_path):
+        _thread(tmp_path)
+        for link in ("../../etc", "/etc", "./sessions/nested", "./"):
+            assert "Error:" in index_directory(str(tmp_path), "t", link), link
+
+    def test_a_bad_kind_is_refused(self, tmp_path):
+        _thread(tmp_path)
+        assert "not an indexable directory" in index_directory(str(tmp_path), "t", "./todos")
 
 
 class TestReadmeShape:

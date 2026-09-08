@@ -300,6 +300,27 @@ def retire_decision(workspace_dir: str, thread_name: str, decision_id: str,
 
 
 @mcp.tool()
+def index_directory(workspace_dir: str, thread_name: str, link: str) -> str:
+    """Index every file in one directory that is not indexed yet.
+
+    Use this instead of calling index_file once per file. A migration indexes
+    whole directories, and for sessions and decisions there is nothing per-file
+    to supply: everything on the line is read off the file. Only artifacts carry
+    a description, so index those one at a time when the description matters.
+
+    Idempotent, so a run that refused some decisions can be repeated once they
+    are fixed without duplicating what already went in. A refusal is reported
+    and does not stop the rest.
+
+    Args:
+        workspace_dir: The tracked workspace path from session context.
+        thread_name: Name of the thread (kebab-case).
+        link: Directory relative to the thread, e.g. ./sessions.
+    """
+    return _threads.index_directory(workspace_dir, thread_name, link)
+
+
+@mcp.tool()
 def index_file(workspace_dir: str, thread_name: str, link: str,
                description: str = "") -> str:
     """Index a file that is already in the thread.

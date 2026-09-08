@@ -47,42 +47,43 @@ def _decision_state(path: Path) -> str | None:
     return status if status in idx.IN_FORCE["decisions"] else None
 
 
-def index_file(thread, link: str, description: str = "",
-               session_id: str | None = None) -> str:
-    """Index a file that is already in the thread.
+def _inside(link: str) -> PurePosixPath | None:
+    """A thread-relative path, or None if it points outside the thread.
 
-    The only function that mints an index entry for a file; the tools that
-    author one call it once they have written it. Everything on the line is
-    derived from the file, which is what keeps an id and its basename in
-    agreement and leaves nothing to invent.
-
-    It refuses a link that does not resolve, so it cannot be used to register
-    something that does not exist yet. That is the whole boundary between this
-    and the authoring tools.
+    Not lstrip("./"), which strips every leading dot and slash and would turn
+    `../../elsewhere` into `elsewhere` before anything got to object to it.
     """
-    if (unwritable := render.blocked(thread.dir)) is not None:
-        return unwritable
-    # Not lstrip("./"), which strips every leading dot and slash and would turn
-    # `../../elsewhere` into `elsewhere` before anything got to object to it.
     relative = PurePosixPath(link[2:] if link.startswith("./") else link)
-    if relative.is_absolute() or ".." in relative.parts or len(relative.parts) < 2:
-        return f"Error: '{link}' is not a path to a file inside the thread."
+    if relative.is_absolute() or ".." in relative.parts or not relative.parts:
+        return None
+    return relative
+
+
+def _index_one(thread, link: str, description: str = "") -> tuple[str, str | None]:
+    """Derive an entry for one existing file and add it. `(entry_id, error)`.
+
+    No render: the caller does that once, so indexing sixty-six sessions
+    rewrites the README once rather than sixty-six times.
+    """
+    relative = _inside(link)
+    if relative is None or len(relative.parts) < 2:
+        return "", f"Error: '{link}' is not a path to a file inside the thread."
 
     kind = relative.parts[0]
     if kind not in _INDEXABLE:
         allowed = ", ".join(_INDEXABLE)
-        return f"Error: '{kind}' is not an indexable directory. Use one of: {allowed}."
+        return "", f"Error: '{kind}' is not an indexable directory. Use one of: {allowed}."
 
     path = thread.dir / relative
     if not path.exists():
-        return f"Error: Nothing at {link}. Write the file before indexing it."
+        return "", f"Error: Nothing at {link}. Write the file before indexing it."
 
     default_state, takes_description = _INDEXABLE[kind]
     if default_state is _STATE_FROM_FILE:
         state = _decision_state(path)
         if state is None:
             allowed = ", ".join(idx.IN_FORCE["decisions"])
-            return (
+            return "", (
                 f"Error: {link} does not declare a status this schema knows.\n"
                 f"Set `status:` in its frontmatter to one of: {allowed}."
             )
@@ -100,10 +101,95 @@ def index_file(thread, link: str, description: str = "",
         entry_id, state, entry_id, f"./{relative}",
         description if takes_description else "",
     ))
+    return entry_id, None
+
+
+def index_file(thread, link: str, description: str = "",
+               session_id: str | None = None) -> str:
+    """Index a file that is already in the thread.
+
+    The only way an index entry for a file is minted; the tools that author one
+    call it once they have written it. Everything on the line is derived from
+    the file, which is what keeps an id and its basename in agreement and
+    leaves nothing to invent.
+
+    It refuses a link that does not resolve, so it cannot register something
+    that does not exist yet. That is the whole boundary between this and the
+    authoring tools.
+    """
+    if (unwritable := render.blocked(thread.dir)) is not None:
+        return unwritable
+    entry_id, error = _index_one(thread, link, description)
+    if error:
+        return error
     render.render(thread.dir)
-    _record(thread.dir, session_id, f"{kind[:-1]} {entry_id}")
-    dated = "" if when else " Its date could not be derived, so it is marked unknown."
-    return f"Indexed {entry_id}.{dated}"
+    _record(thread.dir, session_id, f"{PurePosixPath(link).parts[-2][:-1]} {entry_id}")
+    unknown = entry_id.startswith(ids_mod.UNKNOWN)
+    note = " Its date could not be derived, so it is marked unknown." if unknown else ""
+    return f"Indexed {entry_id}.{note}"
+
+
+def index_directory(thread, link: str, session_id: str | None = None) -> str:
+    """Index every top-level entry in one directory that is not indexed yet.
+
+    Migration is the reason this exists. A thread with sixty-six sessions is
+    sixty-six identical calls otherwise, and for sessions and decisions there is
+    nothing per-file to say: everything on the line is read off the file. Only
+    artifacts carry a description, so those are still worth indexing one at a
+    time when the description matters.
+
+    Idempotent, so a run that refused some decisions can be repeated after
+    fixing them without duplicating the ones that went in. A refusal is reported
+    and does not stop the rest.
+    """
+    if (unwritable := render.blocked(thread.dir)) is not None:
+        return unwritable
+    relative = _inside(link)
+    if relative is None or len(relative.parts) != 1:
+        return f"Error: '{link}' is not a directory inside the thread."
+
+    kind = relative.parts[0]
+    if kind not in _INDEXABLE:
+        allowed = ", ".join(_INDEXABLE)
+        return f"Error: '{kind}' is not an indexable directory. Use one of: {allowed}."
+
+    directory = thread.dir / relative
+    if not directory.is_dir():
+        return f"No {kind}/ directory, so there is nothing to index."
+
+    already = {
+        PurePosixPath(e.link).name
+        for retired in (False, True)
+        for e in idx.read(thread.dir, kind, retired)[0]
+    }
+    pending = sorted(p for p in directory.iterdir() if p.name not in already)
+    if not pending:
+        return f"Every entry in {kind}/ is already indexed."
+
+    indexed, unknown, refused = [], [], []
+    for path in pending:
+        entry_id, error = _index_one(thread, f"./{kind}/{path.name}")
+        if error:
+            refused.append(f"{path.name}: {error.replace(chr(10), ' ')}")
+            continue
+        indexed.append(entry_id)
+        if entry_id.startswith(ids_mod.UNKNOWN):
+            unknown.append(entry_id)
+
+    if indexed:
+        render.render(thread.dir)
+        _record(thread.dir, session_id, f"{len(indexed)} {kind} indexed")
+
+    lines = [f"Indexed {len(indexed)} of {len(pending)} in {kind}/."]
+    if unknown:
+        lines.append(
+            f"  {len(unknown)} had no derivable date and are marked unknown: "
+            + ", ".join(unknown[:5]) + ("..." if len(unknown) > 5 else "")
+        )
+    if refused:
+        lines.append(f"  {len(refused)} refused:")
+        lines.extend(f"    - {r}" for r in refused)
+    return "\n".join(lines)
 
 
 def _record(thread_dir: Path, session_id: str | None, line: str) -> None:

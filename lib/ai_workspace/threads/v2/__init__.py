@@ -5,6 +5,7 @@ from ai_workspace.threads.v2.thread import create, resume
 # new in v2: nothing older has indexes to write to
 from ai_workspace.threads.v2.ops import (
     add_todo,
+    index_directory,
     index_file,
     log_decision,
     retire_artifact,
@@ -17,6 +18,7 @@ from ai_workspace.threads.v2.ops import (
 __all__ = [
     "add_todo",
     "create",
+    "index_directory",
     "index_file",
     "log_decision",
     "resume",
