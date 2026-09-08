@@ -97,6 +97,21 @@ class TestIndex:
         idx.add(d, "todos", idx.Entry("20260101-a", "active", "A", "./todos/a.md"))
         assert idx.index_path(d, "todos").exists()
 
+    def test_a_description_round_trips(self, tmp_path):
+        """Only artifacts carry one, and the line is its only home."""
+        d = _v2_thread(tmp_path)
+        idx.add(d, "artifacts", idx.Entry(
+            "20260316-notes", "current", "20260316-notes",
+            "./artifacts/20260316-notes.md", "What the auth flow does"))
+        line = idx.index_path(d, "artifacts").read_text().strip()
+        assert line.endswith(" -- What the auth flow does")
+        assert idx.read(d, "artifacts")[0][0].description == "What the auth flow does"
+
+    def test_a_line_without_one_reads_as_no_description(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        idx.add(d, "decisions", idx.Entry("20260101-a", "locked", "A", "./decisions/a.md"))
+        assert idx.read(d, "decisions")[0][0].description == ""
+
     def test_round_trip(self, tmp_path):
         d = _v2_thread(tmp_path)
         idx.add(d, "decisions", idx.Entry("20260101-a", "locked", "A", "./decisions/a.md"))

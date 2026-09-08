@@ -7,15 +7,20 @@ never picks up its own index and `decisions/*.md` keeps meaning exactly
 Line format, written only here and never by hand:
 
     - 20260723-prep-ladder:locked [Interview prep ladder](./decisions/20260723-prep-ladder.md)
+    - 20260316-notes:current [20260316-notes](./artifacts/20260316-notes.md) -- what it contains
 
-`id:state` then a linked title. `^- <id>:` is an exact match because the colon
-terminates the id. Sessions carry a bare id with no state.
+`id:state`, a linked title, then an optional description. `^- <id>:` is an exact
+match because the colon terminates the id. Sessions carry a bare id with no
+state.
 
-There is deliberately no description on the line. Carrying a decision's
-`summary:` here would be a second copy of something the file already states, and
-it would drift the moment anyone edits the file, which the log-decision command
-explicitly invites. The index says what exists and what state it is in; the file
-says what it means.
+A decision's or a session's `summary:` never appears here. It is already in the
+file, so a copy would drift the moment anyone edits it, which the log-decision
+command explicitly invites.
+
+That argument does not reach artifacts. They have no template, no required
+frontmatter, and can be a PDF or a directory, so the line is the only home a
+description has and there is no second copy to drift from. Artifacts are the
+only kind that carries one.
 """
 
 import re
@@ -39,18 +44,28 @@ RETIRED = {
     "sessions": (),
 }
 
-_LINE_RE = re.compile(r"^- (?P<id>[^\s:]+)(?::(?P<state>[^\s]+))? \[(?P<title>[^\]]*)\]\((?P<link>[^)]*)\)\s*$")
+_LINE_RE = re.compile(
+    r"^- (?P<id>[^\s:]+)(?::(?P<state>[^\s]+))? "
+    r"\[(?P<title>[^\]]*)\]\((?P<link>[^)]*)\)"
+    r"(?: -- (?P<description>.*?))?\s*$"
+)
 
 
 class Entry:
-    __slots__ = ("id", "state", "title", "link")
+    """One indexed thing. Both tails are optional, and per kind rather than per
+    entry: sessions never carry a state, only artifacts carry a description."""
 
-    def __init__(self, id: str, state: str | None, title: str, link: str):
+    __slots__ = ("id", "state", "title", "link", "description")
+
+    def __init__(self, id: str, state: str | None, title: str, link: str,
+                 description: str = ""):
         self.id, self.state, self.title, self.link = id, state, title, link
+        self.description = description
 
     def render(self) -> str:
         state = f":{self.state}" if self.state else ""
-        return f"- {self.id}{state} [{self.title}]({self.link})"
+        tail = f" -- {self.description}" if self.description else ""
+        return f"- {self.id}{state} [{self.title}]({self.link}){tail}"
 
     def __repr__(self) -> str:
         return f"Entry({self.id!r}, {self.state!r}, {self.title!r})"
@@ -79,7 +94,8 @@ def read(thread_dir: Path, kind: str, retired: bool = False) -> tuple[list[Entry
     for line in body.splitlines():
         hit = _LINE_RE.match(line)
         if hit:
-            entries.append(Entry(hit["id"], hit["state"], hit["title"], hit["link"]))
+            entries.append(Entry(hit["id"], hit["state"], hit["title"], hit["link"],
+                                 hit["description"] or ""))
     return entries, fm
 
 
