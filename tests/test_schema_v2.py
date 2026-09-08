@@ -301,6 +301,21 @@ class TestIds:
     def test_a_title_with_nothing_sluggable_still_gets_an_id(self):
         assert ids.make_id(date(2026, 9, 8), "...") == "20260908-untitled"
 
+    def test_accented_latin_keeps_its_letters(self):
+        """Dropping the accented character whole made `café` into `caf`."""
+        assert ids.slugify("café-notes") == "cafe-notes"
+        assert ids.slugify("Réunion") == "reunion"
+        assert ids.slugify("naïve façade") == "naive-facade"
+
+    def test_a_name_with_no_latin_still_gets_a_usable_id(self):
+        """Nothing transliterates, so the id is a placeholder and the link is
+        what identifies the file. Two of them stay distinct."""
+        taken = set()
+        for _ in range(2):
+            got = ids.unique_id(ids.make_id(date(2026, 1, 1), "日本語メモ"), taken)
+            taken.add(got)
+        assert taken == {"20260101-untitled", "20260101-untitled-2"}
+
     def test_collisions_get_a_suffix(self):
         assert ids.unique_id("20260101-a", {"20260101-a"}) == "20260101-a-2"
         assert ids.unique_id("20260101-a", {"20260101-a", "20260101-a-2"}) == "20260101-a-3"

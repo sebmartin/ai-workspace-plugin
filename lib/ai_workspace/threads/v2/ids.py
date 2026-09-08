@@ -12,6 +12,7 @@ for anything older.
 """
 
 import re
+import unicodedata
 from datetime import date
 
 # The date prefix of an id whose date could not be derived. The epoch rather
@@ -41,7 +42,12 @@ _EXTENSION = re.compile(r"\.[A-Za-z0-9]{1,4}$")
 
 def slugify(text: str) -> str:
     """Kebab-case, capped at a word boundary so it never cuts mid-word."""
-    slug = SLUG_RE.sub("-", text.lower()).strip("-")
+    # Decompose first so accented Latin keeps its letters: without this
+    # `café` slugs to `caf` and `Réunion` to `r-union`, because the accented
+    # character is dropped whole rather than reduced to its base.
+    plain = unicodedata.normalize("NFKD", text)
+    plain = "".join(c for c in plain if not unicodedata.combining(c))
+    slug = SLUG_RE.sub("-", plain.lower()).strip("-")
     if len(slug) > MAX_SLUG:
         cut = slug[: MAX_SLUG + 1]
         slug = cut.rsplit("-", 1)[0] if "-" in cut[1:] else cut[:MAX_SLUG]
