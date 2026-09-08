@@ -171,7 +171,7 @@ Schema 2 threads only, each writing one index line and re-rendering the README:
 - `mcp__plugin_ai-workspace_threads__set_window(workspace_dir, thread_name, entry_ids, section, kind)`
 - `mcp__plugin_ai-workspace_threads__log_decision(workspace_dir, thread_name, title, summary, body, status, supersedes)`
 - `mcp__plugin_ai-workspace_threads__retire_decision(workspace_dir, thread_name, decision_id, state)`
-- `mcp__plugin_ai-workspace_threads__add_artifact(workspace_dir, thread_name, title, link)`
+- `mcp__plugin_ai-workspace_threads__index_file(workspace_dir, thread_name, link, description)`
 - `mcp__plugin_ai-workspace_threads__retire_artifact(workspace_dir, thread_name, artifact_id, state)`
 - `mcp__plugin_ai-workspace_threads__save_session(workspace_dir, thread_name, slug, summary, keywords, next_context, body, status)`
 

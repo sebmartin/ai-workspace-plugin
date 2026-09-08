@@ -33,6 +33,8 @@ A missing index is an empty index. Nothing pre-creates them.
 
 Never hand-edit an index or the README's Next steps section; both are rendered from what the tools write, and a hand edit will be overwritten. Status, About and the header fields are yours to edit.
 
+**The renderer owns `## Next steps` from its heading to the next `##`.** Two things follow. It must not be the last section, or a render swallows everything after it, which is why the template puts About below it. And a README with no such heading is refused rather than appended to, so replace a schema 1 README from `templates/v2/thread-template.md` before writing anything to a thread.
+
 | To | Use |
 |---|---|
 | Add a backlog item | `add_todo` — always with a link |
@@ -41,7 +43,7 @@ Never hand-edit an index or the README's Next steps section; both are rendered f
 | Choose what the README shows | `set_window` — about five, in priority order |
 | Record a decision | `log_decision` |
 | Retire one | `retire_decision` (`superseded` / `withdrawn`) |
-| Index an artifact | `add_artifact` |
+| Index a file that exists | `index_file` |
 | Retire one | `retire_artifact` (`superseded` / `stale`) |
 | Save | `save_session` |
 
