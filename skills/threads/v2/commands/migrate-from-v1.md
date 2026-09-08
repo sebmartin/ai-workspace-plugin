@@ -111,8 +111,17 @@ the session it came from when it has nothing of its own. Parked entries that are
 already resolved should be retired rather than carried over. Then `set_window`
 with about five, in priority order.
 
-**Collapse Quick Resume into Status** — a few sentences for a person. Everything
-else it held is now a todo, a decision or a session.
+**Collapse Quick Resume into Status** — a few sentences for a person, taken from
+Current focus.
+
+**Recent progress is the part that can be lost.** Next steps and Parked become
+todos and Open Questions fold into them, but Recent progress is a log, and it
+maps onto the sessions index only if every entry had a session behind it. Older
+threads have entries that never did. Read them against the sessions you have
+just indexed, and for anything with no session: put it in Status if it still
+describes where things stand, and otherwise say plainly that you are dropping
+it and what it said. It survives in `{name}-v1` either way, but only if someone
+knows to look.
 
 `attachments/` is copied across and left alone. It has no index, because an
 attachment is a file the user dropped in and there is no moment where a
