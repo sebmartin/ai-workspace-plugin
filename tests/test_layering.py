@@ -95,6 +95,35 @@ def test_every_module_in_a_schema_is_reachable_from_its_surface():
         )
 
 
+def test_only_the_schema_being_created_is_inlined_in_the_skill():
+    """SKILL.md carries the current schema's model; every older one has a file.
+
+    The skill assumes what the plugin creates, so a session touching a current
+    thread fetches nothing. That only holds while the inlined prose and
+    CURRENT_SCHEMA agree, and shipping a new schema without moving the old
+    section out to its own file would leave SKILL.md documenting the wrong
+    default. Nothing else would notice, which is why this is a test rather
+    than a note.
+    """
+    from ai_workspace.threads import schema
+
+    prose = REPO / "skills" / "threads"
+    current = prose / f"v{schema.CURRENT_SCHEMA}" / "model.md"
+    assert not current.exists(), (
+        f"{current} exists, but schema {schema.CURRENT_SCHEMA} is what the plugin "
+        f"creates, so its model belongs inline in SKILL.md."
+    )
+    for version in schema.SCHEMAS:
+        if version == schema.CURRENT_SCHEMA:
+            continue
+        older = prose / f"v{version}" / "model.md"
+        assert older.is_file(), (
+            f"schema {version} is still readable but has no {older}. A schema the "
+            f"plugin no longer creates needs its own prose, moved out of SKILL.md "
+            f"when it stopped being current."
+        )
+
+
 def test_every_registered_schema_declares_its_surface():
     """A schema's __all__ is its surface, and dispatch resolves against it.
 

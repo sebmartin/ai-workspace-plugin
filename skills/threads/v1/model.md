@@ -4,6 +4,16 @@ The README is the thread. Everything lives in it, and the linked files hold the 
 
 Applies to any thread whose directory has no `schema-version` file. `resume_thread` reports the schema in its focus headers.
 
+> ⚠️ **These instructions apply to schema 1 threads and nothing else.**
+> They are safe to hold in mind alongside the schema 2 model in SKILL.md only
+> if you check the `Schema:` header of the thread in front of you every time it
+> changes. Applying schema 1 habits to a schema 2 thread destroys work quietly:
+> hand-editing its README or an index looks like it worked and is erased by the
+> next render. The reverse is safe, because the schema 2 write tools refuse a
+> schema 1 thread outright.
+
+**This file overrides SKILL.md's "Working with a schema 2 thread" section entirely**, plus the schema 2 rows of its Commands table. Everything else in SKILL.md still applies: workspace resolution, the read-only rule for archives, thread tracking, and the pause before planning.
+
 ## The README model
 
 The README is a lean index — the complete map of a thread. It must be short enough to read in full and retain entirely.
