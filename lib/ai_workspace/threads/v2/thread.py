@@ -126,6 +126,13 @@ def _decision_summary(thread_dir: Path, entry: idx.Entry) -> str:
         return ""
     try:
         fields, _ = split_frontmatter(path.read_text(errors="ignore")[:2000], path)
-        return str(fields.get("summary") or "")
     except OSError:
         return ""
+    except ValueError:
+        # Loud but not fatal. Frontmatter written before anything parsed it can
+        # be invalid YAML — an unquoted summary containing ": " is the common
+        # one — and letting that raise here makes a whole thread unresumable
+        # over a single legacy file. Saying so on the line is what gets it
+        # fixed; refusing to open the thread is not.
+        return "(frontmatter is not valid YAML, so no summary; worth fixing)"
+    return str(fields.get("summary") or "")

@@ -255,6 +255,23 @@ class TestCompose:
         idx.add(d, "decisions", idx.Entry("20260101-x", "locked", "X", "./decisions/20260101-x.md"))
         assert "Chose X because it is simplest." in v2.compose(d, "t")
 
+    def test_one_unparseable_decision_does_not_break_the_thread(self, tmp_path):
+        """A real thread had twenty-nine of these and would not have opened.
+
+        An unquoted `summary:` containing ": " is invalid YAML, and schema 1
+        never parsed it so nobody knew. Resume flags it rather than failing.
+        """
+        d = _v2_thread(tmp_path)
+        (d / "decisions" / "20260619-lot.md").write_text(
+            "---\ntitle: Lot\nstatus: locked\n"
+            "summary: Lot 4 579 257 subdivides per NF plan: 6 736 633 and 6 736 634.\n"
+            "---\nbody\n")
+        idx.add(d, "decisions", idx.Entry(
+            "20260619-lot", "locked", "20260619-lot", "./decisions/20260619-lot.md"))
+        out = v2.compose(d, "t")
+        assert "20260619-lot" in out
+        assert "not valid YAML" in out
+
     def test_sessions_are_tailed(self, tmp_path):
         d = _v2_thread(tmp_path)
         for i in range(15):
