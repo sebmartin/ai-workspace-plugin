@@ -435,6 +435,9 @@ def save_session(workspace_dir: str, thread_name: str, slug: str, summary: str,
     incrementally does not. With no body, this updates the frontmatter, the
     index entry and the dates and leaves the prose alone.
 
+    Returns `{"id": ..., "status_written": ...}`. A refusal returns
+    `{"error": CODE, ...}` and writes nothing.
+
     Args:
         workspace_dir: The tracked workspace path from session context.
         thread_name: Name of the thread (kebab-case).

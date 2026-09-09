@@ -456,8 +456,9 @@ class TestSaveSession:
                            "growcer, interview", "Drill tomorrow.",
                            body="# Session\n\nWhat happened.\n",
                            status="Round 3 booked for Friday.")
-        assert "Saved" in out
+        assert _reply(out)["status_written"] is True
         sid = _only_id(d, "sessions")
+        assert _reply(out)["id"] == sid
         text = (d / "sessions" / f"{sid}.md").read_text()
         fields, _ = split_frontmatter(text)
         assert fields["summary"] == "Prepped the round."
