@@ -13,7 +13,6 @@ from pathlib import Path
 from typing import NamedTuple
 
 from ai_workspace.threads import v1, v2
-from ai_workspace.threads.marker import NAME as MARKER  # noqa: F401  (re-exported)
 from ai_workspace.threads.marker import read as read_schema  # noqa: F401  (re-exported)
 
 SCHEMAS = {1: v1, 2: v2}
