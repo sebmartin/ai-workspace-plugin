@@ -188,5 +188,235 @@ def list_archived_threads(workspace_dir: str) -> str:
 
 
 
+
+@mcp.tool()
+def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
+             state: str = "active") -> str:
+    """Add a todo to the thread's backlog.
+
+    Every todo carries a link, always. Use a file under todos/ when the item has
+    state of its own, an external URL when there is an issue or PR, and
+    otherwise the session it came out of. A bare line cannot be expanded later,
+    which is the whole complaint about one-line next steps.
+
+    Adding does not promote: the backlog is allowed to be long, and the README
+    shows only what set_window selects.
+
+    Returns `{"id": ...}`, the minted todo id. `set_window` and the retire
+    tools take it.
+
+    A refusal returns `{"error": CODE, ...}` and writes nothing: `STATE_UNKNOWN`
+    or `STATUS_UNKNOWN` with the `allowed` values, `NO_SUCH_ENTRY`,
+    `LINK_REQUIRED`.
+
+    Args:
+        workspace_dir: The tracked workspace path from session context.
+        thread_name: Name of the thread (kebab-case).
+        title: Short label for the todo.
+        link: Path or URL. Never omit; use the originating session if nothing else.
+        state: `active` or `parked`. Parked means deliberately not now.
+    """
+    return _threads.add_todo(workspace_dir, thread_name, title, link, state)
+
+
+@mcp.tool()
+def retire_todo(workspace_dir: str, thread_name: str, todo_id: str, state: str) -> str:
+    """Retire a todo as done or dropped, removing it from any window.
+
+    Returns `{"id": ...}`.
+
+    Args:
+        workspace_dir: The tracked workspace path from session context.
+        thread_name: Name of the thread (kebab-case).
+        todo_id: The id from the index line, e.g. 20260808-growcer-prep.
+        state: `done` for something finished, `dropped` for something deliberately abandoned.
+    """
+    return _threads.retire_todo(workspace_dir, thread_name, todo_id, state)
+
+
+@mcp.tool()
+def set_todo_state(workspace_dir: str, thread_name: str, todo_id: str, state: str) -> str:
+    """Park or unpark a todo without retiring it.
+
+    Returns `{"id": ...}`.
+
+    Args:
+        workspace_dir: The tracked workspace path from session context.
+        thread_name: Name of the thread (kebab-case).
+        todo_id: The id from the index line.
+        state: `active` or `parked`.
+    """
+    return _threads.set_todo_state(workspace_dir, thread_name, todo_id, state)
+
+
+@mcp.tool()
+def set_window(workspace_dir: str, thread_name: str, entry_ids: list[str],
+               section: str = "next_steps", kind: str = "todos") -> str:
+    """Choose which entries the README shows, and in what order.
+
+    This is the whole of priority. The backlog below the window is never ranked,
+    because ordering the twentieth item against the twenty-first produces
+    nothing. Aim for about five.
+
+    Returns `{"window": ..., "size": ...}`.
+
+    Args:
+        workspace_dir: The tracked workspace path from session context.
+        thread_name: Name of the thread (kebab-case).
+        entry_ids: Ids in the order they should appear.
+        section: README section the window drives. Default `next_steps`.
+        kind: Index the ids belong to. Default `todos`.
+    """
+    return _threads.set_window(workspace_dir, thread_name, entry_ids, section, kind)
+
+
+@mcp.tool()
+def log_decision(workspace_dir: str, thread_name: str, title: str, summary: str,
+                 body: str, status: str = "proposed",
+                 supersedes: list[str] | None = None) -> str:
+    """Write a decision file and index it.
+
+    `summary` is read on every resume, so it carries real cost: one sentence,
+    one subject, what was decided and not why. If it needs "and" twice, that is
+    the signal to log several decisions instead.
+
+    `supersedes` retires the decisions it names. That direction is deliberate —
+    traversal starts from what is in force, so only live-to-dead pointers get
+    followed.
+
+    Returns `{"id": ...}`, plus `superseded` listing what it retired. The file
+    is at ./decisions/<id>.md.
+
+    A refusal returns `{"error": CODE, ...}` and writes nothing: `STATE_UNKNOWN`
+    or `STATUS_UNKNOWN` with the `allowed` values, `NO_SUCH_ENTRY`,
+    `LINK_REQUIRED`.
+
+    Args:
+        workspace_dir: The tracked workspace path from session context.
+        thread_name: Name of the thread (kebab-case).
+        title: Short title for the decision.
+        summary: One sentence, one subject. WHAT was decided, no rationale.
+        body: Markdown body. Claim first, argument after.
+        status: `proposed`, `partially-locked` or `locked`.
+        supersedes: Ids of decisions this replaces; each is retired as superseded.
+    """
+    return _threads.log_decision(workspace_dir, thread_name, title, summary, body,
+                                 status, supersedes)
+
+
+@mcp.tool()
+def retire_decision(workspace_dir: str, thread_name: str, decision_id: str,
+                    state: str) -> str:
+    """Retire a decision, updating both the index and the file's own status.
+
+    Returns `{"id": ...}`.
+
+    Args:
+        workspace_dir: The tracked workspace path from session context.
+        thread_name: Name of the thread (kebab-case).
+        decision_id: The id from the index line.
+        state: `superseded` when something replaced it, `withdrawn` when it was
+            abandoned with nothing taking its place.
+    """
+    return _threads.retire_decision(workspace_dir, thread_name, decision_id, state)
+
+
+@mcp.tool()
+def index_directory(workspace_dir: str, thread_name: str, link: str) -> str:
+    """Index every file in one directory that is not indexed yet.
+
+    Use this instead of calling index_file once per file. A migration indexes
+    whole directories, and for sessions and decisions there is nothing per-file
+    to supply: everything on the line is read off the file. Only artifacts carry
+    a description, so index those one at a time when the description matters.
+
+    Idempotent, so a run that refused some files can be repeated once they are
+    fixed without duplicating what went in. A refusal does not stop the rest.
+
+    Returns JSON, and reports only deviations. `{}` means every file went in,
+    including when there were none to do; you asked for the directory, so
+    silence is the answer that it got them.
+
+        {"undated": ["notes"],
+         "refused": {"STATUS_UNKNOWN": ["20260301-old.md"]}}
+
+    `undated` names anything given the 19700101 date because nothing said when
+    it was from. It is indexed and usable; the id just sorts at the epoch.
+
+    `refused` maps a code to the files it applies to. Fix those and run again.
+
+    - `FRONTMATTER_UNPARSEABLE` — not valid YAML, so a decision's status cannot
+      be read. Usually an unquoted value containing ": ". Call index_file on
+      one of them for the parser's own message.
+    - `STATUS_UNKNOWN` — a decision declares a status this schema does not use.
+      Substitute the vocabulary in the file's frontmatter.
+    - `UNREADABLE` — the file could not be opened.
+
+    A bad request returns `{"error": CODE, "detail": ...}` and indexes nothing:
+    `OUTSIDE_THREAD`, `NOT_INDEXABLE`, or `NO_SUCH_DIRECTORY` when the kind is
+    valid but the thread has no such directory, which means it is malformed.
+
+    Args:
+        workspace_dir: The tracked workspace path from session context.
+        thread_name: Name of the thread (kebab-case).
+        link: Directory relative to the thread, e.g. ./sessions.
+    """
+    return _threads.index_directory(workspace_dir, thread_name, link)
+
+
+@mcp.tool()
+def index_file(workspace_dir: str, thread_name: str, link: str,
+               description: str = "") -> str:
+    """Index a file that is already in the thread.
+
+    Use this once a file exists on disk: an artifact you have written, or a
+    session, decision or artifact being brought into the index during a
+    migration. It refuses a link that does not resolve, so write the file first.
+
+    Everything on the index line is derived from the file. The kind comes from
+    the directory, the id from a date found in the filename, and a decision's
+    state from its `status:` frontmatter, which must already use this schema's
+    vocabulary. A file whose name states no date is dated from the earliest
+    session that names it, and failing that is marked unknown.
+
+    Returns JSON: `{"id": "20260316-summary-auth-flow"}`, with `"undated": true`
+    when nothing said what date the file is from, so it took 19700101.
+
+    A refusal returns `{"error": CODE, "detail": ...}` and writes nothing. Same
+    codes as index_directory, plus `MISSING` when the link resolves to nothing
+    and `METADATA` for a dotfile, which is never content.
+
+    Args:
+        workspace_dir: The tracked workspace path from session context.
+        thread_name: Name of the thread (kebab-case).
+        link: Path relative to the thread, e.g. ./artifacts/20260813-notes-x.md.
+        description: One line saying what an artifact contains. Artifacts only,
+            and the only thing not read from the file: decisions and sessions
+            carry a `summary:` in their own frontmatter, artifacts have nowhere
+            to put one. It is read on every resume, so it costs something
+            permanently, the same way a decision's summary does. One sentence.
+            A thread whose sixteen artifacts averaged 255 characters spent 30%
+            of its resume on them.
+    """
+    return _threads.index_file(workspace_dir, thread_name, link, description)
+
+
+@mcp.tool()
+def retire_artifact(workspace_dir: str, thread_name: str, artifact_id: str,
+                    state: str) -> str:
+    """Retire an artifact so it stops appearing as current.
+
+    Returns `{"id": ...}`.
+
+    Args:
+        workspace_dir: The tracked workspace path from session context.
+        thread_name: Name of the thread (kebab-case).
+        artifact_id: The id from the index line.
+        state: `superseded` when something replaced it, `stale` when it no longer
+            describes reality.
+    """
+    return _threads.retire_artifact(workspace_dir, thread_name, artifact_id, state)
+
+
 if __name__ == "__main__":
     mcp.run()

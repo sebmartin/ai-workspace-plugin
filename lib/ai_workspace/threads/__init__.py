@@ -17,21 +17,31 @@ archive/ never opens it, so it needs nothing from any schema.
 import re
 
 from ai_workspace import workspace as ws
-from ai_workspace.workspace import names_one_directory  # noqa: F401  (re-exported)
 from ai_workspace.threads.schema import (  # noqa: F401  (re-exported)
     CURRENT_SCHEMA,
     MIN_READABLE_SCHEMA,
     SCHEMAS,
     Thread,
     at,
-    read_schema,
     implementation,
+    needs_migration_message,
+    read_schema,
 )
+from ai_workspace.workspace import names_one_directory  # noqa: F401  (re-exported)
 
 __all__ = [
+    "add_todo",
     "create",
-    "resume",
+    "index_directory",
+    "index_file",
+    "log_decision",
     "names_one_directory",
+    "resume",
+    "retire_artifact",
+    "retire_decision",
+    "retire_todo",
+    "set_todo_state",
+    "set_window",
     "validate_thread_name",
 ]
 
@@ -83,6 +93,22 @@ def _locate(workspace_dir: str, thread_name: str) -> tuple[Thread | None, str | 
     return at(workspace, thread_name, directory)
 
 
+def _for(workspace_dir: str, thread_name: str, op: str):
+    """Resolve the thread and its schema's implementation of `op`.
+
+    Returns (thread, fn, error) with exactly one of fn and error set. A schema
+    that never grew the operation simply has no attribute of that name, so a
+    schema older than a feature refuses here rather than half-running.
+    """
+    thread, error = _locate(workspace_dir, thread_name)
+    if error:
+        return None, None, error
+    fn = getattr(implementation(thread), op, None)
+    if fn is None:
+        return None, None, needs_migration_message(thread.name, thread.schema)
+    return thread, fn, None
+
+
 def _focus(thread: Thread, body: str) -> str:
     """Prefix a response with the headers that set the session's focus.
 
@@ -102,8 +128,8 @@ def _focus(thread: Thread, body: str) -> str:
 
 def resume(workspace_dir: str, thread_name: str) -> str:
     """Return the thread's context, in whatever form its schema keeps it."""
-    thread, error = _locate(workspace_dir, thread_name)
-    return error or _focus(thread, implementation(thread).resume(thread))
+    thread, fn, error = _for(workspace_dir, thread_name, "resume")
+    return error or _focus(thread, fn(thread))
 
 
 def create(workspace_dir: str, thread_name: str) -> str:
@@ -131,3 +157,65 @@ def create(workspace_dir: str, thread_name: str) -> str:
     directory = ws.thread_path(workspace, thread_name)
     thread = Thread(workspace, thread_name, directory, CURRENT_SCHEMA)
     return _focus(thread, implementation(thread).create(thread))
+
+
+def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
+             state: str = "active", session_id: str | None = None) -> str:
+    """Add a todo to the thread's backlog."""
+    thread, fn, error = _for(workspace_dir, thread_name, "add_todo")
+    return error or fn(thread, title, link, state, session_id)
+
+
+def retire_todo(workspace_dir: str, thread_name: str, todo_id: str, state: str) -> str:
+    """Retire a todo as done or dropped, removing it from any window."""
+    thread, fn, error = _for(workspace_dir, thread_name, "retire_todo")
+    return error or fn(thread, todo_id, state)
+
+
+def set_todo_state(workspace_dir: str, thread_name: str, todo_id: str, state: str) -> str:
+    """Park or unpark a todo without retiring it."""
+    thread, fn, error = _for(workspace_dir, thread_name, "set_state")
+    return error or fn(thread, "todos", todo_id, state)
+
+
+def set_window(workspace_dir: str, thread_name: str, entry_ids: list[str],
+               section: str = "next_steps", kind: str = "todos") -> str:
+    """Choose which entries the README shows, and in what order."""
+    thread, fn, error = _for(workspace_dir, thread_name, "set_window")
+    return error or fn(thread, kind, section, entry_ids)
+
+
+def log_decision(workspace_dir: str, thread_name: str, title: str, summary: str,
+                 body: str, status: str = "proposed",
+                 supersedes: list[str] | None = None,
+                 session_id: str | None = None) -> str:
+    """Write a decision file and index it."""
+    thread, fn, error = _for(workspace_dir, thread_name, "log_decision")
+    return error or fn(thread, title, summary, body, status, supersedes, session_id)
+
+
+def retire_decision(workspace_dir: str, thread_name: str, decision_id: str,
+                    state: str) -> str:
+    """Retire a decision that was neither superseded nor is still in force."""
+    thread, fn, error = _for(workspace_dir, thread_name, "retire_decision")
+    return error or fn(thread, decision_id, state)
+
+
+def index_directory(workspace_dir: str, thread_name: str, link: str,
+                    session_id: str | None = None) -> str:
+    """Index everything in one directory that is not indexed yet."""
+    thread, fn, error = _for(workspace_dir, thread_name, "index_directory")
+    return error or fn(thread, link, session_id)
+
+
+def index_file(workspace_dir: str, thread_name: str, link: str,
+               description: str = "", session_id: str | None = None) -> str:
+    """Index a file that is already in the thread."""
+    thread, fn, error = _for(workspace_dir, thread_name, "index_file")
+    return error or fn(thread, link, description, session_id)
+
+def retire_artifact(workspace_dir: str, thread_name: str, artifact_id: str,
+                    state: str) -> str:
+    """Retire an artifact that is superseded or no longer relevant."""
+    thread, fn, error = _for(workspace_dir, thread_name, "retire_artifact")
+    return error or fn(thread, artifact_id, state)

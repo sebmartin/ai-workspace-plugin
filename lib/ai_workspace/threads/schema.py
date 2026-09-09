@@ -64,3 +64,14 @@ def unsupported_message(thread_name: str, schema: int | None) -> str:
     if schema > high:
         return json.dumps({"error": "SCHEMA_TOO_NEW", **reply})
     return json.dumps({"error": "SCHEMA_RETIRED", **reply})
+
+
+def needs_migration_message(thread_name: str, schema: int) -> str:
+    """A refusal for an operation this thread's schema does not have.
+
+    Names the schema rather than the operation's absence, because "your thread
+    is older than this feature" is the actionable form.
+    """
+    return json.dumps({
+        "error": "NEEDS_MIGRATION", "thread": thread_name, "schema": schema,
+    })
