@@ -184,7 +184,9 @@ class TestResumeThread:
         (thread / "README.md").write_text("# My Thread\n**Focus**: x\n")
         result = resume_thread(str(tmp_path), "my-thread")
         assert result.startswith(
-            f"Workspace: {tmp_path}\nThread: {tmp_path / 'threads' / 'my-thread'}\n\n"
+            f"Workspace: {tmp_path}\n"
+            f"Thread: {tmp_path / 'threads' / 'my-thread'}\n"
+            f"Schema: 1\n\n"
         )
 
     def test_error_returns_no_headers(self, tmp_path):
@@ -208,7 +210,9 @@ class TestCreateThread:
         (tmp_path / "threads").mkdir()
         result = create_thread(str(tmp_path), "headered")
         assert result.startswith(
-            f"Workspace: {tmp_path}\nThread: {tmp_path / 'threads' / 'headered'}\n\n"
+            f"Workspace: {tmp_path}\n"
+            f"Thread: {tmp_path / 'threads' / 'headered'}\n"
+            f"Schema: 1\n\n"
         )
 
     def test_already_exists_error_has_no_headers(self, tmp_path):
