@@ -1,5 +1,6 @@
 """Schema 2 primitives: schema detection, indexes, rendering, sessions, dates."""
 
+import json
 import sys
 from pathlib import Path
 
@@ -81,8 +82,9 @@ class TestSchemaDetection:
         writes schema 1, so a message built from CURRENT_SCHEMA would understate
         what the plugin accepts.
         """
-        err = schema.unsupported_message("t", 99)
-        assert f"{min(schema.SCHEMAS)} to {max(schema.SCHEMAS)}" in err
+        err = json.loads(schema.unsupported_message("t", 99))
+        assert err["reads"] == [min(schema.SCHEMAS), max(schema.SCHEMAS)]
+        assert err["error"] == "SCHEMA_TOO_NEW"
 
 
 class TestIndex:

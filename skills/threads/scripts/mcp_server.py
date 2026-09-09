@@ -47,6 +47,11 @@ def list_threads(workspace_dir: str) -> str:
 def resume_thread(workspace_dir: str, thread_name: str) -> str:
     """Resolve the workspace and thread path, and return the full README content.
 
+    A thread this plugin cannot read returns `{"error": CODE, "thread": ...,
+    "schema": <n>, "reads": [<low>, <high>]}`: `SCHEMA_TOO_NEW` (upgrade the
+    plugin), `SCHEMA_RETIRED` (migrate it with a version that still reads it),
+    or `UNREADABLE_SCHEMA` (its marker file is not an integer).
+
     Args:
         workspace_dir: Directory hint for locating the workspace; typically the
             tracked workspace path from session context, or the caller's cwd on

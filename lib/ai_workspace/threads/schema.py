@@ -8,6 +8,7 @@ Separate from __init__.py so the registry, the Thread record and the counters
 stay one readable unit and __init__.py stays the API.
 """
 
+import json
 from pathlib import Path
 from typing import NamedTuple
 
@@ -57,21 +58,10 @@ def unsupported_message(thread_name: str, schema: int | None) -> str:
     in code, which is the coupling the separate counters exist to avoid.
     """
     low, high = min(SCHEMAS), max(SCHEMAS)
-    supported = f"{low}" if low == high else f"{low} to {high}"
+    reply = {"thread": thread_name, "reads": [low, high]}
     if schema is None:
-        return (
-            f"Error: UNREADABLE_SCHEMA\n"
-            f"Thread '{thread_name}' has a {MARKER} file that is not an integer.\n"
-            f"This plugin reads schema {supported}."
-        )
+        return json.dumps({"error": "UNREADABLE_SCHEMA", **reply})
+    reply["schema"] = schema
     if schema > high:
-        return (
-            f"Error: SCHEMA_TOO_NEW\n"
-            f"Thread '{thread_name}' is schema {schema}; this plugin reads {supported}.\n"
-            f"Upgrade the plugin to work with this thread."
-        )
-    return (
-        f"Error: SCHEMA_RETIRED\n"
-        f"Thread '{thread_name}' is schema {schema}; this plugin reads {supported}.\n"
-        f"Migrate it with a plugin version that still reads schema {schema}."
-    )
+        return json.dumps({"error": "SCHEMA_TOO_NEW", **reply})
+    return json.dumps({"error": "SCHEMA_RETIRED", **reply})
