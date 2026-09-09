@@ -28,13 +28,17 @@ def list_threads(workspace_dir: str) -> str:
     """List all discussion threads sorted by most recent activity.
 
     Resolves the workspace from `workspace_dir` (local threads/ first, then configured
-    default). Returns `Error: NO_WORKSPACE` if neither is available.
+    default).
+
+    Every operating tool answers a failed resolution the same way:
+    `{"error": "NO_WORKSPACE", "tried": ...}`. Ask the user for their workspace
+    path, call set_default_workspace, then retry the original call.
 
     Args:
         workspace_dir: Directory hint for locating the workspace; typically the
             tracked workspace path from session context, or the caller's cwd on
             a fresh invocation. The tool probes this directory for threads/,
-            falls back to the configured default, and returns NO_WORKSPACE if neither works.
+            falls back to the configured default.
     """
     return _ws.list_threads(workspace_dir)
 
@@ -47,7 +51,7 @@ def resume_thread(workspace_dir: str, thread_name: str) -> str:
         workspace_dir: Directory hint for locating the workspace; typically the
             tracked workspace path from session context, or the caller's cwd on
             a fresh invocation. The tool probes this directory for threads/,
-            falls back to the configured default, and returns NO_WORKSPACE if neither works.
+            falls back to the configured default.
         thread_name: Name of the thread (kebab-case).
     """
     return _threads.resume(workspace_dir, thread_name)
@@ -60,9 +64,10 @@ def create_thread(workspace_dir: str, thread_name: str) -> str:
     Resolves the workspace from `workspace_dir`. If `workspace_dir` has a threads/ dir, the thread
     is created there. If not, the tool may return a status the LLM must surface
     to the user:
-    - `Status: AMBIGUOUS_WORKSPACE` when a configured default workspace exists
+    - `{"error": "AMBIGUOUS_WORKSPACE", "tried": ..., "configured": ...}` when a
+      configured default exists
       (user picks between configured workspace vs initialising a new one here).
-    - `Status: NEEDS_INIT` when no workspace exists anywhere (user picks between
+    - `{"error": "NEEDS_INIT", "tried": ...}` when none exists anywhere (user picks between
       initialising here vs supplying a path).
 
     Args:
@@ -132,7 +137,7 @@ def archive_thread(workspace_dir: str, thread_name: str) -> str:
         workspace_dir: Directory hint for locating the workspace; typically the
             tracked workspace path from session context, or the caller's cwd on
             a fresh invocation. The tool probes this directory for threads/,
-            falls back to the configured default, and returns NO_WORKSPACE if neither works.
+            falls back to the configured default.
         thread_name: Name of the thread to archive.
     """
     return _ws.archive(workspace_dir, thread_name)
@@ -144,14 +149,15 @@ def restore_thread(workspace_dir: str, thread_name: str) -> str:
     """Restore an archived thread: move it back from archive/ into threads/.
 
     Takes the thread's own name. Archives created before 3.0 are tarballs and
-    are not unpacked by this tool; it returns `Status: LEGACY_ARCHIVE` naming
+    are not unpacked by this tool; it returns
+    `{"error": "LEGACY_ARCHIVE", "tarball": ..., "reference": ...}` naming
     the reference to follow.
 
     Args:
         workspace_dir: Directory hint for locating the workspace; typically the
             tracked workspace path from session context, or the caller's cwd on
             a fresh invocation. The tool probes this directory for threads/,
-            falls back to the configured default, and returns NO_WORKSPACE if neither works.
+            falls back to the configured default.
         thread_name: Name of the archived thread.
     """
     return _ws.restore(workspace_dir, thread_name)
@@ -170,7 +176,7 @@ def list_archived_threads(workspace_dir: str) -> str:
         workspace_dir: Directory hint for locating the workspace; typically the
             tracked workspace path from session context, or the caller's cwd on
             a fresh invocation. The tool probes this directory for threads/,
-            falls back to the configured default, and returns NO_WORKSPACE if neither works.
+            falls back to the configured default.
     """
     return _ws.list_archived_threads(workspace_dir)
 

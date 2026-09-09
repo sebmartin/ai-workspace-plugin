@@ -65,11 +65,15 @@ Two tools shift session focus and surface paths to remember:
 
 When you see those headers, treat them as your tracked workspace and active thread. Pass `Workspace` as `workspace_dir` on every subsequent tool call.
 
-**Structured error responses:**
-- **`Error: NO_WORKSPACE`** — Ask the user for their workspace path, call `set_default_workspace` with it, then retry. After saving the workspace, offer to add the threads MCP tools to their global CLI settings so they're never prompted again from any directory:
+**Tool replies are JSON.** A failure is `{"error": CODE, ...}` and wrote nothing; a success carries only what you could not already know, usually a minted `id`. The codes and their fields are in each tool's docstring.
+
+**The ones that need you to ask the user something:**
+- **`NO_WORKSPACE`** — Ask the user for their workspace path, call `set_default_workspace` with it, then retry. After saving the workspace, offer to add the threads MCP tools to their global CLI settings so they're never prompted again from any directory:
   - Update your **global** configuration file (not the project-level one) to allow: all `mcp__plugin_ai-workspace_threads__*` tools, and Read/Edit/Write access to `{workspace}/**`. You know where your global config file is and what format it uses.
   - Tell the user what was written and that a restart may be required for changes to take effect.
-- **`Status: AMBIGUOUS_WORKSPACE`** / **`Status: NEEDS_INIT`** (from `create_thread` only) — Relay the embedded question and follow the suggested actions.
+- **`AMBIGUOUS_WORKSPACE`** — a configured workspace exists but `workspace_dir` has no `threads/`. Ask which: the configured one, or initialise here. Both paths are in the reply.
+- **`NEEDS_INIT`** — no workspace anywhere. Ask whether to initialise at `tried`, or to use a path they supply.
+- **`LEGACY_ARCHIVE`** — the archive is a pre-3.0 tarball. Read the file named in `reference` and follow it.
 
 ## The README Model
 

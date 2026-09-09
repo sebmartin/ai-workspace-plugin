@@ -31,13 +31,12 @@ def _resolve_workspace(workspace_dir: str) -> tuple[Path | None, str]:
 
 
 def _no_workspace_message(workspace_dir: str) -> str:
-    """Stable text the skill teaches the LLM to recognize."""
-    return (
-        "Error: NO_WORKSPACE\n"
-        f"No threads workspace found at {workspace_dir} or in saved settings.\n"
-        "Ask the user for the path to their threads workspace, then call "
-        "set_default_workspace with that path before retrying."
-    )
+    """The code, and the path that was tried.
+
+    What to do about it lives in the tool docstrings, which are read once
+    rather than once per failure. Nobody reads a tool result.
+    """
+    return json.dumps({"error": "NO_WORKSPACE", "tried": workspace_dir})
 
 
 def resolve_workspace(workspace_dir: str) -> str:
@@ -137,28 +136,12 @@ def resolve_for_create(workspace_dir: str) -> tuple[Path | None, str | None]:
     config = read_config()
     default = config.get("default_workspace")
     if default and (Path(default) / "threads").is_dir():
-        return None, (
-            "Status: AMBIGUOUS_WORKSPACE\n"
-            f"No threads/ directory at {workspace_dir}, but a configured workspace "
-            f"exists at {default}.\n"
-            f'Ask the user: "Create the new thread in the configured '
-            f'workspace at {default}, or initialize a new workspace here '
-            f'at {workspace_dir}?"\n'
-            f"- If they pick the configured workspace, retry create_thread "
-            f"with workspace_dir={default}.\n"
-            f'- If they pick "here", run the ai-workspace:init skill at '
-            f"{workspace_dir}, then retry."
-        )
-    return None, (
-        "Status: NEEDS_INIT\n"
-        "No threads workspace found.\n"
-        f'Ask the user: "Initialize a new workspace at {workspace_dir}, or use one '
-        f'elsewhere?"\n'
-        f'- If "here", run the ai-workspace:init skill at {workspace_dir}, then '
-        f"retry.\n"
-        f'- If "elsewhere", get the path from the user, call '
-        f"set_default_workspace, then retry."
-    )
+        return None, json.dumps({
+            "error": "AMBIGUOUS_WORKSPACE",
+            "tried": workspace_dir,
+            "configured": default,
+        })
+    return None, json.dumps({"error": "NEEDS_INIT", "tried": workspace_dir})
 
 
 def names_one_directory(thread_name: str) -> bool:
@@ -313,12 +296,11 @@ def restore(workspace_dir: str, thread_name: str) -> str:
     source = archive_path(workspace, thread_name)
     tarball = None if source.is_dir() else _legacy_archive_of(archives, thread_name)
     if tarball is not None:
-        return (
-            f"Status: LEGACY_ARCHIVE\n"
-            f"'{thread_name}' is archived as {tarball.name}, a tarball from before 3.0, "
-            f"which this plugin no longer unpacks.\n"
-            f"Read {LEGACY_ARCHIVE_DOC} and follow it."
-        )
+        return json.dumps({
+            "error": "LEGACY_ARCHIVE",
+            "tarball": tarball.name,
+            "reference": LEGACY_ARCHIVE_DOC,
+        })
 
     failure = _move(source, thread_path(workspace, thread_name), f"A thread '{thread_name}'")
     return failure or f"Restored '{thread_name}' to threads/{thread_name}/."

@@ -63,7 +63,7 @@ class TestListThreads:
     def test_no_workspace_returns_error(self, tmp_path):
         """Bare dir + no config → NO_WORKSPACE."""
         result = list_threads(str(tmp_path))
-        assert "Error: NO_WORKSPACE" in result
+        assert json.loads(result)["error"] == "NO_WORKSPACE"
 
     def test_config_fallback_used(self, tmp_path):
         """Bare cwd but config points to a real workspace → resolve via config."""
@@ -250,7 +250,7 @@ class TestCreateThread:
         bare = tmp_path / "elsewhere"
         bare.mkdir()
         result = create_thread(str(bare), "new-thread")
-        assert "Status: AMBIGUOUS_WORKSPACE" in result
+        assert json.loads(result)["error"] == "AMBIGUOUS_WORKSPACE"
         assert str(workspace) in result
         assert str(bare) in result
         # Thread must NOT have been created in either location.
@@ -262,7 +262,7 @@ class TestCreateThread:
         bare = tmp_path / "fresh-dir"
         bare.mkdir()
         result = create_thread(str(bare), "first-thread")
-        assert "Status: NEEDS_INIT" in result
+        assert json.loads(result)["error"] == "NEEDS_INIT"
         assert str(bare) in result
         assert not (bare / "threads").exists()
 
@@ -510,8 +510,9 @@ class TestRestoreThread:
         (tmp_path / "archive").mkdir()
         (tmp_path / "archive" / "2026-ancient.tar.gz").write_bytes(b"not really a tarball")
         result = restore_thread(str(tmp_path), "ancient")
-        assert "LEGACY_ARCHIVE" in result
-        assert "unpack-legacy-archive.md" in result
+        r = json.loads(result)
+        assert r["error"] == "LEGACY_ARCHIVE"
+        assert r["reference"].endswith("unpack-legacy-archive.md")
 
 
 class TestListArchivedThreads:
