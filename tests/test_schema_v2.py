@@ -89,6 +89,15 @@ class TestSchemaDetection:
         assert err["error"] == "SCHEMA_TOO_NEW"
 
 
+    def test_last_section_does_not_swallow_the_footer(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        render.render(d)
+        out = v2.compose(d, "t")
+        about = out.split("## About\n\n")[1].split("\n##")[0]
+        assert "**Indexes**" not in about
+        assert about.strip() == "What this is."
+
+
 class TestIndex:
     def test_missing_index_is_empty_not_an_error(self, tmp_path):
         d = _v2_thread(tmp_path)
