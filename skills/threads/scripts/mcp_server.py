@@ -484,6 +484,20 @@ def audit_migration(workspace_dir: str, original_thread: str,
     date. It cannot tell you whether the Quick Resume prose survived as todos
     and Status; read that yourself.
 
+    Returns JSON. `{"clean": true}` when nothing mechanical is wrong; branch on
+    that before reading anything else. Otherwise the keys name what to fix:
+
+    - `unindexed` — {kind: [filenames]} present in the original and in no index.
+    - `missing_from_copy` — {kind: [filenames]} in the original, absent from the copy.
+    - `dangling` — {kind: [links]} indexed but pointing at nothing.
+    - `out_of_date_order` — [kind] whose index is not sorted by id.
+    - `v1_readme_sections` — schema 1 headings still in the converted README.
+    - `undated_entries` — how many took the 19700101 date. Not a problem by
+      itself, so it does not clear `clean`.
+
+    `clean` never covers judgement: whether Quick Resume survived as todos and
+    Status is for a reader, and this tool does not look.
+
     Args:
         workspace_dir: The tracked workspace path from session context.
         original_thread: The untouched original, e.g. my-thread-v1.

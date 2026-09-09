@@ -1,5 +1,6 @@
 """Migration safety check and the deterministic half of the conversion audit."""
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -96,7 +97,7 @@ class TestAudit:
         idx.add(d, "todos", idx.Entry(
             "20260101-a", "active", "A", "./sessions/20260101-first.md"))
         out = migrate.audit(v1, d)
-        assert "sessions: 1 entr" in out and "not in any index" in out
+        assert json.loads(out)["unindexed"]["sessions"] == ["20260101-first.md"]
 
     def test_filesystem_metadata_is_not_reported_as_missing(self, tmp_path):
         """A real audit reported fifty of these, which is how a gate gets ignored."""
@@ -110,15 +111,14 @@ class TestAudit:
             "20260202-choice", "locked", "20260202-choice", "./decisions/20260202-choice.md"))
         out = migrate.audit(v1, d)
         assert "DS_Store" not in out
-        assert "PROBLEMS" not in out
+        assert json.loads(out)["clean"] is True
 
     def test_a_half_converted_readme_is_reported(self, tmp_path):
         """Every index can be complete while the README is still the old document."""
         v1 = _v1(tmp_path)
         d = _converted_from(v1, tmp_path, readme=False)
         out = migrate.audit(v1, d)
-        assert "still holds schema 1 sections" in out
-        assert "## Quick Resume" in out
+        assert "## Quick Resume" in json.loads(out)["v1_readme_sections"]
 
     def test_clean_conversion_reports_no_problems(self, tmp_path):
         v1 = _v1(tmp_path)
@@ -128,27 +128,26 @@ class TestAudit:
         idx.add(conv, "decisions", idx.Entry("20260202-choice", "locked", "Choice",
                                                 "./decisions/20260202-choice.md"))
         out = migrate.audit(v1, conv)
-        assert "No missing files" in out and "PROBLEMS" not in out
+        assert json.loads(out)["clean"] is True
 
     def test_unindexed_file_is_caught(self, tmp_path):
         v1 = _v1(tmp_path)
         conv = _converted_from(v1, tmp_path)
         out = migrate.audit(v1, conv)
-        assert "not in any index" in out
-        assert "20260101-first.md" in out
+        assert json.loads(out)["unindexed"]["sessions"] == ["20260101-first.md"]
 
     def test_missing_file_is_caught(self, tmp_path):
         v1 = _v1(tmp_path)
         conv = _converted_from(v1, tmp_path)
         (conv / "sessions" / "20260101-first.md").unlink()
-        assert "missing from the copy" in migrate.audit(v1, conv)
+        assert "missing_from_copy" in json.loads(migrate.audit(v1, conv))
 
     def test_dangling_index_link_is_caught(self, tmp_path):
         v1 = _v1(tmp_path)
         conv = _converted_from(v1, tmp_path)
         idx.add(conv, "artifacts", idx.Entry("20260101-x", "current", "X",
                                                 "./artifacts/nope.md"))
-        assert "links to a missing file" in migrate.audit(v1, conv)
+        assert "dangling" in json.loads(migrate.audit(v1, conv))
 
     def test_out_of_order_index_is_caught(self, tmp_path):
         """Written directly, because idx.add would place them in order.
@@ -162,19 +161,19 @@ class TestAudit:
             idx.Entry("20260301-b", "current", "B", "./artifacts/"),
             idx.Entry("20260101-a", "current", "A", "./artifacts/"),
         ], {})
-        assert "not in date order" in migrate.audit(v1, conv)
+        assert "out_of_date_order" in json.loads(migrate.audit(v1, conv))
 
     def test_unknown_dates_are_counted(self, tmp_path):
         v1 = _v1(tmp_path)
         conv = _converted_from(v1, tmp_path)
         idx.add(conv, "artifacts", idx.Entry("19700101-parked", "current", "Parked",
                                                 "./artifacts/"))
-        assert "no derivable date" in migrate.audit(v1, conv)
+        assert json.loads(migrate.audit(v1, conv))["undated_entries"] >= 1
 
     def test_judgment_is_always_left_to_a_reader(self, tmp_path):
         v1 = _v1(tmp_path)
         conv = _converted_from(v1, tmp_path)
-        assert "Still needs a reader" in migrate.audit(v1, conv)
+        assert "clean" in json.loads(migrate.audit(v1, conv))
 
     def test_attachments_are_checked_but_not_indexed(self, tmp_path):
         v1 = _v1(tmp_path)

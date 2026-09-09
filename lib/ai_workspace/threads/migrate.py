@@ -6,6 +6,7 @@ is the deterministic part: whether a safety net exists before starting, and
 whether the converted copy actually kept everything.
 """
 
+import json
 import subprocess
 from pathlib import Path
 
@@ -91,7 +92,7 @@ def audit(original: Path, converted: Path) -> str:
     operations. Only whether the Quick Resume prose survived as todos and Status
     needs judgment, and that is left to a reader.
     """
-    problems: list[str] = []
+    problems: dict = {}
 
     for kind in ("sessions", "decisions", "artifacts", "attachments"):
         src, dst = original / kind, converted / kind
@@ -101,8 +102,7 @@ def audit(original: Path, converted: Path) -> str:
         dst_names = {p.name for p in dst.iterdir() if idx.is_content(p)} if dst.is_dir() else set()
         missing = sorted(src_names - dst_names)
         if missing:
-            problems.append(f"{kind}: {len(missing)} file(s) missing from the copy: "
-                            + ", ".join(missing[:5]))
+            problems.setdefault("missing_from_copy", {})[kind] = missing
 
     for kind in ("sessions", "decisions", "artifacts"):
         src = original / kind
@@ -118,17 +118,16 @@ def audit(original: Path, converted: Path) -> str:
             if idx.is_content(p) and p.name not in indexed
         )
         if unindexed:
-            problems.append(f"{kind}: {len(unindexed)} entr(y/ies) not in any index: "
-                            + ", ".join(unindexed[:5]))
+            problems.setdefault("unindexed", {})[kind] = unindexed
 
     for kind in idx.TYPES:
         entries, _ = idx.read(converted, kind)
         for entry in entries:
             if not (converted / entry.link.lstrip("./")).exists():
-                problems.append(f"{kind}: {entry.id} links to a missing file ({entry.link})")
+                problems.setdefault("dangling", {}).setdefault(kind, []).append(entry.link)
         ordering = [e.id.split("-")[0] for e in entries]
         if ordering != sorted(ordering):
-            problems.append(f"{kind}: index is not in date order")
+            problems.setdefault("out_of_date_order", []).append(kind)
 
     readme = converted / "README.md"
     residue = sorted(
@@ -136,9 +135,7 @@ def audit(original: Path, converted: Path) -> str:
         if readme.is_file() and marker in readme.read_text(errors="ignore")
     )
     if residue:
-        problems.append(
-            "README still holds schema 1 sections: " + ", ".join(residue)
-        )
+        problems["v1_readme_sections"] = residue
 
     unknown = sum(
         1 for kind in idx.TYPES
@@ -146,13 +143,11 @@ def audit(original: Path, converted: Path) -> str:
         if e.id.startswith(ids.UNKNOWN)
     )
 
-    lines = [f"Audit of {converted.name} against {original.name}:"]
+    # A worklist, so: what to go and fix, keyed by what is wrong with it, and
+    # nothing derivable. `clean` is the one thing a caller branches on before
+    # reading anything else. What each key means is in the tool's docstring.
+    reply: dict = {"clean": not problems}
     if unknown:
-        lines.append(f"  {unknown} entr(y/ies) had no derivable date and are marked unknown.")
-    if problems:
-        lines.append("  PROBLEMS:")
-        lines.extend(f"    - {p}" for p in problems)
-    else:
-        lines.append("  No missing files, no dangling links, indexes in order.")
-    lines.append("  Still needs a reader: whether Quick Resume survived as todos and Status.")
-    return "\n".join(lines)
+        reply["undated_entries"] = unknown
+    reply.update(problems)
+    return json.dumps(reply)

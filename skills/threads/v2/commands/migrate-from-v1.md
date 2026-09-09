@@ -26,7 +26,9 @@ the pre-migration state is not recoverable if the answer is no.
    `shutil.copytree` with `copy2`)
 3. Write `schema-version` containing `2` into the copy
 4. Convert the copy — below
-5. Call `audit_migration`, read what it reports, and resolve anything real
+5. Call `audit_migration`. `clean: true` means nothing mechanical is wrong;
+   anything else names what to fix. It never checks judgement, so read the
+   converted README yourself as well
 6. Rename `{name}-v2` to `{name}`
 7. Record the backup as a todo, and tell the user `{name}-v1` is theirs to
    remove or archive when they are satisfied
