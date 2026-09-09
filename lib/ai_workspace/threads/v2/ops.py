@@ -9,6 +9,7 @@ None of these carries a large payload, so none of them can be defeated by the
 model's per-response output cap.
 """
 
+import json
 from datetime import date
 from pathlib import Path, PurePosixPath
 from typing import NamedTuple
@@ -39,19 +40,17 @@ _INDEXABLE = {
 
 
 class Refusal(NamedTuple):
-    """Why one file could not be indexed.
+    """Why one file could not be indexed: a code, and what differs per file.
 
-    Two parts so a batch can group them. `cause` is identical for every file
-    failing the same way; `detail` is what differs. Reporting the detail per
-    file made a report of twenty-four broken decisions ten thousand characters
-    long, nine tenths of it the same sentence with a different path in it.
+    A code rather than a sentence. No human reads a tool result, so the
+    sentence explaining what `FRONTMATTER_UNPARSEABLE` means is filler here and
+    belongs in the tool's docstring, which is read once instead of once per
+    failure. `detail` is only what the code cannot carry, and only ever varies
+    per file: a parser's position, or the status a file actually declared.
     """
 
-    cause: str
+    code: str
     detail: str = ""
-
-    def render(self, link: str) -> str:
-        return f"Error: {link} {self.cause}." + (f"\n{self.detail}" if self.detail else "")
 
 
 def _decision_state(path: Path) -> tuple[str | None, Refusal | None]:
@@ -64,23 +63,16 @@ def _decision_state(path: Path) -> tuple[str | None, Refusal | None]:
     try:
         fields, _ = split_frontmatter(path.read_text(errors="ignore")[:2000], path)
     except OSError as e:
-        return None, Refusal("cannot be read", str(e))
+        return None, Refusal("UNREADABLE", str(e))
     except ValueError as e:
         # The parser's own complaint, which names a line and a column and the
         # real fault. Guessing at a cause here would send the reader to the
         # wrong fix whenever the guess was wrong.
-        return None, Refusal(
-            "has frontmatter that cannot be parsed, so its status cannot be read",
-            str(e),
-        )
+        return None, Refusal("FRONTMATTER_UNPARSEABLE", str(e))
     status = str(fields.get("status") or "").strip()
     if status in idx.IN_FORCE["decisions"]:
         return status, None
-    allowed = ", ".join(idx.IN_FORCE["decisions"])
-    return None, Refusal(
-        f"does not declare a status this schema uses. Use one of: {allowed}",
-        f"it says `{status}`" if status else "it declares none",
-    )
+    return None, Refusal("STATUS_UNKNOWN", status)
 
 
 def _inside(link: str) -> PurePosixPath | None:
@@ -103,18 +95,17 @@ def _index_one(thread, link: str, description: str = "") -> tuple[str, Refusal |
     """
     relative = _inside(link)
     if relative is None or len(relative.parts) < 2:
-        return "", Refusal("is not a path to a file inside the thread")
+        return "", Refusal("OUTSIDE_THREAD")
 
     kind = relative.parts[0]
     if kind not in _INDEXABLE:
-        allowed = ", ".join(_INDEXABLE)
-        return "", Refusal(f"is not in an indexable directory. Use one of: {allowed}")
+        return "", Refusal("NOT_INDEXABLE", kind)
 
     path = thread.dir / relative
     if not path.exists():
-        return "", Refusal("does not exist. Write the file before indexing it")
+        return "", Refusal("MISSING")
     if not idx.is_content(path):
-        return "", Refusal("is filesystem metadata, not thread content")
+        return "", Refusal("METADATA")
 
     default_state, takes_description = _INDEXABLE[kind]
     if default_state is _STATE_FROM_FILE:
@@ -155,12 +146,13 @@ def index_file(thread, link: str, description: str = "",
         return unwritable
     entry_id, refusal = _index_one(thread, link, description)
     if refusal is not None:
-        return refusal.render(link)
+        return json.dumps({"error": refusal.code, "detail": refusal.detail})
     render.render(thread.dir)
     _record(thread.dir, session_id, f"{PurePosixPath(link).parts[-2][:-1]} {entry_id}")
-    unknown = entry_id.startswith(ids_mod.UNKNOWN)
-    note = " Its date could not be derived, so it is marked unknown." if unknown else ""
-    return f"Indexed {entry_id}.{note}"
+    reply: dict = {"id": entry_id}
+    if entry_id.startswith(ids_mod.UNKNOWN):
+        reply["undated"] = True
+    return json.dumps(reply)
 
 
 def index_directory(thread, link: str, session_id: str | None = None) -> str:
@@ -180,16 +172,18 @@ def index_directory(thread, link: str, session_id: str | None = None) -> str:
         return unwritable
     relative = _inside(link)
     if relative is None or len(relative.parts) != 1:
-        return f"Error: '{link}' is not a directory inside the thread."
+        return json.dumps({"error": "OUTSIDE_THREAD", "detail": link})
 
     kind = relative.parts[0]
     if kind not in _INDEXABLE:
-        allowed = ", ".join(_INDEXABLE)
-        return f"Error: '{kind}' is not an indexable directory. Use one of: {allowed}."
+        return json.dumps({"error": "NOT_INDEXABLE", "detail": kind})
 
     directory = thread.dir / relative
     if not directory.is_dir():
-        return f"No {kind}/ directory, so there is nothing to index."
+        # Not silence. `create` lays down all three indexable directories, so a
+        # missing one means the thread is malformed or the caller named a kind
+        # it did not mean, and both want saying.
+        return json.dumps({"error": "NO_SUCH_DIRECTORY", "detail": kind})
 
     already = {
         PurePosixPath(e.link).name
@@ -200,15 +194,13 @@ def index_directory(thread, link: str, session_id: str | None = None) -> str:
         p for p in directory.iterdir()
         if idx.is_content(p) and p.name not in already
     )
-    if not pending:
-        return f"Every entry in {kind}/ is already indexed."
 
     indexed, unknown = [], []
     refused: dict[str, list[str]] = {}
     for path in pending:
         entry_id, refusal = _index_one(thread, f"./{kind}/{path.name}")
         if refusal is not None:
-            refused.setdefault(refusal.cause, []).append(path.name)
+            refused.setdefault(refusal.code, []).append(path.name)
             continue
         indexed.append(entry_id)
         if entry_id.startswith(ids_mod.UNKNOWN):
@@ -218,24 +210,16 @@ def index_directory(thread, link: str, session_id: str | None = None) -> str:
         render.render(thread.dir)
         _record(thread.dir, session_id, f"{len(indexed)} {kind} indexed")
 
-    lines = [f"Indexed {len(indexed)} of {len(pending)} in {kind}/."]
+    # No news is good news. Asking to index a directory and being told every
+    # file went in is a hundred filenames of nothing; the caller asked for all
+    # of them and silence says it got them. Only deviations come back: what was
+    # refused, and what had to be dated at the epoch.
+    reply: dict = {}
     if unknown:
-        lines.append(
-            f"  {len(unknown)} had no derivable date and are marked unknown: "
-            + ", ".join(unknown[:5]) + ("..." if len(unknown) > 5 else "")
-        )
+        reply["undated"] = [i[len(ids_mod.UNKNOWN) + 1:] for i in unknown]
     if refused:
-        # Grouped by cause, and the files named rather than each carrying its
-        # own copy of the same sentence. Whoever fixes them wants the list of
-        # names; the parser's detail is one `index_file` call away.
-        total = sum(len(v) for v in refused.values())
-        lines.append(f"  {total} refused:")
-        for cause, names in refused.items():
-            lines.append(f"    {cause}:")
-            shown = ", ".join(names[:8]) + (f", and {len(names) - 8} more" if len(names) > 8 else "")
-            lines.append(f"      {shown}")
-        lines.append("    Call index_file on one of them for the full message.")
-    return "\n".join(lines)
+        reply["refused"] = refused
+    return json.dumps(reply)
 
 
 def _record(thread_dir: Path, session_id: str | None, line: str) -> None:
@@ -246,18 +230,17 @@ def _record(thread_dir: Path, session_id: str | None, line: str) -> None:
 def add_todo(thread, title: str, link: str, state: str = "active",
              session_id: str | None = None) -> str:
     if state not in idx.IN_FORCE["todos"]:
-        allowed = ", ".join(idx.IN_FORCE["todos"])
-        return f"Error: '{state}' is not a todo state. Use one of: {allowed}."
+        allowed = list(idx.IN_FORCE["todos"])
+        return json.dumps({"error": "STATE_UNKNOWN", "detail": state, "allowed": allowed})
     if not link:
-        return ("Error: a todo needs a link. Use the session it came out of when it "
-                "has no file or issue of its own — a bare line cannot be expanded later.")
+        return json.dumps({"error": "LINK_REQUIRED"})
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
     todo_id = _new_id(thread.dir, "todos", title)
     idx.add(thread.dir, "todos", idx.Entry(todo_id, state, title, link))
     render.render(thread.dir)
     _record(thread.dir, session_id, f"todo {todo_id}")
-    return f"Added todo {todo_id} ({state})."
+    return json.dumps({"id": todo_id})
 
 
 def retire_todo(thread, todo_id: str, state: str) -> str:
@@ -268,24 +251,24 @@ def retire_todo(thread, todo_id: str, state: str) -> str:
         return error
     _drop_from_windows(thread.dir, "todos", todo_id)
     render.render(thread.dir)
-    return f"Retired todo {todo_id} as {state}."
+    return json.dumps({"id": todo_id})
 
 
 def set_state(thread, kind: str, entry_id: str, state: str) -> str:
     """Move an entry between in-force states, e.g. parking or unparking a todo."""
     if state not in idx.IN_FORCE[kind]:
-        allowed = ", ".join(idx.IN_FORCE[kind])
-        return f"Error: '{state}' is not an in-force {kind} state. Use one of: {allowed}."
+        return json.dumps({"error": "STATE_UNKNOWN", "detail": state,
+                           "allowed": list(idx.IN_FORCE[kind])})
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
     entries, fm = idx.read(thread.dir, kind)
     entry = idx.find(entries, entry_id)
     if entry is None:
-        return f"Error: No {kind} entry with id '{entry_id}'."
+        return json.dumps({"error": "NO_SUCH_ENTRY", "detail": entry_id})
     entry.state = state
     idx.write(thread.dir, kind, entries, fm)
     render.render(thread.dir)
-    return f"{entry_id} is now {state}."
+    return json.dumps({"id": entry_id})
 
 
 def set_window(thread, kind: str, section: str, entry_ids: list[str]) -> str:
@@ -295,7 +278,7 @@ def set_window(thread, kind: str, section: str, entry_ids: list[str]) -> str:
     if error:
         return error
     render.render(thread.dir)
-    return f"Window '{section}' set to {len(entry_ids)} item(s)."
+    return json.dumps({"window": section, "size": len(entry_ids)})
 
 
 def _drop_from_windows(thread_dir: Path, kind: str, entry_id: str) -> None:
@@ -314,8 +297,8 @@ def log_decision(thread, title: str, summary: str, body: str,
                  status: str = "proposed", supersedes: list[str] | None = None,
                  session_id: str | None = None) -> str:
     if status not in idx.IN_FORCE["decisions"]:
-        allowed = ", ".join(idx.IN_FORCE["decisions"])
-        return f"Error: '{status}' is not an in-force decision status. Use one of: {allowed}."
+        return json.dumps({"error": "STATUS_UNKNOWN", "detail": status,
+                           "allowed": list(idx.IN_FORCE["decisions"])})
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
     supersedes = supersedes or []
@@ -349,8 +332,10 @@ def log_decision(thread, title: str, summary: str, body: str,
             retired.append(old)
     if retired:
         render.render(thread.dir)
-    note = f" Superseded {', '.join(retired)}." if retired else ""
-    return f"Logged decision {decision_id} ({status}) at ./decisions/{decision_id}.md.{note}"
+    reply: dict = {"id": decision_id}
+    if retired:
+        reply["superseded"] = retired
+    return json.dumps(reply)
 
 
 def retire_decision(thread, decision_id: str, state: str) -> str:
@@ -372,7 +357,7 @@ def retire_decision(thread, decision_id: str, state: str) -> str:
                     path.write_text(text.replace(f"status: {live}", f"status: {state}", 1))
                     break
     render.render(thread.dir)
-    return f"Retired decision {decision_id} as {state}."
+    return json.dumps({"id": decision_id})
 
 
 def retire_artifact(thread, artifact_id: str, state: str) -> str:
@@ -382,4 +367,4 @@ def retire_artifact(thread, artifact_id: str, state: str) -> str:
     if error:
         return error
     render.render(thread.dir)
-    return f"Retired artifact {artifact_id} as {state}."
+    return json.dumps({"id": artifact_id})

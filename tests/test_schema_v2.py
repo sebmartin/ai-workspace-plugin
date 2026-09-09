@@ -10,7 +10,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
 sys.path.insert(0, str(Path(__file__).parent.parent / "skills" / "threads" / "scripts"))
 
-from ai_workspace.threads import schema, marker
+from ai_workspace.threads import marker, schema
 from ai_workspace.threads.v2 import ids, render, session
 from ai_workspace.threads.v2 import index as idx
 from ai_workspace.threads.v2 import thread as v2

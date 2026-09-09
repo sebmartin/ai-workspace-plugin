@@ -17,7 +17,6 @@ archive/ never opens it, so it needs nothing from any schema.
 import re
 
 from ai_workspace import workspace as ws
-from ai_workspace.workspace import names_one_directory  # noqa: F401  (re-exported)
 from ai_workspace.threads.schema import (  # noqa: F401  (re-exported)
     CURRENT_SCHEMA,
     MIN_READABLE_SCHEMA,
@@ -28,6 +27,7 @@ from ai_workspace.threads.schema import (  # noqa: F401  (re-exported)
     needs_migration_message,
     read_schema,
 )
+from ai_workspace.workspace import names_one_directory  # noqa: F401  (re-exported)
 
 __all__ = [
     "add_todo",

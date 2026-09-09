@@ -1,5 +1,6 @@
 """Schema 2 write tools: one line per call, always re-rendered, refused on schema 1."""
 
+import json
 import sys
 from pathlib import Path
 
@@ -17,9 +18,21 @@ def _only_id(thread_dir, kind):
     entries, _ = idx.read(thread_dir, kind)
     return entries[-1].id
 from mcp_server import (
-    add_todo, index_directory, index_file, log_decision, retire_artifact,
-    retire_decision, retire_todo, set_todo_state, set_window,
+    add_todo,
+    index_directory,
+    index_file,
+    log_decision,
+    retire_artifact,
+    retire_decision,
+    retire_todo,
+    set_todo_state,
+    set_window,
 )
+
+
+def _reply(out):
+    """Tool replies are JSON now; tests read the field they care about."""
+    return json.loads(out)
 
 
 @pytest.fixture(autouse=True)
@@ -68,14 +81,14 @@ class TestRefusalOnSchema1:
 class TestTodos:
     def test_add_requires_a_link(self, tmp_path):
         _thread(tmp_path)
-        assert "needs a link" in add_todo(str(tmp_path), "t", "Email the contractor", "")
+        assert _reply(add_todo(str(tmp_path), "t", "Email the contractor", ""))["error"] == "LINK_REQUIRED"
 
     def test_add_then_window_then_render(self, tmp_path):
         d = _thread(tmp_path)
         ws = str(tmp_path)
         out = add_todo(ws, "t", "Prep the coding round", "./sessions/20260101-s.md")
         todo_id = _only_id(d, "todos")
-        assert set_window(ws, "t", [todo_id]).startswith("Window")
+        assert _reply(set_window(ws, "t", [todo_id]))["size"] == 1
         assert "Prep the coding round" in (d / "README.md").read_text()
 
     def test_backlog_is_not_shown_until_promoted(self, tmp_path):
@@ -108,7 +121,7 @@ class TestTodos:
 
     def test_bad_state_is_rejected(self, tmp_path):
         _thread(tmp_path)
-        assert "not a todo state" in add_todo(str(tmp_path), "t", "A", "./s.md", "banana")
+        assert _reply(add_todo(str(tmp_path), "t", "A", "./s.md", "banana"))["error"] == "STATE_UNKNOWN"
 
 
 class TestDecisions:
@@ -146,8 +159,8 @@ class TestDecisions:
 
     def test_bad_status_rejected(self, tmp_path):
         _thread(tmp_path)
-        assert "not an in-force decision status" in log_decision(
-            str(tmp_path), "t", "T", "s", "b", "locked-ish")
+        assert _reply(log_decision(
+            str(tmp_path), "t", "T", "s", "b", "locked-ish"))["error"] == "STATUS_UNKNOWN"
 
 
     @pytest.mark.parametrize("summary", [
@@ -218,13 +231,12 @@ class TestArtifacts:
         """The boundary: this indexes, it never authors."""
         _thread(tmp_path)
         out = index_file(str(tmp_path), "t", "./artifacts/never-written.md")
-        assert "does not exist" in out
+        assert _reply(out)["error"] == "MISSING"
 
     def test_traversal_is_refused(self, tmp_path):
         _thread(tmp_path)
         for link in ("../../etc/passwd", "/etc/passwd", "./artifacts/../../x.md"):
-            assert "not a path to a file inside the thread" in \
-                index_file(str(tmp_path), "t", link), link
+            assert _reply(index_file(str(tmp_path), "t", link))["error"] == "OUTSIDE_THREAD", link
 
 
 class TestIndexDirectory:
@@ -239,8 +251,8 @@ class TestIndexDirectory:
         """Sixty-six sessions was sixty-six round trips before this."""
         d = self._thread_with(tmp_path, "sessions",
                               [f"202601{i:02d}-s{i}.md" for i in range(1, 13)])
-        out = index_directory(str(tmp_path), "t", "./sessions")
-        assert "Indexed 12 of 12" in out
+        # nothing to report when every file went in
+        assert _reply(index_directory(str(tmp_path), "t", "./sessions")) == {}
         assert len(idx.read(d, "sessions")[0]) == 12
 
     def test_the_readme_is_rendered_once_not_per_file(self, tmp_path):
@@ -249,20 +261,40 @@ class TestIndexDirectory:
         index_directory(str(tmp_path), "t", "./sessions")
         assert (d / "README.md").stat().st_mtime_ns != before
 
+    def test_a_hundred_files_all_fine_reports_nothing(self, tmp_path):
+        """No news is good news: the caller asked for the directory, so silence
+        is the answer that it got it."""
+        d = self._thread_with(tmp_path, "sessions",
+                              [f"2026{(i % 12) + 1:02d}{(i % 28) + 1:02d}-s{i}.md"
+                               for i in range(100)])
+        out = index_directory(str(tmp_path), "t", "./sessions")
+        assert out == "{}"
+        assert len(idx.read(d, "sessions")[0]) == 100
+
+    def test_only_the_failures_come_back(self, tmp_path):
+        d = self._thread_with(tmp_path, "decisions",
+                              [f"202608{(i % 28) + 1:02d}-ok-{i}.md" for i in range(95)])
+        for i in range(5):
+            (d / "decisions" / f"202607{i + 1:02d}-bad-{i}.md").write_text(
+                "---\nstatus: decided\n---\nx\n")
+        out = index_directory(str(tmp_path), "t", "./decisions")
+        assert set(_reply(out)) == {"refused"}
+        assert len(_reply(out)["refused"]["STATUS_UNKNOWN"]) == 5
+        assert len(out) < 200, len(out)
+        assert len(idx.read(d, "decisions")[0]) == 95
+
     def test_running_it_twice_adds_nothing(self, tmp_path):
         d = self._thread_with(tmp_path, "sessions", ["20260101-a.md"])
         index_directory(str(tmp_path), "t", "./sessions")
-        out = index_directory(str(tmp_path), "t", "./sessions")
-        assert "already indexed" in out
+        assert _reply(index_directory(str(tmp_path), "t", "./sessions")) == {}
         assert len(idx.read(d, "sessions")[0]) == 1
 
     def test_a_refusal_reports_and_does_not_stop_the_rest(self, tmp_path):
         """A migrated thread full of v1 statuses is the reason this matters."""
         d = self._thread_with(tmp_path, "decisions", ["20260101-good.md"])
         (d / "decisions" / "20260102-old.md").write_text("---\nstatus: decided\n---\nx\n")
-        out = index_directory(str(tmp_path), "t", "./decisions")
-        assert "Indexed 1 of 2" in out
-        assert "1 refused" in out and "20260102-old.md" in out
+        r = _reply(index_directory(str(tmp_path), "t", "./decisions"))
+        assert r == {"refused": {"STATUS_UNKNOWN": ["20260102-old.md"]}}
         assert [e.id for e in idx.read(d, "decisions")[0]] == ["20260101-good"]
 
         (d / "decisions" / "20260102-old.md").write_text("---\nstatus: locked\n---\nx\n")
@@ -282,11 +314,12 @@ class TestIndexDirectory:
                 "---\nstatus: decided\n---\nx\n")
         out = index_directory(str(tmp_path), "t", "./decisions")
 
-        assert "27 refused" in out
-        assert out.count("cannot be parsed") == 1
-        assert out.count("does not declare a status") == 1
-        assert "and 16 more" in out
-        assert len(out) < 1000, len(out)
+        # one key per cause however many files share it, and every file named
+        r = _reply(out)
+        assert set(r) == {"refused"}
+        assert len(r["refused"]["FRONTMATTER_UNPARSEABLE"]) == 24
+        assert len(r["refused"]["STATUS_UNKNOWN"]) == 3
+        assert len(out) < 900, len(out)
 
     def test_one_file_still_gets_the_whole_message(self, tmp_path):
         """The batch names the files; index_file is where the detail lives."""
@@ -295,17 +328,16 @@ class TestIndexDirectory:
         (d / "decisions" / "20260201-x.md").write_text(
             "---\nstatus: locked\nsummary: Lot: subdivides.\n---\nx\n")
         out = index_file(str(tmp_path), "t", "./decisions/20260201-x.md")
-        assert "cannot be parsed" in out and "line 3" in out
+        assert _reply(out)["error"] == "FRONTMATTER_UNPARSEABLE" and "line 3" in _reply(out)["detail"]
 
     def test_undated_entries_are_named_rather_than_buried(self, tmp_path):
         self._thread_with(tmp_path, "artifacts", ["orphan.md", "20260101-a.md"])
-        out = index_directory(str(tmp_path), "t", "./artifacts")
-        assert "had no derivable date" in out and "19700101-orphan" in out
+        assert _reply(index_directory(str(tmp_path), "t", "./artifacts"))["undated"] == ["orphan"]
 
     def test_a_path_outside_the_thread_is_refused(self, tmp_path):
         _thread(tmp_path)
         for link in ("../../etc", "/etc", "./sessions/nested", "./"):
-            assert "Error:" in index_directory(str(tmp_path), "t", link), link
+            assert "error" in _reply(index_directory(str(tmp_path), "t", link)), link
 
     def test_filesystem_metadata_is_not_content(self, tmp_path):
         """A real thread carried fifty of these, and one took a session's id.
@@ -317,8 +349,7 @@ class TestIndexDirectory:
         (d / "sessions").mkdir(parents=True, exist_ok=True)
         for n in ("20260125-real.md", ".DS_Store", "._20260125-real.md", "._.DS_Store"):
             (d / "sessions" / n).write_text("x\n")
-        out = index_directory(str(tmp_path), "t", "./sessions")
-        assert "Indexed 1 of 1" in out
+        assert _reply(index_directory(str(tmp_path), "t", "./sessions")) == {}
         entries = idx.read(d, "sessions")[0]
         assert [(e.id, e.link) for e in entries] == [
             ("20260125-real", "./sessions/20260125-real.md")]
@@ -342,21 +373,28 @@ class TestIndexDirectory:
         (d / "decisions").mkdir(parents=True, exist_ok=True)
         (d / "decisions" / "20260619-lot.md").write_text(
             "---\nstatus: locked\nsummary: Lot 4 579 subdivides: 6 736 633.\n---\nx\n")
-        out = index_file(str(tmp_path), "t", "./decisions/20260619-lot.md")
-        assert "cannot be parsed" in out
-        assert "declares no status" not in out
+        r = _reply(index_file(str(tmp_path), "t", "./decisions/20260619-lot.md"))
+        assert r["error"] == "FRONTMATTER_UNPARSEABLE"
         # the parser's own complaint, with a position, rather than a guess
-        assert "line 3" in out
+        assert "line 3" in r["detail"]
 
     def test_metadata_is_refused_even_when_named_explicitly(self, tmp_path):
         d = _thread(tmp_path)
         (d / "sessions").mkdir(parents=True, exist_ok=True)
         (d / "sessions" / ".DS_Store").write_text("x\n")
-        assert "metadata" in index_file(str(tmp_path), "t", "./sessions/.DS_Store")
+        assert _reply(index_file(str(tmp_path), "t", "./sessions/.DS_Store"))["error"] == "METADATA"
+
+    def test_a_missing_directory_is_an_error_not_silence(self, tmp_path):
+        """create lays all three down, so a missing one means something is wrong."""
+        d = _thread(tmp_path)
+        import shutil
+        shutil.rmtree(d / "artifacts", ignore_errors=True)
+        r = _reply(index_directory(str(tmp_path), "t", "./artifacts"))
+        assert r["error"] == "NO_SUCH_DIRECTORY" and r["detail"] == "artifacts"
 
     def test_a_bad_kind_is_refused(self, tmp_path):
         _thread(tmp_path)
-        assert "not an indexable directory" in index_directory(str(tmp_path), "t", "./todos")
+        assert _reply(index_directory(str(tmp_path), "t", "./todos"))["error"] == "NOT_INDEXABLE"
 
 
 class TestReadmeShape:

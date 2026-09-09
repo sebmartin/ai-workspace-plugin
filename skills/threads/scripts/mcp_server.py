@@ -202,6 +202,13 @@ def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
     Adding does not promote: the backlog is allowed to be long, and the README
     shows only what set_window selects.
 
+    Returns `{"id": ...}`, the minted todo id. `set_window` and the retire
+    tools take it.
+
+    A refusal returns `{"error": CODE, ...}` and writes nothing: `STATE_UNKNOWN`
+    or `STATUS_UNKNOWN` with the `allowed` values, `NO_SUCH_ENTRY`,
+    `LINK_REQUIRED`.
+
     Args:
         workspace_dir: The tracked workspace path from session context.
         thread_name: Name of the thread (kebab-case).
@@ -216,6 +223,8 @@ def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
 def retire_todo(workspace_dir: str, thread_name: str, todo_id: str, state: str) -> str:
     """Retire a todo as done or dropped, removing it from any window.
 
+    Returns `{"id": ...}`.
+
     Args:
         workspace_dir: The tracked workspace path from session context.
         thread_name: Name of the thread (kebab-case).
@@ -228,6 +237,8 @@ def retire_todo(workspace_dir: str, thread_name: str, todo_id: str, state: str) 
 @mcp.tool()
 def set_todo_state(workspace_dir: str, thread_name: str, todo_id: str, state: str) -> str:
     """Park or unpark a todo without retiring it.
+
+    Returns `{"id": ...}`.
 
     Args:
         workspace_dir: The tracked workspace path from session context.
@@ -246,6 +257,8 @@ def set_window(workspace_dir: str, thread_name: str, entry_ids: list[str],
     This is the whole of priority. The backlog below the window is never ranked,
     because ordering the twentieth item against the twenty-first produces
     nothing. Aim for about five.
+
+    Returns `{"window": ..., "size": ...}`.
 
     Args:
         workspace_dir: The tracked workspace path from session context.
@@ -271,6 +284,13 @@ def log_decision(workspace_dir: str, thread_name: str, title: str, summary: str,
     traversal starts from what is in force, so only live-to-dead pointers get
     followed.
 
+    Returns `{"id": ...}`, plus `superseded` listing what it retired. The file
+    is at ./decisions/<id>.md.
+
+    A refusal returns `{"error": CODE, ...}` and writes nothing: `STATE_UNKNOWN`
+    or `STATUS_UNKNOWN` with the `allowed` values, `NO_SUCH_ENTRY`,
+    `LINK_REQUIRED`.
+
     Args:
         workspace_dir: The tracked workspace path from session context.
         thread_name: Name of the thread (kebab-case).
@@ -288,6 +308,8 @@ def log_decision(workspace_dir: str, thread_name: str, title: str, summary: str,
 def retire_decision(workspace_dir: str, thread_name: str, decision_id: str,
                     state: str) -> str:
     """Retire a decision, updating both the index and the file's own status.
+
+    Returns `{"id": ...}`.
 
     Args:
         workspace_dir: The tracked workspace path from session context.
@@ -308,9 +330,31 @@ def index_directory(workspace_dir: str, thread_name: str, link: str) -> str:
     to supply: everything on the line is read off the file. Only artifacts carry
     a description, so index those one at a time when the description matters.
 
-    Idempotent, so a run that refused some decisions can be repeated once they
-    are fixed without duplicating what already went in. A refusal is reported
-    and does not stop the rest.
+    Idempotent, so a run that refused some files can be repeated once they are
+    fixed without duplicating what went in. A refusal does not stop the rest.
+
+    Returns JSON, and reports only deviations. `{}` means every file went in,
+    including when there were none to do; you asked for the directory, so
+    silence is the answer that it got them.
+
+        {"undated": ["notes"],
+         "refused": {"STATUS_UNKNOWN": ["20260301-old.md"]}}
+
+    `undated` names anything given the 19700101 date because nothing said when
+    it was from. It is indexed and usable; the id just sorts at the epoch.
+
+    `refused` maps a code to the files it applies to. Fix those and run again.
+
+    - `FRONTMATTER_UNPARSEABLE` — not valid YAML, so a decision's status cannot
+      be read. Usually an unquoted value containing ": ". Call index_file on
+      one of them for the parser's own message.
+    - `STATUS_UNKNOWN` — a decision declares a status this schema does not use.
+      Substitute the vocabulary in the file's frontmatter.
+    - `UNREADABLE` — the file could not be opened.
+
+    A bad request returns `{"error": CODE, "detail": ...}` and indexes nothing:
+    `OUTSIDE_THREAD`, `NOT_INDEXABLE`, or `NO_SUCH_DIRECTORY` when the kind is
+    valid but the thread has no such directory, which means it is malformed.
 
     Args:
         workspace_dir: The tracked workspace path from session context.
@@ -335,6 +379,13 @@ def index_file(workspace_dir: str, thread_name: str, link: str,
     vocabulary. A file whose name states no date is dated from the earliest
     session that names it, and failing that is marked unknown.
 
+    Returns JSON: `{"id": "20260316-summary-auth-flow"}`, with `"undated": true`
+    when nothing said what date the file is from, so it took 19700101.
+
+    A refusal returns `{"error": CODE, "detail": ...}` and writes nothing. Same
+    codes as index_directory, plus `MISSING` when the link resolves to nothing
+    and `METADATA` for a dotfile, which is never content.
+
     Args:
         workspace_dir: The tracked workspace path from session context.
         thread_name: Name of the thread (kebab-case).
@@ -354,6 +405,8 @@ def index_file(workspace_dir: str, thread_name: str, link: str,
 def retire_artifact(workspace_dir: str, thread_name: str, artifact_id: str,
                     state: str) -> str:
     """Retire an artifact so it stops appearing as current.
+
+    Returns `{"id": ...}`.
 
     Args:
         workspace_dir: The tracked workspace path from session context.
