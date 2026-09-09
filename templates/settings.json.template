@@ -5,8 +5,6 @@
       "Edit(threads/**)",
       "Write(threads/**)",
       "Read(archive/**)",
-      "Edit(archive/**)",
-      "Write(archive/**)",
       "WebSearch",
       "Glob(*)",
       "Bash(find:*)",

@@ -4,11 +4,7 @@
       "command": "uv",
       "args": [
         "run",
-        "--python",
-        ">=3.12",
-        "--with",
-        "mcp>=2",
-        "python3",
+        "--script",
         "skills/threads/scripts/mcp_server.py"
       ],
       "cwd": "."

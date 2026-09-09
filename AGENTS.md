@@ -44,9 +44,16 @@ ai-workspace-plugin/                # Plugin repository
 │   ├── init/SKILL.md
 │   └── threads/
 │       ├── SKILL.md
-│       └── scripts/mcp_server.py   # MCP server (mcp>=2, MCPServer API)
-├── lib/
-│   └── workspace_utils.py          # Shared Python helpers
+│       └── scripts/mcp_server.py   # Tool declarations; delegates to lib/ai_workspace/
+├── lib/ai_workspace/               # Where the server's work happens
+│   ├── workspace.py                # which workspace, where things live, archive/restore
+│   ├── config.py                   # the user-global config.json
+│   ├── plugin.py                   # plugin root, templates, get_skill_file
+│   ├── text.py                     # frontmatter and YAML helpers
+│   └── threads/                    # the thread concept
+│       ├── __init__.py             # the API: one function per operation
+│       ├── schema.py               # schema -> module, and the two counters
+│       └── v1/                     # schema 1: the README is the thread
 ├── templates/
 │   ├── AGENTS.md.template          # Workspace instructions, read by both CLIs
 │   ├── CLAUDE.md.template          # One-line "@AGENTS.md" import for Claude
@@ -56,7 +63,7 @@ ai-workspace-plugin/                # Plugin repository
 │   └── decision-template.md
 ├── scripts/
 │   └── sync-codex-agents.py        # Regenerates .codex-plugin/agents/*.toml from agents/*.md
-├── tests/test_mcp_server.py
+├── tests/                          # test_mcp_server.py, test_server_launch.py, test_layering.py, test_codex_packaging.py
 ├── docs/examples/                  # Walkthroughs for users
 ├── AGENTS.md                       # This file (vendor-neutral repo instructions)
 ├── CLAUDE.md                       # One-line "@AGENTS.md" for Claude Code
@@ -70,7 +77,7 @@ One source tree serves both CLIs. Maximum deduplication:
 
 | Asset | Canonical location | Claude reads via | Codex reads via |
 |---|---|---|---|
-| MCP server code | `skills/threads/scripts/mcp_server.py` | `.claude-plugin/plugin.json` mcpServers | `.codex-plugin/plugin.json` + `.mcp.json` |
+| MCP server code | `lib/ai_workspace/` (declared by `skills/threads/scripts/mcp_server.py`) | `.claude-plugin/plugin.json` mcpServers | `.codex-plugin/plugin.json` + `.mcp.json` |
 | Skill prose | `skills/{name}/SKILL.md` | Auto-discovered under `skills/` | Auto-discovered under `skills/` (same path) |
 | Persona prose | `agents/{name}.md` | Loaded as a subagent | Generated to `.codex-plugin/agents/{name}.toml`; copied to `~/.codex/agents/` by init skill |
 | Workspace instructions | `templates/AGENTS.md.template` | Via `CLAUDE.md` one-line `@AGENTS.md` import | Read directly as `AGENTS.md` |
@@ -103,7 +110,7 @@ One source tree serves both CLIs. Maximum deduplication:
 
 **Templates:**
 - All templates in `templates/`
-- Accessed via `get_template_path()` in `lib/workspace_utils.py` or the `get_template` MCP tool
+- Accessed via `get_template_path()` in `lib/ai_workspace/plugin.py` or the `get_template` MCP tool
 
 ## Development Workflow
 
@@ -121,13 +128,58 @@ See CONTRIBUTING.md for testing procedures and PR guidelines.
 ### Template Access
 
 ```python
-from workspace_utils import get_template_path
+from ai_workspace.plugin import get_template_path
 
 template_path = get_template_path("thread-template.md")
 # Returns: plugin_dir / "templates" / "thread-template.md"
 ```
 
 Never hardcode paths to templates. Always use `get_template_path()`.
+
+### Thread Schemas
+
+A thread's on-disk layout is versioned. `lib/ai_workspace/threads/vN/` holds one
+schema, and its `__init__.py` is the whole surface: dispatch resolves against
+that module, not the files under it.
+
+**Adding a schema must never edit an older one.** A new schema imports what it
+keeps from the schema immediately below it and defines only what it changes:
+
+```python
+# lib/ai_workspace/threads/v2/__init__.py
+from ai_workspace.threads.v1 import create       # unchanged from v1
+from ai_workspace.threads.v2.thread import resume  # changed in v2
+```
+
+Import only from the schema directly below. v3 names v2, never v1, even for a
+function whose body is v1's. That keeps retiring a schema to one hop: move what
+its successor still uses into that successor, and nothing above it changes.
+
+A package is a **concept**, not a version axis. `threads/` owns everything about
+threads, including the parts that are not versioned. Two separate questions:
+
+- *Is it about threads?* Decides `threads/` membership. `validate_thread_name`
+  passes without being versioned.
+- *Does it read or write one thread's on-disk layout?* Decides `threads/vN/`
+  membership. Only this one is about versioning.
+
+Archiving passes neither. Moving a thread between `threads/` and `archive/`
+never opens it, so it is workspace work and lives in `workspace.py`.
+
+Locating a thread is the workspace's job, not the thread's. `workspace.py`
+answers *where* (`thread_path`, `thread_dir`, `threads_dir`, `archive_dir`);
+`threads/` answers *which schema, and what can it do*. That is what lets a
+workspace get versioned on its own axis later.
+
+`mcp_server.py` never names a version. Each tool is one line:
+
+```python
+return _threads.resume(workspace_dir, thread_name)
+```
+
+**Watch the name collision.** A function defined in `threads/__init__.py`
+shadows any sibling module of the same name, so an operation and a submodule
+may never share one.
 
 ### Thread Structure
 
@@ -139,6 +191,26 @@ threads/{thread-name}/
 ├── attachments/        # Input files
 └── artifacts/          # Output files (snapshots, reports)
 ```
+
+### Server dependencies
+
+Declared once, in a PEP 723 block at the top of `skills/threads/scripts/mcp_server.py`:
+
+```python
+# /// script
+# requires-python = ">=3.12"
+# dependencies = ["mcp>=2"]
+# ///
+```
+
+Both launch configs read it with `uv run --script`, and the test command reads
+the same block with `--with-requirements <that script>`. Adding a dependency is
+one line in one file.
+
+That is deliberate. The friction of naming a package in two manifests, three
+docs and a packaging test is what made hand-rolling a parser look cheap, and
+that produced two frontmatter regexes that disagreed with each other. Reach for
+a library.
 
 ### MCP Tool Invocation
 
@@ -175,7 +247,7 @@ mcp__plugin_ai-workspace_threads__get_template(template_name)
 - Be concise and direct
 - Don't use emojis unless requested
 - Don't use em dashes. Use a comma, period, or rewrite the sentence instead
-- Show file paths with line numbers: `workspace_utils.py:45`
+- Show file paths with line numbers: `lib/ai_workspace/workspace.py:45`
 
 ## Notes
 
