@@ -38,6 +38,15 @@ _INDEXABLE = {
     "artifacts": ("current", True),
 }
 
+# An artifact description is read on every resume, so it is charged forever
+# where the file it describes is opened almost never. A migration carrying them
+# out of a v1 README averaged 255 characters and they became 30% of that
+# thread's payload. This refuses rather than truncating: a slug cut short is
+# still an identifier, where a sentence cut short reads as whole and the reader
+# cannot tell. Refusing also reaches the only party that can fix it, since the
+# caller wrote the sentence and is still holding it.
+MAX_DESCRIPTION = 200
+
 
 class Refusal(NamedTuple):
     """Why one file could not be indexed: a code, and what differs per file.
@@ -87,8 +96,28 @@ def _inside(link: str) -> PurePosixPath | None:
     return relative
 
 
+def _already_indexed(thread_dir: Path, kind: str, link: str):
+    """The entry already covering this file, wherever it lives, or None.
+
+    Both indexes, because a retired artifact is still indexed and minting a
+    second id for it would leave two entries for one file in two files.
+    Returns what a rewrite needs: `(entry, entries, frontmatter, retired)`.
+    """
+    for retired in (False, True):
+        entries, fm = idx.read(thread_dir, kind, retired)
+        for entry in entries:
+            if entry.link == link:
+                return entry, entries, fm, retired
+    return None
+
+
 def _index_one(thread, link: str, description: str = "") -> tuple[str, Refusal | None]:
     """Derive an entry for one existing file and add it. `(entry_id, error)`.
+
+    Keyed on the file, so a second call amends rather than duplicates. It used
+    to mint a fresh id and add a line, which put two entries with two ids on one
+    file and reported success for both. Nothing else could edit a description
+    either, so a thread that migrated with long ones had no way back.
 
     No render: the caller does that once, so indexing sixty-six sessions
     rewrites the README once rather than sixty-six times.
@@ -101,6 +130,9 @@ def _index_one(thread, link: str, description: str = "") -> tuple[str, Refusal |
     if kind not in _INDEXABLE:
         return "", Refusal("NOT_INDEXABLE", kind)
 
+    if len(description) > MAX_DESCRIPTION:
+        return "", Refusal("DESCRIPTION_TOO_LONG", str(MAX_DESCRIPTION))
+
     path = thread.dir / relative
     if not path.exists():
         return "", Refusal("MISSING")
@@ -108,6 +140,18 @@ def _index_one(thread, link: str, description: str = "") -> tuple[str, Refusal |
         return "", Refusal("METADATA")
 
     default_state, takes_description = _INDEXABLE[kind]
+
+    normalised = f"./{relative}"
+    if (found := _already_indexed(thread.dir, kind, normalised)) is not None:
+        entry, entries, fm, retired = found
+        # An empty description means "not given" rather than "set it to
+        # nothing", the same conversion every other optional field makes at this
+        # boundary. Without it, re-indexing to correct a link would silently
+        # erase the sentence.
+        if description and takes_description and entry.description != description:
+            entry.description = description
+            idx.write(thread.dir, kind, entries, fm, retired)
+        return entry.id, None
     if default_state is _STATE_FROM_FILE:
         state, refusal = _decision_state(path)
         if refusal is not None:

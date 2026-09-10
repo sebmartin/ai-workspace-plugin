@@ -12,6 +12,19 @@ from ai_workspace.threads.v2 import index as idx
 SESSION_WINDOW = 10
 ATTACHMENT_WINDOW = 12
 
+MEMORY = "memory.md"
+
+# Where a thread stops being cheap to open. Not derived from any CLI's tool
+# output limit: those differ per vendor and this plugin ships to two, and by the
+# time one of them truncates the thread has been costly for a long while. Set to
+# about three times the largest real thread we have, which leaves room to act.
+SIZE_NOTICE = 40_000
+
+# Markdown carrying this many ids, dates and table pipes runs near this. Only
+# ever used to produce a hard-rounded figure, so the vendors' tokenizers
+# disagreeing by 15% changes nothing about what it is read for.
+CHARS_PER_TOKEN = 3.5
+
 
 # Stop at the next heading or at a horizontal rule: the last section would
 # otherwise swallow the footer that follows it.
@@ -75,7 +88,16 @@ def compose(thread_dir: Path, thread_name: str) -> str:
     """
     readme = (thread_dir / "README.md")
     text = readme.read_text() if readme.exists() else ""
-    out = [_header(text)]
+    out = []
+
+    # First, because it changes how everything below it is read. Every other
+    # section is a line per record whose body is fetched on demand; this is the
+    # one body the payload carries, because a rule read afterwards has already
+    # been broken.
+    if memory := _memory(thread_dir):
+        out.append(f"## Thread memory\n\n{memory}\n")
+
+    out.append(_header(text))
 
     status = _section(text, "Status")
     out.append("\n## Status\n\n" + (status or "(empty)"))
@@ -129,7 +151,60 @@ def compose(thread_dir: Path, thread_name: str) -> str:
         out.append(", ".join(names) if len(names) <= ATTACHMENT_WINDOW
                    else "Not indexed. List `attachments/` when you need one.")
 
-    return "\n".join(out).rstrip() + "\n"
+    payload = "\n".join(out).rstrip() + "\n"
+    return _size_notice(len(payload)) + payload
+
+
+def _two_figures(n: int) -> int:
+    """Round to two significant figures, so the estimate cannot read as measured."""
+    if n < 100:
+        return n
+    scale = 10 ** (len(str(n)) - 2)
+    return round(n / scale) * scale
+
+
+def _size_notice(payload_chars: int) -> str:
+    """What resuming this thread costs, once that is worth knowing. Else nothing.
+
+    Reported in tokens because chars are a unit with nothing to compare against,
+    where an agent can weigh tokens against the context it has. Rounded hard for
+    the same reason the estimate is allowed at all: it decides whether to raise
+    the subject, and it is not fit for anything finer.
+
+    Its presence is the signal, the way a batch op returning {} means everything
+    worked. Below the threshold this costs nothing, which is why the instruction
+    sits here rather than in SKILL.md: there it would be charged to every thread
+    in every workspace to describe a state almost none of them are in.
+
+    Measures the payload without itself, since the notice is not the thread.
+    """
+    if payload_chars < SIZE_NOTICE:
+        return ""
+    tokens = _two_figures(int(payload_chars / CHARS_PER_TOKEN))
+    return (
+        f"## Thread size\n\n"
+        f"~{tokens:,} tokens per resume. Expensive to open, and every session "
+        f"pays it. Say so, break it down by section if asked, and leave "
+        f"splitting or retiring to the user.\n\n"
+    )
+
+
+def _memory(thread_dir: Path) -> str:
+    """The thread's agent-bound file, verbatim, or nothing.
+
+    Absence is the empty case, so `create` writes no stub and a thread that
+    never needed one carries no file. Nothing parses it: it is prose the agent
+    wrote for itself, and imposing a shape on it would be a shape the agent has
+    to maintain rather than one anything reads.
+
+    Read whole and unwindowed, which is both the point of it and its whole
+    cost. The skill makes pruning part of a save for that reason.
+    """
+    path = thread_dir / MEMORY
+    try:
+        return path.read_text(errors="ignore").strip() if path.is_file() else ""
+    except OSError:
+        return ""
 
 
 def _decision_summary(thread_dir: Path, entry: idx.Entry) -> str:

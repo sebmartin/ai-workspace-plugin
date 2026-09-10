@@ -379,12 +379,19 @@ def index_file(workspace_dir: str, thread_name: str, link: str,
     vocabulary. A file whose name states no date is dated from the earliest
     session that names it, and failing that is marked unknown.
 
+    Calling it again on a file that is already indexed returns the id it
+    already has rather than adding a second entry, and replaces the description
+    if you pass a different one. That is how an artifact description gets
+    corrected or shortened; there is no other way, since index lines are never
+    hand-edited. Passing no description leaves the existing one alone.
+
     Returns JSON: `{"id": "20260316-summary-auth-flow"}`, with `"undated": true`
     when nothing said what date the file is from, so it took 19700101.
 
     A refusal returns `{"error": CODE, "detail": ...}` and writes nothing. Same
-    codes as index_directory, plus `MISSING` when the link resolves to nothing
-    and `METADATA` for a dotfile, which is never content.
+    codes as index_directory, plus `MISSING` when the link resolves to nothing,
+    `METADATA` for a dotfile, which is never content, and
+    `DESCRIPTION_TOO_LONG`, whose `detail` is the limit in characters.
 
     Args:
         workspace_dir: The tracked workspace path from session context.
@@ -394,9 +401,9 @@ def index_file(workspace_dir: str, thread_name: str, link: str,
             and the only thing not read from the file: decisions and sessions
             carry a `summary:` in their own frontmatter, artifacts have nowhere
             to put one. It is read on every resume, so it costs something
-            permanently, the same way a decision's summary does. One sentence.
-            A thread whose sixteen artifacts averaged 255 characters spent 30%
-            of its resume on them.
+            permanently, the same way a decision's summary does. One sentence,
+            and refused beyond 200 characters. A thread whose sixteen artifacts
+            averaged 255 characters spent 30% of its resume on them.
     """
     return _threads.index_file(workspace_dir, thread_name, link, description)
 

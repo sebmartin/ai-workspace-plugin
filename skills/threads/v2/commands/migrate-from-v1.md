@@ -99,7 +99,11 @@ subdirectory is one artifact either way.
 holds them in a list nobody loads on resume; a schema 2 index line is read
 every single time. One migration carried sixteen across at an average of 255
 characters and they became 30% of the thread's resume. Say what the artifact
-is, not what is in it.
+is, not what is in it. Anything past 200 characters is refused, so rewrite it
+and call again rather than looking for a way around the limit.
+
+Calling `index_file` again on a file already indexed replaces its description
+instead of adding a second entry, so a description you got wrong is fixable.
 
 Everything else on the line is read off the file. The id takes a date found
 anywhere in the filename, so `2026-01-20-initial-setup.md` and
@@ -141,25 +145,37 @@ custom section survives in the file and is never read again. `audit_migration`
 lists them under `readme_sections_to_place`, and it cannot tell whether you
 placed them, so that list is a checklist for you rather than a failure.
 
-Route each by what it *is*, not by what it looks like:
+Place each by two questions. Who is it written for, and does it have to be
+loaded before you can act?
 
-| the section holds | it goes to |
-|---|---|
-| rules the assistant must follow | `agent-rules.md` |
-| a choice that was made | a decision |
-| something established: a table, a register, a reference | an artifact |
-| things still to do | todos |
-| where matters stand, or what the thread is | Status or About |
+| | you have to be holding it | you only have to know it exists |
+|---|---|---|
+| **for you** | `memory.md` | a decision or an artifact: its index line loads, its body does not |
+| **for the user** | Status, and the Next steps window | About, a session log, an artifact |
 
-An artifact is the floor, not the default. Anything that fits none of the rows
-above goes there verbatim, under its own heading, indexed with a description
-saying what it was — because losing it is the only outcome worse than filing it
-imprecisely. What must not happen is a section that exists only in
-`{name}-v1/README.md` once the swap is done.
+Anything still to do is a todo whichever row it came from. The window decides
+whether the user meets it on resume.
 
-The first row is the one to get right. `artifacts/` is work the assistant
-produced; a rule is an instruction to it, authored by the user, and the reason
-`agent-rules.md` exists is that there was nowhere else for it.
+`memory.md` is the cell schema 1 had no file for, and that is why these sections
+became custom headings in the first place. Schema 1 said the README was the
+thread and to read it whole, so a heading was enough to guarantee it got read.
+Anything you would need to have read in order to behave correctly goes there:
+house rules, who is who, what a term means in this thread, what the record does
+not cover. Carry it across verbatim, keep the attribution if the original had
+one, and add one if you know it.
+
+A choice that was made is a decision even where the prose is still arguing it,
+which is a decision with `proposed` status. Its `summary:` loads on every
+resume, so it needs no memory entry.
+
+An artifact is the floor. Anything that fits no cell goes there verbatim, under
+its own heading, indexed with a description saying what it was, because losing
+it is the only outcome worse than filing it imprecisely. What must not happen is
+a section that exists only in `{name}-v1/README.md` once the swap is done.
+
+**Ask when the cell is genuinely unclear.** Guessing lazy is the expensive
+mistake: the user carries on expecting you to be holding something, you are not,
+and nothing announces the gap.
 
 **Recent progress is the part that can be lost.** Next steps and Parked become
 todos and Open Questions fold into them, but Recent progress is a log, and it
