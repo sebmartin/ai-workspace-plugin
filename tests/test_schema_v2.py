@@ -1,6 +1,7 @@
 """Schema 2 primitives: schema detection, indexes, rendering, sessions, dates."""
 
 import json
+import re
 import sys
 from datetime import date
 from pathlib import Path
@@ -409,6 +410,64 @@ class TestCompose:
         out = v2.compose(d, "t")
         assert "(10 of 15)" in out
         assert "20260100-s" not in out
+
+    def test_memory_is_inlined_whole_and_first(self, tmp_path):
+        """The one body the payload carries, ahead of anything it qualifies.
+
+        Everything else is a line per record. Memory is inlined because a rule
+        read after the work it governs has already been broken.
+        """
+        d = _v2_thread(tmp_path)
+        (d / "memory.md").write_text(
+            "## House rules\n\n"
+            "- Never quote a decision id outside the workspace. [Seb, 2026-08-13]\n"
+        )
+        out = v2.compose(d, "t")
+        assert "## Thread memory" in out
+        assert "Never quote a decision id outside the workspace. [Seb, 2026-08-13]" in out
+        assert out.index("## Thread memory") < out.index("## Status")
+
+    def test_no_memory_file_means_no_section(self, tmp_path):
+        """Absence is the empty case, so create writes no stub."""
+        d = _v2_thread(tmp_path)
+        assert not (d / "memory.md").exists()
+        assert "Thread memory" not in v2.compose(d, "t")
+
+    def test_an_emptied_memory_file_reads_as_none(self, tmp_path):
+        """Pruning the last entry leaves a file. A heading over nothing would
+        read as a section that failed to load."""
+        d = _v2_thread(tmp_path)
+        (d / "memory.md").write_text("\n\n")
+        assert "Thread memory" not in v2.compose(d, "t")
+
+    def test_a_thread_worth_opening_says_nothing_about_its_size(self, tmp_path):
+        """Silence is the common case, so it is what costs nothing."""
+        d = _v2_thread(tmp_path)
+        assert "Thread size" not in v2.compose(d, "t")
+
+    def test_an_expensive_thread_says_what_it_costs(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        (d / "memory.md").write_text("word " * 12_000)
+        out = v2.compose(d, "t")
+        assert out.startswith("## Thread size")
+        assert "tokens per resume" in out
+
+    def test_the_notice_survives_a_truncated_tail(self, tmp_path):
+        """Ahead of memory, which is otherwise first. A warning at the end of a
+        payload big enough to be cut is a warning nobody receives."""
+        d = _v2_thread(tmp_path)
+        (d / "memory.md").write_text("word " * 12_000)
+        out = v2.compose(d, "t")
+        assert out.index("## Thread size") < out.index("## Thread memory")
+
+    def test_the_figure_cannot_read_as_measured(self, tmp_path):
+        """Two significant figures. It is chars divided by a constant, and the
+        vendors' tokenizers disagree, so anything finer would be a claim we
+        cannot make."""
+        d = _v2_thread(tmp_path)
+        (d / "memory.md").write_text("word " * 12_000)
+        digits = re.search(r"~([\d,]+) tokens", v2.compose(d, "t")).group(1).replace(",", "")
+        assert digits[2:] == "0" * len(digits[2:]), f"reported {digits}"
 
     def test_payload_is_far_smaller_than_a_v1_readme(self, tmp_path):
         d = _v2_thread(tmp_path)

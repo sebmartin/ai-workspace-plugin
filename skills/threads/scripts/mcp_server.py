@@ -379,12 +379,19 @@ def index_file(workspace_dir: str, thread_name: str, link: str,
     vocabulary. A file whose name states no date is dated from the earliest
     session that names it, and failing that is marked unknown.
 
+    Calling it again on a file that is already indexed returns the id it
+    already has rather than adding a second entry, and replaces the description
+    if you pass a different one. That is how an artifact description gets
+    corrected or shortened; there is no other way, since index lines are never
+    hand-edited. Passing no description leaves the existing one alone.
+
     Returns JSON: `{"id": "20260316-summary-auth-flow"}`, with `"undated": true`
     when nothing said what date the file is from, so it took 19700101.
 
     A refusal returns `{"error": CODE, "detail": ...}` and writes nothing. Same
-    codes as index_directory, plus `MISSING` when the link resolves to nothing
-    and `METADATA` for a dotfile, which is never content.
+    codes as index_directory, plus `MISSING` when the link resolves to nothing,
+    `METADATA` for a dotfile, which is never content, and
+    `DESCRIPTION_TOO_LONG`, whose `detail` is the limit in characters.
 
     Args:
         workspace_dir: The tracked workspace path from session context.
@@ -394,9 +401,9 @@ def index_file(workspace_dir: str, thread_name: str, link: str,
             and the only thing not read from the file: decisions and sessions
             carry a `summary:` in their own frontmatter, artifacts have nowhere
             to put one. It is read on every resume, so it costs something
-            permanently, the same way a decision's summary does. One sentence.
-            A thread whose sixteen artifacts averaged 255 characters spent 30%
-            of its resume on them.
+            permanently, the same way a decision's summary does. One sentence,
+            and refused beyond 200 characters. A thread whose sixteen artifacts
+            averaged 255 characters spent 30% of its resume on them.
     """
     return _threads.index_file(workspace_dir, thread_name, link, description)
 
@@ -454,6 +461,63 @@ def save_session(workspace_dir: str, thread_name: str, slug: str, summary: str,
     return _threads.save_session(workspace_dir, thread_name, slug, summary,
                                  keywords, next_context, body or None,
                                  status or None)
+
+
+
+@mcp.tool()
+def migration_safety_check(workspace_dir: str, thread_name: str) -> str:
+    """Report whether a thread could be recovered if its migration goes wrong.
+
+    Call this before starting a migration and relay what it says. It is advice,
+    not a gate: the plugin never commits, so the user decides. The migration
+    keeps the original either way, but that only covers mistakes up to the
+    swap.
+
+    Args:
+        workspace_dir: The tracked workspace path from session context.
+        thread_name: Name of the thread about to be migrated (kebab-case).
+    """
+    return _threads.migration_safety_check(workspace_dir, thread_name)
+
+
+@mcp.tool()
+def audit_migration(workspace_dir: str, original_thread: str,
+                    converted_thread: str) -> str:
+    """Compare a converted copy against the original and report what it lost.
+
+    Run this after converting and before the swap. It checks the parts that are
+    decidable — files present in one tree and not the other, index entries
+    pointing at nothing, indexes out of date order, entries with no derivable
+    date. It cannot tell you whether the Quick Resume prose survived as todos
+    and Status; read that yourself.
+
+    Returns JSON. `{"clean": true}` when nothing mechanical is wrong; branch on
+    that before reading anything else. Otherwise the keys name what to fix:
+
+    - `unindexed` — {kind: [filenames]} present in the original and in no index.
+    - `missing_from_copy` — {kind: [filenames]} in the original, absent from the copy.
+    - `dangling` — {kind: [links]} indexed but pointing at nothing.
+    - `out_of_date_order` — [kind] whose index is not sorted by id.
+    - `v1_readme_sections` — schema 1 headings still in the converted README.
+
+    - `undated_entries` — how many took the 19700101 date. Not a problem by
+      itself, so it does not clear `clean`.
+    - `readme_sections_to_place` — `##` headings the original README carried
+      beyond the schema 1 template. Schema 1 read the README in full, so anyone
+      could add one; schema 2 composes from fixed slots, so an unplaced section
+      survives in the backup and is never read again. Also does not clear
+      `clean`: whether each found a home is judgement, and this tool cannot
+      see the answer.
+
+    `clean` never covers judgement: whether Quick Resume survived as todos and
+    Status is for a reader, and this tool does not look.
+
+    Args:
+        workspace_dir: The tracked workspace path from session context.
+        original_thread: The untouched original, e.g. my-thread-v1.
+        converted_thread: The converted copy, e.g. my-thread-v2.
+    """
+    return _threads.audit_migration(workspace_dir, original_thread, converted_thread)
 
 
 if __name__ == "__main__":

@@ -96,12 +96,30 @@ A `Schema: 2` header needs nothing loaded. Any other value, load that row's file
 
 The README is what a person reads. The indexes are the record, and they are what you read.
 
+**Thread context belongs in the thread.** Not in `CLAUDE.md`, `AGENTS.md`, or whatever your
+harness offers as its own memory. Those load in every session in that directory, including
+sessions on a different thread, and nothing scopes them back afterwards. Every kind of
+context has a slot here:
+
+| what it is | where it goes |
+|---|---|
+| what you have to know before you act | `memory.md` |
+| a choice that was made | a decision |
+| something still to do | a todo |
+| something established, produced, or worth keeping | an artifact |
+| what happened this session | the session log |
+| where things stand, and what the thread is for | Status and About |
+
+When something fits none of these, say so and ask. Filing it where nothing reads it is the
+failure this table exists to prevent.
+
 ### Shape
 
 ```
 threads/{name}/
 ├── schema-version           "2"
 ├── README.md                for the human
+├── memory.md                for you (optional; absent until there is something in it)
 ├── sessions/     + sessions-index.md
 ├── decisions/    + decisions-index.md, decisions-retired.md
 ├── artifacts/    + artifacts-index.md, artifacts-retired.md
@@ -115,7 +133,7 @@ A missing index is an empty index. Nothing pre-creates them.
 
 ### What resume returns
 
-`resume_thread` returns everything in one call: Status, About, the header, the Next steps window, the todo backlog, every in-force decision with the `summary:` read from its file, the artifacts index, and the last ten sessions.
+`resume_thread` returns everything in one call: `memory.md` in full if there is one, then Status, About, the header, the Next steps window, the todo backlog, every in-force decision with the `summary:` read from its file, the artifacts index, and the last ten sessions.
 
 **Print only Status and Next steps.** Everything else is context you hold, not output. A list of thirty-five decisions is for you, not for the screen. Counts are not stored anywhere, so say them from what you read.
 
@@ -123,7 +141,7 @@ A missing index is an empty index. Nothing pre-creates them.
 
 ### Writing
 
-Never hand-edit an index or the README's Next steps section; both are rendered from what the tools write, and a hand edit will be overwritten. Status, About and the header fields are yours to edit.
+Never hand-edit an index or the README's Next steps section; both are rendered from what the tools write, and a hand edit will be overwritten. Status, About, the header fields and `memory.md` are yours to edit directly, and no tool writes any of them.
 
 **The renderer owns `## Next steps` from its heading to the next `##`.** Two things follow. It must not be the last section, or a render swallows everything after it, which is why the template puts About below it. And a README with no such heading is refused rather than appended to, so replace a schema 1 README from `templates/v2/thread-template.md` before writing anything to a thread.
 
@@ -145,6 +163,31 @@ Never hand-edit an index or the README's Next steps section; both are rendered f
 
 **Propose, do not reorder on your own.** Change the window when the user says what is next, or when something completes and leaves a hole. Read the whole backlog when you do — the item that most needs promoting is usually the stale one, which recency hides.
 
+### Memory
+
+`memory.md` is read in full at the top of every resume. It holds what you have to be
+holding to behave correctly: how the user wants you to work in this thread, who the people
+named in it are, what a term means here, what the record does not cover.
+
+There is no tool and no stub. Edit the file; resume already handed you its contents.
+
+**The test is whether acting without it would be wrong.** Anything you would merely look
+up belongs in a file you open when the question comes up.
+
+**Nothing that reached a conclusion goes here.** A choice that was made is a decision, even
+one still being argued, which is a decision with `proposed` status. Its `summary:` already
+loads on every resume.
+
+Date and attribute each entry, `[Seb, 2026-08-13]`, so it stays possible to tell which
+ones still apply.
+
+**Check the file before adding to it**, since you are holding all of it. When something new
+contradicts, repeats or narrows an entry, edit that entry. A qualification appended below
+the rule it narrows gets read as a separate rule.
+
+**Its length is a cost you pay on every resume.** Read it through when you save: drop what
+no longer applies, and move out what turned out not to need loading.
+
 ### Decisions
 
 `summary:` is read on every resume, so it costs something permanently. One sentence, one subject, WHAT was decided and not why. If it needs "and" twice, log several decisions.
@@ -155,7 +198,7 @@ Claim first in the body, argument after, so a reader who only needs the rule can
 
 ### Saving
 
-A save is only the session log and the Status paragraph, because todos, decisions and artifacts were written when they happened. A session that ends without a save still leaves its stub and a record of what it touched.
+A save writes the session log and the Status paragraph, because todos, decisions and artifacts were written when they happened. It is also the moment to read `memory.md` through, if the thread has one. A session that ends without a save still leaves its stub and a record of what it touched.
 
 Pass `body` for an ordinary session log. For a long one, write the session file directly and call `save_session` without a body — a whole log in one tool call has to fit a single response.
 
