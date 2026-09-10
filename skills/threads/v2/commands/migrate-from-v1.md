@@ -134,6 +134,33 @@ with about five, in priority order.
 **Collapse Quick Resume into Status** — a few sentences for a person, taken from
 Current focus.
 
+**A section the template does not define is the part most likely to be lost.**
+Schema 1 said the README is the thread and to read it in full, so anyone could
+add a heading and it would be read. Schema 2 composes from fixed slots, so a
+custom section survives in the file and is never read again. `audit_migration`
+lists them under `readme_sections_to_place`, and it cannot tell whether you
+placed them, so that list is a checklist for you rather than a failure.
+
+Route each by what it *is*, not by what it looks like:
+
+| the section holds | it goes to |
+|---|---|
+| rules the assistant must follow | `agent-rules.md` |
+| a choice that was made | a decision |
+| something established: a table, a register, a reference | an artifact |
+| things still to do | todos |
+| where matters stand, or what the thread is | Status or About |
+
+An artifact is the floor, not the default. Anything that fits none of the rows
+above goes there verbatim, under its own heading, indexed with a description
+saying what it was — because losing it is the only outcome worse than filing it
+imprecisely. What must not happen is a section that exists only in
+`{name}-v1/README.md` once the swap is done.
+
+The first row is the one to get right. `artifacts/` is work the assistant
+produced; a rule is an instruction to it, authored by the user, and the reason
+`agent-rules.md` exists is that there was nowhere else for it.
+
 **Recent progress is the part that can be lost.** Next steps and Parked become
 todos and Open Questions fold into them, but Recent progress is a log, and it
 maps onto the sessions index only if every entry had a session behind it. Older

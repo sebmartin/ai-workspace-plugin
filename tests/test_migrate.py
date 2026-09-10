@@ -113,6 +113,24 @@ class TestAudit:
         assert "DS_Store" not in out
         assert json.loads(out)["clean"] is True
 
+    def test_a_custom_readme_section_is_reported(self, tmp_path):
+        """A real thread carried twelve standing instructions in one, and the
+        migration reported clean while they stopped being read."""
+        v1 = _v1(tmp_path)
+        (v1 / "README.md").write_text(
+            (v1 / "README.md").read_text()
+            + "\n## Standing Instructions\n\nDo not speculate outside your competence.\n")
+        d = _converted_from(v1, tmp_path)
+        idx.add(d, "sessions", idx.Entry(
+            "20260101-first", None, "20260101-first", "./sessions/20260101-first.md"))
+        idx.add(d, "decisions", idx.Entry(
+            "20260202-choice", "locked", "20260202-choice", "./decisions/20260202-choice.md"))
+        out = json.loads(migrate.audit(v1, d))
+        assert out["readme_sections_to_place"] == ["Standing Instructions"]
+        # named, not blocking: the audit cannot see whether it found a home,
+        # and failing a correct migration is how a gate gets ignored
+        assert out["clean"] is True
+
     def test_a_half_converted_readme_is_reported(self, tmp_path):
         """Every index can be complete while the README is still the old document."""
         v1 = _v1(tmp_path)

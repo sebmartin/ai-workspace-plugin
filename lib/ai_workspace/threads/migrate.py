@@ -67,6 +67,33 @@ V1_README_MARKERS = (
     "### Resources",
 )
 
+# The sections the schema 1 template defines, and so the only ones the
+# conversion knows what to do with. Anything else in a real README is content
+# somebody added, and schema 2 reads fixed slots rather than the whole file, so
+# a custom section survives in the file and is never read again.
+V1_TEMPLATE_SECTIONS = frozenset({
+    "Quick Resume", "About", "Decisions", "Open Questions", "Resources",
+})
+
+
+def _custom_sections(readme: Path) -> list[str]:
+    """`##` headings a schema 1 README carries beyond its template.
+
+    The conversion enumerates the template's sections and nothing else, so a
+    custom one migrates without complaint and stops being read. That happened:
+    a thread carried twelve standing instructions in `## Standing Instructions`
+    and the migration reported clean.
+    """
+    if not readme.is_file():
+        return []
+    found = []
+    for line in readme.read_text(errors="ignore").splitlines():
+        if line.startswith("## "):
+            name = line[3:].strip()
+            if name and name not in V1_TEMPLATE_SECTIONS:
+                found.append(name)
+    return found
+
 
 def _indexed_targets(thread_dir: Path, kind: str) -> set[str]:
     """Filenames one kind's index accounts for, in force or retired.
@@ -137,6 +164,8 @@ def audit(original: Path, converted: Path) -> str:
     if residue:
         problems["v1_readme_sections"] = residue
 
+
+
     unknown = sum(
         1 for kind in idx.TYPES
         for e in idx.read(converted, kind)[0]
@@ -149,5 +178,14 @@ def audit(original: Path, converted: Path) -> str:
     reply: dict = {"clean": not problems}
     if unknown:
         reply["undated_entries"] = unknown
+    # Named, never blocking. Whether a section found a home is judgement, and
+    # the audit cannot see the answer: it knows the original carried the
+    # heading and nothing more. Reporting it as a failure would fire on a
+    # correct migration, which is how a gate gets ignored. What let a real one
+    # through was not the flag being true; it was nothing mentioning the
+    # section at all.
+    custom = _custom_sections(original / "README.md")
+    if custom:
+        reply["readme_sections_to_place"] = custom
     reply.update(problems)
     return json.dumps(reply)

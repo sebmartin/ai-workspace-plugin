@@ -492,8 +492,15 @@ def audit_migration(workspace_dir: str, original_thread: str,
     - `dangling` — {kind: [links]} indexed but pointing at nothing.
     - `out_of_date_order` — [kind] whose index is not sorted by id.
     - `v1_readme_sections` — schema 1 headings still in the converted README.
+
     - `undated_entries` — how many took the 19700101 date. Not a problem by
       itself, so it does not clear `clean`.
+    - `readme_sections_to_place` — `##` headings the original README carried
+      beyond the schema 1 template. Schema 1 read the README in full, so anyone
+      could add one; schema 2 composes from fixed slots, so an unplaced section
+      survives in the backup and is never read again. Also does not clear
+      `clean`: whether each found a home is judgement, and this tool cannot
+      see the answer.
 
     `clean` never covers judgement: whether Quick Resume survived as todos and
     Status is for a reader, and this tool does not look.
