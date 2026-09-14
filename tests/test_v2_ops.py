@@ -239,6 +239,60 @@ class TestArtifacts:
         for link in ("../../etc/passwd", "/etc/passwd", "./artifacts/../../x.md"):
             assert _reply(index_file(str(tmp_path), "t", link))["error"] == "OUTSIDE_THREAD", link
 
+    def test_indexing_the_same_file_twice_amends_rather_than_duplicates(self, tmp_path):
+        """It used to mint a second id and report success for both, which left
+        two entries on one file and no way to correct a description."""
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        link = self._artifact(d)
+        first = _reply(index_file(ws, "t", link, "The first description."))
+        second = _reply(index_file(ws, "t", link, "Shorter."))
+        assert first["id"] == second["id"] == "20260101-notes"
+        entries, _ = idx.read(d, "artifacts")
+        assert len(entries) == 1
+        assert entries[0].description == "Shorter."
+
+    def test_re_indexing_without_a_description_keeps_the_one_there(self, tmp_path):
+        """Empty means "not given" at this boundary, the way body does. Wiping
+        it would make correcting anything else destroy the sentence."""
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        link = self._artifact(d)
+        index_file(ws, "t", link, "What the auth flow does")
+        index_file(ws, "t", link)
+        assert idx.read(d, "artifacts")[0][0].description == "What the auth flow does"
+
+    def test_a_retired_artifact_is_not_indexed_a_second_time(self, tmp_path):
+        """Retired is still indexed. Minting again would put one file in two
+        indexes under two ids, and only one of them would ever be retired."""
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        link = self._artifact(d)
+        index_file(ws, "t", link)
+        retire_artifact(ws, "t", "20260101-notes", "stale")
+        assert _reply(index_file(ws, "t", link))["id"] == "20260101-notes"
+        assert idx.read(d, "artifacts")[0] == []
+        assert len(idx.read(d, "artifacts", retired=True)[0]) == 1
+
+    def test_a_description_past_the_cap_is_refused(self, tmp_path):
+        """Refused rather than cut. A sentence truncated at 200 characters reads
+        as whole, so nobody learns and nobody can tell."""
+        d = _thread(tmp_path)
+        out = _reply(index_file(str(tmp_path), "t", self._artifact(d), "x" * 201))
+        assert out["error"] == "DESCRIPTION_TOO_LONG"
+        assert out["detail"] == "200"
+        assert idx.read(d, "artifacts")[0] == []
+
+    def test_the_refusal_leaves_the_previous_description_intact(self, tmp_path):
+        """The guard runs before anything mutates, so a rejected amendment is
+        not half-applied."""
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        link = self._artifact(d)
+        index_file(ws, "t", link, "A short one.")
+        index_file(ws, "t", link, "y" * 400)
+        assert idx.read(d, "artifacts")[0][0].description == "A short one."
+
 
 class TestIndexDirectory:
     def _thread_with(self, tmp_path, kind, names):
