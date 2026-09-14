@@ -232,8 +232,8 @@ For trivial commands, instructions are inline. For complex commands, read the re
 | `resume` | Call `resume_thread`; schema 2 is described above, anything older needs its file | inline |
 | `open` | `open threads/{name}` or `open threads`; confirm | inline |
 | `set-workspace` | Call `set_default_workspace` with provided path, then offer to install global permissions | inline |
-| `archive-thread` | Archive, restore, and list archived threads | `commands/archive-thread.md` |
-| `unpack-legacy-archive` | Restore a `.tar.gz` archive from before 3.0 | `commands/unpack-legacy-archive.md` |
+| `archive-thread` | Archive, restore, and list archived threads | `skills/threads/commands/archive-thread.md` |
+| `unpack-legacy-archive` | Restore a `.tar.gz` archive from before 3.0 | `skills/threads/commands/unpack-legacy-archive.md` |
 
 Everything else — saving, logging decisions, artifacts, todos, parking, linking — differs by schema. Schema 2's are in the table under Working with a schema 2 thread; an older schema lists its own.
 
