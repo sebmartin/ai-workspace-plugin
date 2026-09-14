@@ -466,7 +466,9 @@ class TestCompose:
         cannot make."""
         d = _v2_thread(tmp_path)
         (d / "memory.md").write_text("word " * 12_000)
-        digits = re.search(r"~([\d,]+) tokens", v2.compose(d, "t")).group(1).replace(",", "")
+        found = re.search(r"~([\d,]+) tokens", v2.compose(d, "t"))
+        assert found, "the notice carries no token count"
+        digits = found.group(1).replace(",", "")
         assert digits[2:] == "0" * len(digits[2:]), f"reported {digits}"
 
     def test_payload_is_far_smaller_than_a_v1_readme(self, tmp_path):
