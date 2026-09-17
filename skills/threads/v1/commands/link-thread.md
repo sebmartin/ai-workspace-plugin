@@ -11,7 +11,7 @@
 ## Create a child thread (`/threads create-child [thread-name]`)
 
 - Requires an active thread (current thread becomes the parent)
-- Create the new child thread (same as `/threads create`, see `commands/create.md`)
+- Create the new child thread (same as `/threads create`, see `skills/threads/v1/commands/create-thread.md`)
 - Set up bidirectional links:
   1. Set child's "Parent Thread" to `[Parent Thread Name](../parent-thread-name/README.md)`
   2. Add child to current thread's "Child Threads" — `[Child Thread Name](../child-thread-name/README.md)`. If "None", replace; otherwise append.

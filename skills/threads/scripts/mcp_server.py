@@ -14,11 +14,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "lib"))
 
-from mcp.server.mcpserver import MCPServer
-
 from ai_workspace import plugin as _plugin
 from ai_workspace import threads as _threads
 from ai_workspace import workspace as _ws
+from mcp.server.mcpserver import MCPServer
 
 mcp = MCPServer("threads")
 
@@ -45,7 +44,14 @@ def list_threads(workspace_dir: str) -> str:
 
 @mcp.tool()
 def resume_thread(workspace_dir: str, thread_name: str) -> str:
-    """Resolve the workspace and thread path, and return the full README content.
+    """Resolve the workspace and thread path, and return the thread's context.
+
+    On a schema 2 thread the reply is composed rather than read from a file:
+    `memory.md` in full if there is one, then Status, About, the header, the
+    Next steps window, the todo backlog, every in-force decision with the
+    `summary:` read from its file, the artifacts index, and the last ten
+    sessions. A `## Thread size` heading appears only when the thread has grown
+    expensive to open.
 
     A thread this plugin cannot read returns `{"error": CODE, "thread": ...,
     "schema": <n>, "reads": [<low>, <high>]}`: `SCHEMA_TOO_NEW` (upgrade the
@@ -90,9 +96,7 @@ def create_thread(workspace_dir: str, thread_name: str) -> str:
 def get_skill_file(relative_path: str) -> str:
     """Return the contents of a file from the plugin directory.
 
-    Use this to read skill reference files (e.g. commands/save-thread.md)
-    without needing direct filesystem access. Paths are resolved relative
-    to the plugin root and must not escape it.
+    Paths are resolved relative to the plugin root and must not escape it.
 
     Args:
         relative_path: Path relative to the plugin root (e.g., "skills/threads/commands/save-thread.md").
@@ -105,8 +109,7 @@ def resolve_workspace(workspace_dir: str) -> str:
     """Resolve which workspace directory to use for thread operations.
 
     Checks for a local threads/ directory first, then falls back to the
-    configured default workspace. Kept as an optional diagnostic — operating
-    tools (list_threads, create_thread, etc.) resolve internally now.
+    configured default workspace.
 
     Args:
         workspace_dir: Directory hint for locating the workspace; typically the
@@ -121,7 +124,6 @@ def resolve_workspace(workspace_dir: str) -> str:
 def set_default_workspace(workspace_path: str) -> str:
     """Set the default workspace directory for thread operations.
 
-    This is used when running /threads from outside a workspace directory.
     The path is persisted in the plugin's global config.
 
     Args:
@@ -133,10 +135,6 @@ def set_default_workspace(workspace_path: str) -> str:
 @mcp.tool()
 def archive_thread(workspace_dir: str, thread_name: str) -> str:
     """Archive a thread: move it out of threads/ and into archive/.
-
-    Nothing is compressed and nothing is summarised. The thread keeps its shape
-    and stays readable and greppable where it lands, which is why no summary is
-    written for it. An archived thread is read-only; restore it to work on it.
 
     Args:
         workspace_dir: Directory hint for locating the workspace; typically the
@@ -173,9 +171,8 @@ def restore_thread(workspace_dir: str, thread_name: str) -> str:
 def list_archived_threads(workspace_dir: str) -> str:
     """List the threads under archive/, numbered.
 
-    Archived threads are read-only; restoring one is what makes it writable
-    again. A thread archived before 3.0 is listed as a tarball, with the
-    reference to follow for unpacking it.
+    A thread archived before 3.0 is listed as a tarball, with the reference to
+    follow for unpacking it.
 
     Args:
         workspace_dir: Directory hint for locating the workspace; typically the
@@ -198,9 +195,6 @@ def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
     state of its own, an external URL when there is an issue or PR, and
     otherwise the session it came out of. A bare line cannot be expanded later,
     which is the whole complaint about one-line next steps.
-
-    Adding does not promote: the backlog is allowed to be long, and the README
-    shows only what set_window selects.
 
     Returns `{"id": ...}`, the minted todo id. `set_window` and the retire
     tools take it.
@@ -254,9 +248,7 @@ def set_window(workspace_dir: str, thread_name: str, entry_ids: list[str],
                section: str = "next_steps", kind: str = "todos") -> str:
     """Choose which entries the README shows, and in what order.
 
-    This is the whole of priority. The backlog below the window is never ranked,
-    because ordering the twentieth item against the twenty-first produces
-    nothing. Aim for about five.
+    Aim for about five ids.
 
     Returns `{"window": ..., "size": ...}`.
 
@@ -280,9 +272,7 @@ def log_decision(workspace_dir: str, thread_name: str, title: str, summary: str,
     one subject, what was decided and not why. If it needs "and" twice, that is
     the signal to log several decisions instead.
 
-    `supersedes` retires the decisions it names. That direction is deliberate —
-    traversal starts from what is in force, so only live-to-dead pointers get
-    followed.
+    `supersedes` retires the decisions it names.
 
     Returns `{"id": ...}`, plus `superseded` listing what it retired. The file
     is at ./decisions/<id>.md.
@@ -325,10 +315,8 @@ def retire_decision(workspace_dir: str, thread_name: str, decision_id: str,
 def index_directory(workspace_dir: str, thread_name: str, link: str) -> str:
     """Index every file in one directory that is not indexed yet.
 
-    Use this instead of calling index_file once per file. A migration indexes
-    whole directories, and for sessions and decisions there is nothing per-file
-    to supply: everything on the line is read off the file. Only artifacts carry
-    a description, so index those one at a time when the description matters.
+    A description cannot be passed here, so an artifact that needs one is
+    indexed by index_file instead.
 
     Idempotent, so a run that refused some files can be repeated once they are
     fixed without duplicating what went in. A refusal does not stop the rest.
@@ -369,9 +357,7 @@ def index_file(workspace_dir: str, thread_name: str, link: str,
                description: str = "") -> str:
     """Index a file that is already in the thread.
 
-    Use this once a file exists on disk: an artifact you have written, or a
-    session, decision or artifact being brought into the index during a
-    migration. It refuses a link that does not resolve, so write the file first.
+    It refuses a link that does not resolve, so write the file first.
 
     Everything on the index line is derived from the file. The kind comes from
     the directory, the id from a date found in the filename, and a decision's
@@ -432,10 +418,6 @@ def save_session(workspace_dir: str, thread_name: str, slug: str, summary: str,
                  status: str = "") -> str:
     """Save the session log and the thread's Status paragraph.
 
-    Todos, decisions and artifacts are written when they happen, so a save is
-    only the two things that need synthesising. Everything else is already on
-    disk.
-
     `body` is optional. Leave it empty when the session file has already been
     written or extended directly — a long body in one tool call has to fit the
     model's output budget in a single response, where writing the file
@@ -468,10 +450,9 @@ def save_session(workspace_dir: str, thread_name: str, slug: str, summary: str,
 def migration_safety_check(workspace_dir: str, thread_name: str) -> str:
     """Report whether a thread could be recovered if its migration goes wrong.
 
-    Call this before starting a migration and relay what it says. It is advice,
-    not a gate: the plugin never commits, so the user decides. The migration
-    keeps the original either way, but that only covers mistakes up to the
-    swap.
+    Advice, not a gate: the plugin never commits, so the user decides. The
+    migration keeps the original either way, but that only covers mistakes up
+    to the swap. Relay what it says.
 
     Args:
         workspace_dir: The tracked workspace path from session context.
@@ -485,8 +466,7 @@ def audit_migration(workspace_dir: str, original_thread: str,
                     converted_thread: str) -> str:
     """Compare a converted copy against the original and report what it lost.
 
-    Run this after converting and before the swap. It checks the parts that are
-    decidable — files present in one tree and not the other, index entries
+    It checks the parts that are decidable — files present in one tree and not the other, index entries
     pointing at nothing, indexes out of date order, entries with no derivable
     date. It cannot tell you whether the Quick Resume prose survived as todos
     and Status; read that yourself.

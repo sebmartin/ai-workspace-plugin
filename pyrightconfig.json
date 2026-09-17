@@ -1,0 +1,7 @@
+{
+  "include": ["lib", "skills/threads/scripts", "tests", "scripts"],
+  "extraPaths": ["lib", "skills/threads/scripts"],
+  "pythonVersion": "3.12",
+  "typeCheckingMode": "standard",
+  "reportMissingModuleSource": "none"
+}

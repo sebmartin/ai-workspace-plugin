@@ -87,7 +87,7 @@ class TestTodos:
     def test_add_then_window_then_render(self, tmp_path):
         d = _thread(tmp_path)
         ws = str(tmp_path)
-        out = add_todo(ws, "t", "Prep the coding round", "./sessions/20260101-s.md")
+        add_todo(ws, "t", "Prep the coding round", "./sessions/20260101-s.md")
         todo_id = _only_id(d, "todos")
         assert _reply(set_window(ws, "t", [todo_id]))["size"] == 1
         assert "Prep the coding round" in (d / "README.md").read_text()
@@ -128,7 +128,7 @@ class TestTodos:
 class TestDecisions:
     def test_file_and_index_entry_are_written(self, tmp_path):
         d = _thread(tmp_path)
-        out = log_decision(str(tmp_path), "t", "Use Iceberg",
+        log_decision(str(tmp_path), "t", "Use Iceberg",
                            "Chose Iceberg for table format.", "# Body\n", "locked")
         did = _only_id(d, "decisions")
         assert (d / "decisions" / f"{did}.md").exists()
@@ -523,8 +523,8 @@ class TestSaveSession:
 
     def test_body_is_optional_and_keeps_what_is_there(self, tmp_path):
         d = _thread(tmp_path)
-        from mcp_server import save_session
         from ai_workspace.threads.v2 import session
+        from mcp_server import save_session
         sid = session.ensure_stub(d, "topic")
         p = session.session_path(d, sid)
         p.write_text(p.read_text() + "\nWritten incrementally by hand.\n")
@@ -535,8 +535,8 @@ class TestSaveSession:
 
     def test_saving_clears_the_unsaved_marker(self, tmp_path):
         d = _thread(tmp_path)
-        from mcp_server import save_session
         from ai_workspace.threads.v2 import session
+        from mcp_server import save_session
         session.ensure_stub(d, "topic")
         save_session(str(tmp_path), "t", "topic", "s", "k", "n")
         sid = _only_id(d, "sessions")

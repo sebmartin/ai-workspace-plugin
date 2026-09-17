@@ -203,10 +203,3 @@ Link:  ./todos/{date}-retire-the-v1-backup.md
 A file rather than a link to the backup itself, because a link pointing outside
 the thread is what `audit` reports as dangling. The todo is the user's decision
 to make, not yours: never delete either directory, and never offer to.
-
-**If the workspace is a git repository, say what a commit would include.** The
-migration leaves the tree dirty: the README reads as an edit, and `{name}-v1`,
-the indexes and the todos are untracked. Committing everything as-is puts a
-complete duplicate of the thread into history. Say so, and leave the choice
-alone — the recoverable state is the commit made before the migration started,
-and that one is already safe.

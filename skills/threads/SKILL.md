@@ -68,13 +68,13 @@ When you see those headers, treat them as your tracked workspace and active thre
 
 **Tool replies are JSON.** A failure is `{"error": CODE, ...}` and wrote nothing; a success carries only what you could not already know, usually a minted `id`. The codes and their fields are in each tool's docstring.
 
-**The ones that need you to ask the user something:**
-- **`NO_WORKSPACE`** — Ask the user for their workspace path, call `set_default_workspace` with it, then retry. After saving the workspace, offer to add the threads MCP tools to their global CLI settings so they're never prompted again from any directory:
-  - Update your **global** configuration file (not the project-level one) to allow: all `mcp__plugin_ai-workspace_threads__*` tools, and Read/Edit/Write access to `{workspace}/**`. You know where your global config file is and what format it uses.
-  - Tell the user what was written and that a restart may be required for changes to take effect.
-- **`AMBIGUOUS_WORKSPACE`** — a configured workspace exists but `workspace_dir` has no `threads/`. Ask which: the configured one, or initialise here. Both paths are in the reply.
-- **`NEEDS_INIT`** — no workspace anywhere. Ask whether to initialise at `tried`, or to use a path they supply.
-- **`LEGACY_ARCHIVE`** — the archive is a pre-3.0 tarball. Read the file named in `reference` and follow it.
+**A workspace error is a question for the user, never a path to guess at.** Each
+one names the choice in its reply; put it to them and wait.
+
+After `NO_WORKSPACE` is resolved and `set_default_workspace` has been called, offer to add the threads MCP tools to their global CLI settings so they are never prompted again from any directory:
+
+- Update your **global** configuration file (not the project-level one) to allow: all `mcp__plugin_ai-workspace_threads__*` tools, and Read/Edit/Write access to `{workspace}/**`. You know where your global config file is and what format it uses.
+- Tell the user what was written and that a restart may be required for changes to take effect.
 
 ## Thread schemas
 
@@ -127,13 +127,11 @@ threads/{name}/
 └── todos/        + todos-index.md, todos-retired.md
 ```
 
-An index line is `- <id>:<state> [Title](./dir/file.md)`, with ` -- a description` on artifacts only. Sessions have no state. Decisions and sessions keep their `summary:` in their own frontmatter, so it is never copied here; an artifact has nowhere else to put one.
-
-A missing index is an empty index. Nothing pre-creates them.
+An artifact carries a one-line description on its index line. Nothing else does: a decision and a session keep their `summary:` in their own frontmatter.
 
 ### What resume returns
 
-`resume_thread` returns everything in one call: `memory.md` in full if there is one, then Status, About, the header, the Next steps window, the todo backlog, every in-force decision with the `summary:` read from its file, the artifacts index, and the last ten sessions.
+`resume_thread` returns the whole thread in one call; its docstring lists what.
 
 **Print only Status and Next steps.** Everything else is context you hold, not output. A list of thirty-five decisions is for you, not for the screen. Counts are not stored anywhere, so say them from what you read.
 
@@ -143,21 +141,20 @@ A missing index is an empty index. Nothing pre-creates them.
 
 Never hand-edit an index or the README's Next steps section; both are rendered from what the tools write, and a hand edit will be overwritten. Status, About, the header fields and `memory.md` are yours to edit directly, and no tool writes any of them.
 
-**The renderer owns `## Next steps` from its heading to the next `##`.** Two things follow. It must not be the last section, or a render swallows everything after it, which is why the template puts About below it. And a README with no such heading is refused rather than appended to, so replace a schema 1 README from `templates/v2/thread-template.md` before writing anything to a thread.
+A render replaces `## Next steps` down to the next `##`, so never leave it as the last section of a README. Anything below it is swallowed without a word.
 
 | To | Use |
 |---|---|
-| Add a backlog item | `add_todo` — always with a link |
-| Finish or abandon one | `retire_todo` (`done` / `dropped`) |
-| Park or unpark | `set_todo_state` (`parked` / `active`) |
-| Choose what the README shows | `set_window` — about five, in priority order |
+| Add a backlog item | `add_todo` |
+| Finish or abandon one | `retire_todo` |
+| Park or unpark | `set_todo_state` |
+| Choose what the README shows | `set_window` |
 | Record a decision | `log_decision` |
-| Retire one | `retire_decision` (`superseded` / `withdrawn`) |
-| Index a file that exists | `index_file` — an artifact's description is one sentence; it is read on every resume |
-| Retire one | `retire_artifact` (`superseded` / `stale`) |
+| Retire a decision | `retire_decision` |
+| Index one file that exists | `index_file` |
+| Index a whole directory at once | `index_directory` |
+| Retire an artifact | `retire_artifact` |
 | Save | `save_session` |
-
-**Every todo carries a link.** A file under `todos/` when it has state of its own, an external URL when there is an issue, otherwise the session it came out of. Never a bare line: the point is that you can expand it later.
 
 **Next steps is the user's commitments, not your suggestions.** An idea you had belongs in the session log. The backlog is allowed to be long; the window is what is scarce.
 
@@ -188,19 +185,9 @@ the rule it narrows gets read as a separate rule.
 **Its length is a cost you pay on every resume.** Read it through when you save: drop what
 no longer applies, and move out what turned out not to need loading.
 
-### Decisions
-
-`summary:` is read on every resume, so it costs something permanently. One sentence, one subject, WHAT was decided and not why. If it needs "and" twice, log several decisions.
-
-Claim first in the body, argument after, so a reader who only needs the rule can stop.
-
-`supersedes` on the new decision retires the ones it names. Never point from a retired decision to its replacement: traversal starts from what is in force.
-
 ### Saving
 
 A save writes the session log and the Status paragraph, because todos, decisions and artifacts were written when they happened. It is also the moment to read `memory.md` through, if the thread has one. A session that ends without a save still leaves its stub and a record of what it touched.
-
-Pass `body` for an ordinary session log. For a long one, write the session file directly and call `save_session` without a body — a whole log in one tool call has to fit a single response.
 
 Everything from here on applies whatever the schema, except where a schema's own file says otherwise.
 
@@ -245,8 +232,8 @@ For trivial commands, instructions are inline. For complex commands, read the re
 | `resume` | Call `resume_thread`; schema 2 is described above, anything older needs its file | inline |
 | `open` | `open threads/{name}` or `open threads`; confirm | inline |
 | `set-workspace` | Call `set_default_workspace` with provided path, then offer to install global permissions | inline |
-| `archive-thread` | Archive, restore, and list archived threads | `commands/archive-thread.md` |
-| `unpack-legacy-archive` | Restore a `.tar.gz` archive from before 3.0 | `commands/unpack-legacy-archive.md` |
+| `archive-thread` | Archive, restore, and list archived threads | `skills/threads/commands/archive-thread.md` |
+| `unpack-legacy-archive` | Restore a `.tar.gz` archive from before 3.0 | `skills/threads/commands/unpack-legacy-archive.md` |
 
 Everything else — saving, logging decisions, artifacts, todos, parking, linking — differs by schema. Schema 2's are in the table under Working with a schema 2 thread; an older schema lists its own.
 
@@ -267,37 +254,12 @@ Reference files are loaded via `mcp__plugin_ai-workspace_threads__get_skill_file
 - "Open [name] in Finder" / "Set workspace to [path]"
 - Just a number like "2" (when responding to a selection prompt)
 
-## MCP Tools
+## If the MCP tools are unavailable
 
-Server: `threads`, exposed under the plugin's vendor-prefixed bridge.
+Every tool is named `mcp__plugin_ai-workspace_threads__<name>`, and its arguments
+and reply codes are in its own docstring. Nothing about calling one is repeated here.
 
-- `mcp__plugin_ai-workspace_threads__resolve_workspace(workspace_dir)` — Diagnostic only
-- `mcp__plugin_ai-workspace_threads__set_default_workspace(workspace_path)`
-- `mcp__plugin_ai-workspace_threads__list_threads(workspace_dir)`
-- `mcp__plugin_ai-workspace_threads__resume_thread(workspace_dir, thread_name)` — Resolve workspace + thread path, return full README
-- `mcp__plugin_ai-workspace_threads__create_thread(workspace_dir, thread_name)`
-- `mcp__plugin_ai-workspace_threads__get_skill_file(relative_path)` — Read any file from the plugin directory; use for templates (`templates/foo.md`), the model file of an older schema (`skills/threads/v1/model.md`) and command references (`skills/threads/v1/commands/foo.md`)
-Schema 2 threads only, each writing one index line and re-rendering the README:
-
-- `mcp__plugin_ai-workspace_threads__add_todo(workspace_dir, thread_name, title, link, state)`
-- `mcp__plugin_ai-workspace_threads__retire_todo(workspace_dir, thread_name, todo_id, state)`
-- `mcp__plugin_ai-workspace_threads__set_todo_state(workspace_dir, thread_name, todo_id, state)`
-- `mcp__plugin_ai-workspace_threads__set_window(workspace_dir, thread_name, entry_ids, section, kind)`
-- `mcp__plugin_ai-workspace_threads__log_decision(workspace_dir, thread_name, title, summary, body, status, supersedes)`
-- `mcp__plugin_ai-workspace_threads__retire_decision(workspace_dir, thread_name, decision_id, state)`
-- `mcp__plugin_ai-workspace_threads__index_file(workspace_dir, thread_name, link, description)`
-- `mcp__plugin_ai-workspace_threads__retire_artifact(workspace_dir, thread_name, artifact_id, state)`
-- `mcp__plugin_ai-workspace_threads__save_session(workspace_dir, thread_name, slug, summary, keywords, next_context, body, status)`
-
-They return `Status: NEEDS_MIGRATION` on a schema 1 thread rather than falling back.
-
-- `mcp__plugin_ai-workspace_threads__archive_thread(workspace_dir, thread_name)`
-- `mcp__plugin_ai-workspace_threads__restore_thread(workspace_dir, thread_name)`
-- `mcp__plugin_ai-workspace_threads__list_archived_threads(workspace_dir)`
-
-Pass the caller's current working directory as `workspace_dir` (literal path, not `$(pwd)`).
-
-**If MCP tools are unavailable:** The threads MCP server failed to start. Two likely causes:
+**When none of them can be called at all:** The threads MCP server failed to start. Two likely causes:
 
 1. **`uv` not installed** — direct the user to https://docs.astral.sh/uv/getting-started/installation/
 2. **Dependency or version mismatch** — the server declares what it needs in a `# /// script` block at the top of `skills/threads/scripts/mcp_server.py`. Have the user run the launch command by hand to see the real error:
