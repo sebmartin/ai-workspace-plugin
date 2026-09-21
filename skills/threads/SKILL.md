@@ -135,6 +135,21 @@ threads/{name}/
 
 An artifact carries a one-line description on its index line. Nothing else does: a decision and a session keep their `summary:` in their own frontmatter.
 
+### Reading another thread
+
+Read its files directly, whenever another thread holds something you need. Do not resume it: resuming makes it your active thread, and you do not need a composed payload to answer one question about someone else's work.
+
+| To learn | Open |
+|---|---|
+| where it stands, and what it is for | `README.md`, which is short |
+| what it settled | `decisions-index.md` for ids and titles, then the decision file for its `summary:` and argument |
+| what happened, and when | `sessions-index.md` |
+| what it produced | `artifacts-index.md`, which carries a description per line |
+
+A schema 1 thread keeps all of that inline in its README, so one read covers it.
+
+**Never write to a thread you have not resumed.** The write tools take a thread name and will do it, so nothing stops you but this.
+
 ### What resume returns
 
 `resume_thread` returns the whole thread in one call; its docstring lists what.
