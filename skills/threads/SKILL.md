@@ -183,6 +183,19 @@ at the thread on the other end, read what it already says, and decide whether it
 can be written to at all. Fetch
 `skills/threads/v2/link-thread.md` when the user asks for a link.
 
+**A decision is a choice that was made, and it is the most expensive thing you
+can write.** Its summary is read on every resume, forever, where a session log
+is read only when someone goes looking. The test is whether you can name the
+alternative that was rejected. If you cannot, it is not a decision.
+
+Three things that are not, each with a home:
+
+| What it actually is | Where it goes |
+|---|---|
+| A fact about how something works | the session log, or `memory.md` if acting without it would be wrong |
+| A restatement of a rule that already exists | nowhere; the rule is already where it belongs |
+| The only option there was | nowhere; with no alternative there was no choice |
+
 **Next steps is the user's commitments, not your suggestions.** An idea you had belongs in the session log. The backlog is allowed to be long; the window is what is scarce.
 
 **Propose, do not reorder on your own.** Change the window when the user says what is next, or when something completes and leaves a hole. Read the whole backlog when you do — the item that most needs promoting is usually the stale one, which recency hides.
