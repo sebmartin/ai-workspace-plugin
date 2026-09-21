@@ -99,7 +99,7 @@ def get_skill_file(relative_path: str) -> str:
     Paths are resolved relative to the plugin root and must not escape it.
 
     Args:
-        relative_path: Path relative to the plugin root (e.g., "skills/threads/commands/save-thread.md").
+        relative_path: Path relative to the plugin root (e.g., "skills/threads/v1/save-thread.md").
     """
     return _plugin.get_skill_file(relative_path=relative_path)
 
@@ -354,7 +354,7 @@ def index_directory(workspace_dir: str, thread_name: str, link: str) -> str:
 
 @mcp.tool()
 def index_file(workspace_dir: str, thread_name: str, link: str,
-               description: str = "") -> str:
+               description: str = "", date: str = "") -> str:
     """Index a file that is already in the thread.
 
     It refuses a link that does not resolve, so write the file first.
@@ -362,22 +362,26 @@ def index_file(workspace_dir: str, thread_name: str, link: str,
     Everything on the index line is derived from the file. The kind comes from
     the directory, the id from a date found in the filename, and a decision's
     state from its `status:` frontmatter, which must already use this schema's
-    vocabulary. A file whose name states no date is dated from the earliest
-    session that names it, and failing that is marked unknown.
+    vocabulary. A file whose name states no date takes the `date` you pass, and
+    is marked unknown if you pass none.
 
     Calling it again on a file that is already indexed returns the id it
     already has rather than adding a second entry, and replaces the description
     if you pass a different one. That is how an artifact description gets
-    corrected or shortened; there is no other way, since index lines are never
+    corrected or shortened, and how an unknown date is repaired; there is no
+    other way, since a file is never renamed and an index line is never
     hand-edited. Passing no description leaves the existing one alone.
 
     Returns JSON: `{"id": "20260316-summary-auth-flow"}`, with `"undated": true`
-    when nothing said what date the file is from, so it took 19700101.
+    when nothing said what date the file is from, so it took 19700101, and
+    `"was"` carrying the previous id when a date changed it. Use the new one
+    from then on: ids are what set_window and the retire tools take.
 
     A refusal returns `{"error": CODE, "detail": ...}` and writes nothing. Same
     codes as index_directory, plus `MISSING` when the link resolves to nothing,
-    `METADATA` for a dotfile, which is never content, and
-    `DESCRIPTION_TOO_LONG`, whose `detail` is the limit in characters.
+    `METADATA` for a dotfile, which is never content,
+    `DESCRIPTION_TOO_LONG`, whose `detail` is the limit in characters, and
+    `DATE_INVALID`.
 
     Args:
         workspace_dir: The tracked workspace path from session context.
@@ -390,8 +394,15 @@ def index_file(workspace_dir: str, thread_name: str, link: str,
             permanently, the same way a decision's summary does. One sentence,
             and refused beyond 200 characters. A thread whose sixteen artifacts
             averaged 255 characters spent 30% of its resume on them.
+        date: `YYYY-MM-DD`, when the file is from. Only read when the filename
+            states no date, and the only way to repair an entry that was
+            indexed as unknown. Take it from the file's own contents, or from
+            the decision or session that produced it, or ask. Leave it out
+            rather than guessing: an unknown date is visibly unknown and can be
+            fixed later, where a plausible wrong one reads as fact and nothing
+            will ever flag it.
     """
-    return _threads.index_file(workspace_dir, thread_name, link, description)
+    return _threads.index_file(workspace_dir, thread_name, link, description, date or None)
 
 
 @mcp.tool()

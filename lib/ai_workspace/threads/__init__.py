@@ -235,12 +235,13 @@ def index_directory(workspace_dir: str, thread_name: str, link: str,
 
 
 def index_file(workspace_dir: str, thread_name: str, link: str,
-               description: str = "", session_id: str | None = None) -> str:
+               description: str = "", date: str | None = None,
+               session_id: str | None = None) -> str:
     """Index a file that is already in the thread."""
     call = _for(workspace_dir, thread_name, "index_file")
     if isinstance(call, str):
         return call
-    return call.fn(call.thread, link, description, session_id)
+    return call.fn(call.thread, link, description, date, session_id)
 
 
 def retire_artifact(workspace_dir: str, thread_name: str, artifact_id: str,

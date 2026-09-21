@@ -15,9 +15,9 @@ from pathlib import Path, PurePosixPath
 from typing import NamedTuple
 
 from ai_workspace.text import split_frontmatter, yaml_value
-from ai_workspace.threads.v2 import dates, render, session
 from ai_workspace.threads.v2 import ids as ids_mod
 from ai_workspace.threads.v2 import index as idx
+from ai_workspace.threads.v2 import render, session
 
 
 def _new_id(thread_dir: Path, kind: str, title: str) -> str:
@@ -111,8 +111,41 @@ def _already_indexed(thread_dir: Path, kind: str, link: str):
     return None
 
 
-def _index_one(thread, link: str, description: str = "") -> tuple[str, Refusal | None]:
-    """Derive an entry for one existing file and add it. `(entry_id, error)`.
+def _redate(thread_dir: Path, kind: str, entry, entries: list, fm: dict,
+            retired: bool, when: date) -> tuple[str, str | None]:
+    """Give an indexed file a new date, and with it a new id.
+
+    The only repair for an entry that landed on the epoch, since a filename is
+    never renamed and an index line is never hand-edited. The id changes, so
+    the reply has to say so: ids are what set_window and the retire tools take,
+    and the caller is holding the old one.
+
+    Removed and re-added rather than edited in place, so it lands where its new
+    date puts it instead of where its old one did.
+    """
+    base = ids_mod.make_id(when, ids_mod.from_filename(PurePosixPath(entry.link).name)[1])
+    if base == entry.id:
+        return entry.id, None
+    was = entry.id
+    entries.remove(entry)
+    idx.write(thread_dir, kind, entries, fm, retired)
+    entry.id = ids_mod.unique_id(base, idx.taken_ids(thread_dir, kind))
+    if entry.title == was:
+        entry.title = entry.id
+    idx.add(thread_dir, kind, entry, retired)
+    return entry.id, was
+
+
+class Indexed(NamedTuple):
+    """The entry an index call landed on, and the id it replaced if any."""
+
+    id: str
+    was: str | None = None
+
+
+def _index_one(thread, link: str, description: str = "",
+               when: date | None = None) -> tuple[Indexed, Refusal | None]:
+    """Derive an entry for one existing file and add it. `(Indexed, error)`.
 
     Keyed on the file, so a second call amends rather than duplicates. It used
     to mint a fresh id and add a line, which put two entries with two ids on one
@@ -124,20 +157,20 @@ def _index_one(thread, link: str, description: str = "") -> tuple[str, Refusal |
     """
     relative = _inside(link)
     if relative is None or len(relative.parts) < 2:
-        return "", Refusal("OUTSIDE_THREAD")
+        return Indexed(""), Refusal("OUTSIDE_THREAD")
 
     kind = relative.parts[0]
     if kind not in _INDEXABLE:
-        return "", Refusal("NOT_INDEXABLE", kind)
+        return Indexed(""), Refusal("NOT_INDEXABLE", kind)
 
     if len(description) > MAX_DESCRIPTION:
-        return "", Refusal("DESCRIPTION_TOO_LONG", str(MAX_DESCRIPTION))
+        return Indexed(""), Refusal("DESCRIPTION_TOO_LONG", str(MAX_DESCRIPTION))
 
     path = thread.dir / relative
     if not path.exists():
-        return "", Refusal("MISSING")
+        return Indexed(""), Refusal("MISSING")
     if not idx.is_content(path):
-        return "", Refusal("METADATA")
+        return Indexed(""), Refusal("METADATA")
 
     default_state, takes_description = _INDEXABLE[kind]
 
@@ -151,17 +184,18 @@ def _index_one(thread, link: str, description: str = "") -> tuple[str, Refusal |
         if description and takes_description and entry.description != description:
             entry.description = description
             idx.write(thread.dir, kind, entries, fm, retired)
-        return entry.id, None
+        if when is None:
+            return Indexed(entry.id), None
+        return Indexed(*_redate(thread.dir, kind, entry, entries, fm, retired, when)), None
     if default_state is _STATE_FROM_FILE:
         state, refusal = _decision_state(path)
         if refusal is not None:
-            return "", refusal
+            return Indexed(""), refusal
     else:
         state = default_state
 
-    when, rest = ids_mod.from_filename(path.name)
-    if when is None:
-        when = dates.from_a_session_naming(thread.dir, path.name)
+    from_name, rest = ids_mod.from_filename(path.name)
+    when = from_name or when
     entry_id = ids_mod.unique_id(
         ids_mod.make_id(when, rest), idx.taken_ids(thread.dir, kind)
     )
@@ -170,11 +204,11 @@ def _index_one(thread, link: str, description: str = "") -> tuple[str, Refusal |
         entry_id, state, entry_id, f"./{relative}",
         description if takes_description else "",
     ))
-    return entry_id, None
+    return Indexed(entry_id), None
 
 
 def index_file(thread, link: str, description: str = "",
-               session_id: str | None = None) -> str:
+               when: str | None = None, session_id: str | None = None) -> str:
     """Index a file that is already in the thread.
 
     The only way an index entry for a file is minted; the tools that author one
@@ -188,13 +222,21 @@ def index_file(thread, link: str, description: str = "",
     """
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
-    entry_id, refusal = _index_one(thread, link, description)
+    dated = None
+    if when:
+        try:
+            dated = date.fromisoformat(when)
+        except ValueError:
+            return json.dumps({"error": "DATE_INVALID", "detail": when})
+    indexed, refusal = _index_one(thread, link, description, dated)
     if refusal is not None:
         return json.dumps({"error": refusal.code, "detail": refusal.detail})
     render.render(thread.dir)
-    _record(thread.dir, session_id, f"{PurePosixPath(link).parts[-2][:-1]} {entry_id}")
-    reply: dict = {"id": entry_id}
-    if entry_id.startswith(ids_mod.UNKNOWN):
+    _record(thread.dir, session_id, f"{PurePosixPath(link).parts[-2][:-1]} {indexed.id}")
+    reply: dict = {"id": indexed.id}
+    if indexed.was:
+        reply["was"] = indexed.was
+    if indexed.id.startswith(ids_mod.UNKNOWN):
         reply["undated"] = True
     return json.dumps(reply)
 
@@ -242,13 +284,13 @@ def index_directory(thread, link: str, session_id: str | None = None) -> str:
     indexed, unknown = [], []
     refused: dict[str, list[str]] = {}
     for path in pending:
-        entry_id, refusal = _index_one(thread, f"./{kind}/{path.name}")
+        entry, refusal = _index_one(thread, f"./{kind}/{path.name}")
         if refusal is not None:
             refused.setdefault(refusal.code, []).append(path.name)
             continue
-        indexed.append(entry_id)
-        if entry_id.startswith(ids_mod.UNKNOWN):
-            unknown.append(entry_id)
+        indexed.append(entry.id)
+        if entry.id.startswith(ids_mod.UNKNOWN):
+            unknown.append(entry.id)
 
     if indexed:
         render.render(thread.dir)

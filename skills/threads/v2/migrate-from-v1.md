@@ -74,9 +74,8 @@ with sixty-six sessions is sixty-six round trips if you index them one at a
 time. Nothing else, and nothing before it.
 
 Sessions are self-dating, from a `YYYYMMDD-` prefix and a `date:` in their own
-frontmatter, so they need nothing looked up. Everything after this step can be
-dated from them, and by then they have been migrated. **That ordering is what
-keeps schema 2 from ever reading a schema 1 file, so do not reorder these.**
+frontmatter, so they need nothing looked up. Index them first anyway: they are
+where you will read the dates for everything else that has none.
 
 ### 3. Index the decisions and artifacts
 
@@ -107,11 +106,29 @@ instead of adding a second entry, so a description you got wrong is fixable.
 
 Everything else on the line is read off the file. The id takes a date found
 anywhere in the filename, so `2026-01-20-initial-setup.md` and
-`snapshot-20260303-parking-lot.md` both sort correctly without being renamed. A
-file whose name states no date is dated from the earliest session that names it,
-and failing that is marked `19700101`, meaning unknown. Never invent a plausible
-date, and never use a filesystem timestamp, which records when bytes moved
-rather than when something was written.
+`snapshot-20260303-parking-lot.md` both sort correctly without being renamed.
+
+### 4. Date what came back undated
+
+A file whose name states no date is indexed as `19700101`, meaning unknown, and
+both indexing tools report which ones those are. Work through that list; it is
+usually a handful, and on one real thread almost every artifact.
+
+Find the date in the thread, not in the filesystem. The file's own first line
+or frontmatter, the decision that established it, the session that produced it.
+A directory-shaped artifact is often created by a decision and named in no
+session at all, so look there before concluding nothing says. Then
+`index_file` again on the same link with `date`, which re-dates the entry and
+moves it to where that date puts it.
+
+The id changes when you do this, and the reply gives you the old one as `was`.
+Use the new id from then on.
+
+Where nothing in the thread says, ask. Leave it unknown if the answer is not
+available: unknown is visibly unknown and can be repaired any time, where a
+plausible wrong date reads as fact and nothing will ever flag it. Never use a
+filesystem timestamp, which records when bytes moved rather than when something
+was written.
 
 **Do not rename any file.** The id is derived; the file keeps its name and the
 index line links to it. Renaming would break links from session logs into
@@ -128,7 +145,7 @@ Decisions with no status need reading. So do any whose prose describes
 supersession, to tell which superseded which — the live one declares
 `supersedes`.
 
-### 4. The rest
+### 5. The rest
 
 **Extract todos** from Next steps, Parked and Open Questions. Each needs a link:
 the session it came from when it has nothing of its own. Parked entries that are

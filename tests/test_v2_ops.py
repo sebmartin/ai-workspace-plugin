@@ -409,18 +409,6 @@ class TestIndexDirectory:
         assert [(e.id, e.link) for e in entries] == [
             ("20260125-real", "./sessions/20260125-real.md")]
 
-    def test_an_appledouble_file_cannot_date_an_artifact(self, tmp_path):
-        """They are binary and their header can hold the original filename, so
-        reading them as a dating source is both wasteful and unsound."""
-        d = _thread(tmp_path)
-        (d / "sessions").mkdir(parents=True, exist_ok=True)
-        (d / "artifacts").mkdir(parents=True, exist_ok=True)
-        (d / "sessions" / "._20260101-early.md").write_bytes(b"\x00\x05orphan.md\xb0")
-        (d / "sessions" / "20260607-real.md").write_text("wrote orphan.md today\n")
-        (d / "artifacts" / "orphan.md").write_text("x\n")
-        index_file(str(tmp_path), "t", "./artifacts/orphan.md")
-        assert [e.id for e in idx.read(d, "artifacts")[0]] == ["20260607-orphan"]
-
     def test_a_decision_with_invalid_yaml_is_told_what_is_wrong(self, tmp_path):
         """Blaming a missing status sends the reader to the wrong fix: the
         status is fine, the file just cannot be parsed."""
@@ -555,3 +543,75 @@ class TestSaveSession:
         _thread(tmp_path, "old", schema=1)
         from mcp_server import save_session
         assert "NEEDS_MIGRATION" in save_session(str(tmp_path), "old", "s", "s", "k", "n")
+
+
+class TestDating:
+    """A file that does not say when it is from is dated by the caller or not at all.
+
+    Nothing is inferred from other files in the thread. A session mentioning a
+    filename was read as evidence of when it was made, which it is not, and a
+    plausible wrong date is the one kind of error nothing downstream can see.
+    """
+
+    def _artifact(self, tmp_path, name):
+        d = _thread(tmp_path)
+        (d / "artifacts").mkdir(parents=True, exist_ok=True)
+        (d / "artifacts" / name).write_text("x\n")
+        return d
+
+    def test_an_undated_file_is_marked_unknown(self, tmp_path):
+        d = self._artifact(tmp_path, "orphan.md")
+        (d / "sessions" / "20260607-real.md").write_text("wrote orphan.md today\n")
+        reply = _reply(index_file(str(tmp_path), "t", "./artifacts/orphan.md"))
+        assert reply["id"] == "19700101-orphan"
+        assert reply["undated"] is True
+
+    def test_a_supplied_date_is_used(self, tmp_path):
+        self._artifact(tmp_path, "orphan.md")
+        reply = _reply(index_file(
+            str(tmp_path), "t", "./artifacts/orphan.md", date="2026-07-27"))
+        assert reply["id"] == "20260727-orphan"
+        assert "undated" not in reply
+
+    def test_the_filename_wins_over_a_supplied_date(self, tmp_path):
+        self._artifact(tmp_path, "20260101-dated.md")
+        reply = _reply(index_file(
+            str(tmp_path), "t", "./artifacts/20260101-dated.md", date="2026-07-27"))
+        assert reply["id"] == "20260101-dated"
+
+    def test_a_date_repairs_an_unknown_entry_and_reports_the_old_id(self, tmp_path):
+        d = self._artifact(tmp_path, "orphan.md")
+        index_file(str(tmp_path), "t", "./artifacts/orphan.md")
+        reply = _reply(index_file(
+            str(tmp_path), "t", "./artifacts/orphan.md", date="2026-07-27"))
+        assert reply == {"id": "20260727-orphan", "was": "19700101-orphan"}
+        assert [e.id for e in idx.read(d, "artifacts")[0]] == ["20260727-orphan"]
+
+    def test_a_repaired_entry_moves_to_where_its_date_puts_it(self, tmp_path):
+        d = self._artifact(tmp_path, "orphan.md")
+        (d / "artifacts" / "20260301-early.md").write_text("x\n")
+        (d / "artifacts" / "20260901-late.md").write_text("x\n")
+        index_directory(str(tmp_path), "t", "./artifacts")
+        index_file(str(tmp_path), "t", "./artifacts/orphan.md", date="2026-06-01")
+        assert [e.id for e in idx.read(d, "artifacts")[0]] == [
+            "20260301-early", "20260601-orphan", "20260901-late"]
+
+    def test_a_repair_keeps_the_description(self, tmp_path):
+        d = self._artifact(tmp_path, "orphan.md")
+        index_file(str(tmp_path), "t", "./artifacts/orphan.md", "what it holds")
+        index_file(str(tmp_path), "t", "./artifacts/orphan.md", date="2026-07-27")
+        assert idx.read(d, "artifacts")[0][0].description == "what it holds"
+
+    def test_an_unparseable_date_is_refused_and_writes_nothing(self, tmp_path):
+        d = self._artifact(tmp_path, "orphan.md")
+        reply = _reply(index_file(
+            str(tmp_path), "t", "./artifacts/orphan.md", date="last July"))
+        assert reply["error"] == "DATE_INVALID"
+        assert not idx.index_path(d, "artifacts").exists()
+
+    def test_redating_to_the_same_date_reports_no_change(self, tmp_path):
+        self._artifact(tmp_path, "orphan.md")
+        index_file(str(tmp_path), "t", "./artifacts/orphan.md", date="2026-07-27")
+        reply = _reply(index_file(
+            str(tmp_path), "t", "./artifacts/orphan.md", date="2026-07-27"))
+        assert reply == {"id": "20260727-orphan"}
