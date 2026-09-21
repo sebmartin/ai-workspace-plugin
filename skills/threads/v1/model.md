@@ -78,4 +78,4 @@ See `skills/threads/v2/commands/migrate-from-v1.md` when the user agrees to conv
 | `create-thread` | `skills/threads/v1/commands/create-thread.md` |
 | `park-topic` | `skills/threads/v1/commands/park-topic.md` |
 | `link-thread` | `skills/threads/v1/commands/link-thread.md` |
-| `archive-thread` | `skills/threads/v1/commands/archive-thread.md` |
+| `archive-thread` | `skills/threads/commands/archive-thread.md` |

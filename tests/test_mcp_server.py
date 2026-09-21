@@ -1,9 +1,8 @@
 """Unit tests for skills/threads/mcp_server.py business logic."""
 
-import io
 import json
+import re
 import sys
-import tarfile
 import time
 from pathlib import Path
 
@@ -16,7 +15,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "skills" / "threads" / "sc
 import mcp_server  # noqa: F401  (imported for its sys.path side effect)
 from ai_workspace import workspace as ws_module
 from ai_workspace.config import get_config_dir, read_config, write_config
-from ai_workspace.threads.v1 import thread as v1_thread
 from mcp_server import (
     archive_thread,
     create_thread,
@@ -579,3 +577,57 @@ class TestGetSkillFile:
     def test_directory_returns_error(self):
         result = get_skill_file("skills/threads/commands")
         assert "Error" in result
+
+
+class TestSkillFileReferences:
+    """Every path the shipped prose tells the agent to fetch actually resolves.
+
+    Both paths this was written for had shipped. SKILL.md's Commands table asked
+    for `commands/archive-thread.md`, but get_skill_file resolves against the
+    plugin root and the file sits two directories deeper. v1/model.md pointed at
+    a v1 archive command that never existed, archiving being shared across
+    schemas rather than owned by one. Neither fails until an agent follows it,
+    and what comes back is a not-found the agent has no way to correct, because
+    nothing tells it what the right path would have been.
+    """
+
+    REPO = Path(__file__).resolve().parent.parent
+
+    # Any backticked multi-segment path with an extension. Deliberately not a
+    # list of known plugin roots: `commands/archive-thread.md` and `v1/model.md`
+    # are both wrong and neither starts at one, so a root list would have to
+    # already contain the mistake to catch it.
+    _PLUGIN_PATH = re.compile(r"`([A-Za-z0-9_][A-Za-z0-9_./-]*/[A-Za-z0-9_.-]+\.[A-Za-z]{2,8})`")
+
+    # Paths into the user's workspace, which this repo cannot resolve and should
+    # not try to. A placeholder, a thread-relative link, or a thread subdirectory.
+    _WORKSPACE = re.compile(
+        r"[{}]|^\.{1,2}/|^(?:threads|archive|sessions|decisions|artifacts|attachments|todos)/"
+    )
+    _FETCHED = re.compile(r'get_skill_file\(\s*"([^"]+)"\s*\)')
+
+    def _prose(self):
+        """Only what ships inside skills/. Templates are written into the user's
+        workspace, so a path in one points at their tree rather than ours."""
+        return sorted((self.REPO / "skills").rglob("*.md"))
+
+    def _offenders(self, pattern):
+        out = []
+        for doc in self._prose():
+            for hit in pattern.findall(doc.read_text()):
+                if self._WORKSPACE.search(hit) or (self.REPO / hit).is_file():
+                    continue
+                out.append(f"{doc.relative_to(self.REPO)} -> {hit}")
+        return out
+
+    def test_every_path_passed_to_get_skill_file_resolves(self):
+        offenders = self._offenders(self._FETCHED)
+        assert not offenders, "\n  ".join(
+            ["get_skill_file is told to fetch files that are not there:", *offenders]
+        )
+
+    def test_every_plugin_relative_path_in_prose_resolves(self):
+        offenders = self._offenders(self._PLUGIN_PATH)
+        assert not offenders, "\n  ".join(
+            ["prose names plugin files that are not there:", *offenders]
+        )

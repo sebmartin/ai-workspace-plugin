@@ -11,6 +11,7 @@ stdin and stdout — so a missing entry point, a broken import, or a tool that
 fails to register is a test failure rather than a support ticket.
 """
 
+import contextlib
 import json
 import os
 import selectors
@@ -55,6 +56,7 @@ def _talk(requests: list[dict], expect_ids: list[int], timeout: int = 60) -> dic
         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         cwd=REPO,
     )
+    assert proc.stdin is not None and proc.stdout is not None  # PIPE, always
     replies: dict[int, dict] = {}
     selector = selectors.DefaultSelector()
     pending = b""
@@ -87,10 +89,8 @@ def _talk(requests: list[dict], expect_ids: list[int], timeout: int = 60) -> dic
             pending += chunk
     finally:
         selector.close()
-        try:
+        with contextlib.suppress(OSError):
             proc.stdin.close()
-        except OSError:
-            pass
         proc.terminate()
         try:
             _, stderr_bytes = proc.communicate(timeout=10)
@@ -118,7 +118,7 @@ HANDSHAKE = [
 
 @pytest.fixture(scope="module")
 def tools() -> dict:
-    replies = _talk(HANDSHAKE + [{"jsonrpc": "2.0", "id": 2, "method": "tools/list"}], [2])
+    replies = _talk([*HANDSHAKE, {"jsonrpc": "2.0", "id": 2, "method": "tools/list"}], [2])
     return {t["name"]: t for t in replies[2]["result"]["tools"]}
 
 
@@ -162,10 +162,7 @@ def test_every_tool_describes_itself(tools):
 def test_a_tool_actually_runs(tmp_path):
     """End to end through the protocol, not just registered."""
     (tmp_path / "threads").mkdir()
-    replies = _talk(HANDSHAKE + [{
-        "jsonrpc": "2.0", "id": 3, "method": "tools/call",
-        "params": {"name": "list_threads", "arguments": {"workspace_dir": str(tmp_path)}},
-    }], [3])
+    replies = _talk([*HANDSHAKE, {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "list_threads", "arguments": {"workspace_dir": str(tmp_path)}}}], [3])
     assert "No threads found" in json.dumps(replies[3]["result"])
 
 
