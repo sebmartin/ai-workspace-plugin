@@ -4,10 +4,10 @@ The README is mostly hand-written. The renderer owns Next steps and nothing
 else, replacing it from its heading to the next heading and leaving the rest of
 the file untouched.
 
-That boundary is load-bearing for `link-thread`, which maintains
+That boundary is load-bearing for linking, which maintains
 `**Parent Thread**` / `**Child Threads**` / `**Related Threads**` by editing the
-README of both threads it connects, and is the one operation that inherently
-spans schemas since either side may be schema 1 or 2.
+README of both threads it connects. There is no tool for it: the fields are
+hand-edited, and the renderer leaves the header alone.
 """
 
 import re

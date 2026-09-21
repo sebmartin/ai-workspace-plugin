@@ -177,6 +177,12 @@ A render replaces `## Next steps` down to the next `##`, so never leave it as th
 | Retire an artifact | `retire_artifact` |
 | Save | `save_session` |
 
+**Linking two threads has no tool.** The three link fields in the header are
+hand-edited, and the work is judgement rather than mechanism: you have to look
+at the thread on the other end, read what it already says, and decide whether it
+can be written to at all. Fetch
+`skills/threads/v2/link-thread.md` when the user asks for a link.
+
 **Next steps is the user's commitments, not your suggestions.** An idea you had belongs in the session log. The backlog is allowed to be long; the window is what is scarce.
 
 **Propose, do not reorder on your own.** Change the window when the user says what is next, or when something completes and leaves a hole. Read the whole backlog when you do — the item that most needs promoting is usually the stale one, which recency hides.
@@ -253,10 +259,10 @@ For trivial commands, instructions are inline. For complex commands, read the re
 | `resume` | Call `resume_thread`; schema 2 is described above, anything older needs its file | inline |
 | `open` | `open threads/{name}` or `open threads`; confirm | inline |
 | `set-workspace` | Call `set_default_workspace` with provided path, then offer to install global permissions | inline |
-| `archive-thread` | Archive, restore, and list archived threads | `skills/threads/commands/archive-thread.md` |
-| `unpack-legacy-archive` | Restore a `.tar.gz` archive from before 3.0 | `skills/threads/commands/unpack-legacy-archive.md` |
+| `archive-thread` | Archive, restore, and list archived threads | `skills/threads/archive-thread.md` |
+| `unpack-legacy-archive` | Restore a `.tar.gz` archive from before 3.0 | `skills/threads/unpack-legacy-archive.md` |
 
-Everything else — saving, logging decisions, artifacts, todos, parking, linking — differs by schema. Schema 2's are in the table under Working with a schema 2 thread; an older schema lists its own.
+Everything else — saving, logging decisions, artifacts, todos, parking, linking — differs by schema. Schema 2's are under Working with a schema 2 thread, in its table and the notes below it; an older schema lists its own.
 
 **Set workspace** (`set-workspace`): Call `set_default_workspace` with the provided path. Confirm it was saved. Then follow the same global permissions offer described in the `NO_WORKSPACE` handler above — detect the CLI, write the allowlist entries for the workspace path, tell the user what was written.
 
