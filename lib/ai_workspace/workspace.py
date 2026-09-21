@@ -181,7 +181,7 @@ def _bad_name(thread_name: str) -> str:
     )
 
 
-LEGACY_ARCHIVE_DOC = "skills/threads/commands/unpack-legacy-archive.md"
+LEGACY_ARCHIVE_DOC = "skills/threads/unpack-legacy-archive.md"
 
 
 def _thread_name_of(tarball: Path) -> str:

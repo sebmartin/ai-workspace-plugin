@@ -66,16 +66,24 @@ If the user declines, do not ask again unprompted, and do not migrate anything
 on your own initiative. Raise it once more if they later try to save, since
 that is the moment the refusal becomes concrete.
 
-See `skills/threads/v2/commands/migrate-from-v1.md` when the user agrees to convert.
+See `skills/threads/v2/migrate-from-v1.md` when the user agrees to convert.
 
 ## Commands
 
+> ⚠️ **These describe how a schema 1 thread was written when schema 1 was
+> current.** They are kept because knowing how the content got its shape is
+> what lets you read one and migrate it. Do not run them. The plugin no longer
+> writes to a schema 1 thread, and a user who wants to keep hand-editing their
+> own files is doing that outside the plugin. `archive-thread` is the exception
+> and is live: it moves a directory without opening it, so it is the same
+> command at every schema.
+
 | Command | Reference |
 |---|---|
-| `save-thread` | `skills/threads/v1/commands/save-thread.md` |
-| `save-artifact` | `skills/threads/v1/commands/save-artifact.md` |
-| `log-decision` | `skills/threads/v1/commands/log-decision.md` |
-| `create-thread` | `skills/threads/v1/commands/create-thread.md` |
-| `park-topic` | `skills/threads/v1/commands/park-topic.md` |
-| `link-thread` | `skills/threads/v1/commands/link-thread.md` |
-| `archive-thread` | `skills/threads/commands/archive-thread.md` |
+| `save-thread` | `skills/threads/v1/save-thread.md` |
+| `save-artifact` | `skills/threads/v1/save-artifact.md` |
+| `log-decision` | `skills/threads/v1/log-decision.md` |
+| `create-thread` | `skills/threads/v1/create-thread.md` |
+| `park-topic` | `skills/threads/v1/park-topic.md` |
+| `link-thread` | `skills/threads/v1/link-thread.md` |
+| `archive-thread` | `skills/threads/archive-thread.md` |

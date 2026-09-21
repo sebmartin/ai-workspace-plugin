@@ -562,12 +562,12 @@ class TestArchivedThreadsAreReadOnly:
 
 class TestGetSkillFile:
     def test_reads_existing_file(self):
-        result = get_skill_file("skills/threads/v1/commands/save-thread.md")
+        result = get_skill_file("skills/threads/v1/save-thread.md")
         assert "save-thread" in result
         assert "Step 1" in result
 
     def test_missing_file_returns_error(self):
-        result = get_skill_file("skills/threads/commands/nonexistent.md")
+        result = get_skill_file("skills/threads/nonexistent.md")
         assert "Error" in result
 
     def test_path_traversal_blocked(self):
@@ -582,11 +582,12 @@ class TestGetSkillFile:
 class TestSkillFileReferences:
     """Every path the shipped prose tells the agent to fetch actually resolves.
 
-    Both paths this was written for had shipped. SKILL.md's Commands table asked
-    for `commands/archive-thread.md`, but get_skill_file resolves against the
-    plugin root and the file sits two directories deeper. v1/model.md pointed at
-    a v1 archive command that never existed, archiving being shared across
-    schemas rather than owned by one. Neither fails until an agent follows it,
+    Both paths this was written for had shipped. SKILL.md asked for a
+    skill-relative path, but get_skill_file resolves against the plugin root,
+    so the file sat two directories deeper than the prose claimed. v1/model.md
+    pointed at a v1 archiving procedure that never existed, archiving being
+    shared across schemas rather than owned by one. Neither fails until an
+    agent follows it,
     and what comes back is a not-found the agent has no way to correct, because
     nothing tells it what the right path would have been.
     """
@@ -594,8 +595,8 @@ class TestSkillFileReferences:
     REPO = Path(__file__).resolve().parent.parent
 
     # Any backticked multi-segment path with an extension. Deliberately not a
-    # list of known plugin roots: `commands/archive-thread.md` and `v1/model.md`
-    # are both wrong and neither starts at one, so a root list would have to
+    # list of known plugin roots: both shipped mistakes were relative to
+    # somewhere other than the plugin root, so a root list would have to
     # already contain the mistake to catch it.
     _PLUGIN_PATH = re.compile(r"`([A-Za-z0-9_][A-Za-z0-9_./-]*/[A-Za-z0-9_.-]+\.[A-Za-z]{2,8})`")
 

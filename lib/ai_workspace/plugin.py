@@ -28,12 +28,12 @@ def get_template_path(template_name: str) -> Path:
 def get_skill_file(relative_path: str) -> str:
     """Return the contents of a file from the plugin directory.
 
-    Use this to read skill reference files (e.g. commands/save-thread.md)
+    Use this to read skill reference files (e.g. skills/threads/v1/save-thread.md)
     without needing direct filesystem access. Paths are resolved relative
     to the plugin root and must not escape it.
 
     Args:
-        relative_path: Path relative to the plugin root (e.g., "skills/threads/commands/save-thread.md").
+        relative_path: Path relative to the plugin root (e.g., "skills/threads/v1/save-thread.md").
     """
     plugin_root = get_plugin_dir().resolve()
     target = (plugin_root / relative_path).resolve()
