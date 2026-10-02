@@ -77,7 +77,7 @@ You open Claude from the workspace and resume the thread.
 >
 > ---
 >
-> **Working on thread: career-growth**
+> **Working on thread: career-growth** (schema 2)
 
 Then you run the skill:
 
