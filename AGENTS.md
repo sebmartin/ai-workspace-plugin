@@ -300,9 +300,17 @@ are erased by the next render without a word.
   behaviour for every user. When refactoring underneath, compare them against
   the previous revision programmatically rather than by eye.
 - **Convert at the boundary.** MCP needs concrete defaults, so a tool takes
-  `body: str = ""` while the operation distinguishes "not given" from "set it
-  to nothing". The tool passes `body or None`. Dropping that conversion once
-  wiped session files that had been written incrementally.
+  `description: str = ""` while the operation distinguishes "not given" from
+  "set it to nothing". The tool passes `description or None`. Dropping that
+  conversion once erased descriptions that a re-index was only meant to leave
+  alone.
+- **An optional argument is a decision the caller can get wrong.** `body` was
+  optional on `save_session`, guarded by a note about the model's output
+  budget. That budget runs to six figures of tokens and a session log to
+  thousands, so it never bound; what the option produced was a save stripped
+  to its required fields under pressure, reporting success while writing a
+  session with no narrative. Make it optional only when both answers are
+  right.
 
 ### Thread Structure
 

@@ -254,7 +254,7 @@ def retire_artifact(workspace_dir: str, thread_name: str, artifact_id: str,
 
 
 def save_session(workspace_dir: str, thread_name: str, slug: str, summary: str,
-                 keywords: str, next_context: str, body: str | None = None,
+                 keywords: str, next_context: str, body: str,
                  status: str | None = None) -> str:
     """Write the session log and the Status paragraph in one call."""
     call = _for(workspace_dir, thread_name, "save_session")

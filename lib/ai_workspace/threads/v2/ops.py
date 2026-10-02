@@ -457,7 +457,7 @@ def retire_artifact(thread, artifact_id: str, state: str) -> str:
 
 
 def save_session(thread, slug: str, summary: str, keywords: str,
-                 next_context: str, body: str | None = None,
+                 next_context: str, body: str,
                  status: str | None = None) -> str:
     """Everything a save does that is not synthesis.
 
