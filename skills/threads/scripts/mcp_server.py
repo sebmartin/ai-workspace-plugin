@@ -1,211 +1,25 @@
 #!/usr/bin/env python3
-"""Threads MCP Server - Tools for managing discussion threads.
+# /// script
+# requires-python = ">=3.12"
+# dependencies = ["mcp>=2", "python-frontmatter"]
+# ///
+"""Threads MCP Server - the tool surface.
 
-Archive-related tools require Python 3.12+ (tarfile filter="data" support).
+Implementations live in lib/ai_workspace/. This module declares the tools, their
+docstrings and their arguments, and delegates.
 """
 
-import json
-import re
-import shutil
 import sys
-import tarfile
-from datetime import date
 from pathlib import Path
-
-ARCHIVE_SCHEMA_VERSION = 1
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "lib"))
 
+from ai_workspace import plugin as _plugin
+from ai_workspace import threads as _threads
+from ai_workspace import workspace as _ws
 from mcp.server.mcpserver import MCPServer
-from workspace_utils import (
-    get_plugin_dir,
-    get_template_path,
-    read_config,
-    validate_thread_name,
-    write_config,
-)
 
 mcp = MCPServer("threads")
-
-
-# ---------- Workspace resolution ----------
-
-def _resolve_workspace(workspace_dir: str) -> tuple[Path | None, str]:
-    """Resolve a directory hint to a workspace path.
-
-    Probe order: (1) workspace_dir/threads/, (2) configured default_workspace/threads/.
-    Returns (workspace_path, source) where source ∈ {"local", "config", "none"}.
-    When source is "none" the path is None.
-    """
-    ws_path = Path(workspace_dir)
-    if (ws_path / "threads").is_dir():
-        return ws_path, "local"
-    config = read_config()
-    default = config.get("default_workspace")
-    if default:
-        default_path = Path(default)
-        if (default_path / "threads").is_dir():
-            return default_path, "config"
-    return None, "none"
-
-
-def _no_workspace_message(workspace_dir: str) -> str:
-    """Stable text the skill teaches the LLM to recognize."""
-    return (
-        "Error: NO_WORKSPACE\n"
-        f"No threads workspace found at {workspace_dir} or in saved settings.\n"
-        "Ask the user for the path to their threads workspace, then call "
-        "set_default_workspace with that path before retrying."
-    )
-
-
-def _with_focus(workspace: Path, thread_name: str, body: str) -> str:
-    """Prefix a tool's success response with Workspace + Thread headers.
-
-    Used only by tools that shift the session's focus to a specific thread
-    (create_thread, resume_thread). The LLM tracks Workspace and Thread
-    across the session and uses them for follow-up file ops.
-    """
-    return (
-        f"Workspace: {workspace}\n"
-        f"Thread: {workspace / 'threads' / thread_name}\n\n"
-        f"{body}"
-    )
-
-
-# ---------- Archive helpers ----------
-
-_ARCHIVE_BASE_RE = re.compile(r"^\d{4}-[a-z0-9][a-z0-9-]*$")
-
-
-def _validate_archive_base(base: str) -> bool:
-    if not base or ".." in base or "/" in base or "\\" in base or "--" in base:
-        return False
-    return bool(_ARCHIVE_BASE_RE.match(base))
-
-
-def _parse_readme_dates(readme_path: Path, thread_dir: Path) -> tuple[str, str]:
-    started = None
-    last_active = None
-    if readme_path.exists():
-        text = readme_path.read_text()
-        m = re.search(r"^\*\*Started\*\*:\s*(\d{4}-\d{2}-\d{2})", text, re.MULTILINE)
-        if m:
-            started = m.group(1)
-        m = re.search(r"^\*\*Last Session\*\*:\s*(\d{4}-\d{2}-\d{2})", text, re.MULTILINE)
-        if m:
-            last_active = m.group(1)
-    if not started:
-        started = date.fromtimestamp(thread_dir.stat().st_ctime).isoformat()
-    if not last_active:
-        mtimes = [p.stat().st_mtime for p in thread_dir.rglob("*") if p.is_file()]
-        last_active = date.fromtimestamp(
-            max(mtimes) if mtimes else thread_dir.stat().st_mtime
-        ).isoformat()
-    return started, last_active
-
-
-def _find_symlinks(root: Path) -> list[Path]:
-    """Return list of symlink paths (including the root itself) under root."""
-    found = []
-    if root.is_symlink():
-        found.append(root)
-    for p in root.rglob("*"):
-        if p.is_symlink():
-            found.append(p)
-    return found
-
-
-def _yaml_quote(s: str) -> str:
-    escaped = s.replace("\\", "\\\\").replace('"', '\\"')
-    return f'"{escaped}"'
-
-
-def _emit_summary_yaml(
-    thread_name: str,
-    started: str,
-    last_active: str,
-    archived: str,
-    archive_file: str,
-    summary: str,
-    keywords: list,
-    body: str,
-) -> str:
-    lines = [
-        "---",
-        f"schema_version: {ARCHIVE_SCHEMA_VERSION}",
-        f"thread: {thread_name}",
-        f"started: {started}",
-        f"last_active: {last_active}",
-        f"archived: {archived}",
-        f"archive_file: {archive_file}",
-        f"summary: {_yaml_quote(summary)}",
-    ]
-    if keywords:
-        lines.append("keywords:")
-        for kw in keywords:
-            lines.append(f"  - {_yaml_quote(kw)}")
-    else:
-        lines.append("keywords: []")
-    lines.append("---")
-    lines.append("")
-    lines.append(body if body.endswith("\n") else body + "\n")
-    return "\n".join(lines)
-
-
-def _verify_archive(archive_path: Path, expected_top: str) -> str | None:
-    """Return None on success, error string on failure."""
-    try:
-        with tarfile.open(archive_path, "r:gz") as t:
-            names = t.getnames()
-    except (tarfile.TarError, OSError) as e:
-        return f"Archive integrity check failed: {e}"
-    top_levels = {n.split("/")[0] for n in names if n}
-    if top_levels != {expected_top}:
-        return (
-            f"Archive top-level mismatch: expected {{'{expected_top}'}}, "
-            f"got {sorted(top_levels)}"
-        )
-    return None
-
-
-def _is_within(path: Path, base: Path) -> bool:
-    try:
-        path.resolve().relative_to(base.resolve())
-        return True
-    except ValueError:
-        return False
-
-
-def _safe_extract(archive_path: Path, target: Path) -> str | None:
-    """Extract archive into target, blocking path traversal. Returns None on success."""
-    try:
-        with tarfile.open(archive_path, "r:gz") as t:
-            for m in t.getmembers():
-                name = m.name
-                if name.startswith("/") or "\\" in name or ".." in Path(name).parts:
-                    return f"Refused to extract member '{name}': unsafe path"
-                if not _is_within(target / name, target):
-                    return f"Refused to extract member '{name}': escapes target"
-            t.extractall(target, filter="data")
-    except (tarfile.TarError, OSError) as e:
-        return f"Extraction failed: {e}"
-    return None
-
-
-def _read_top_level(archive_path: Path) -> tuple[set, str | None]:
-    """Return (top_level_names, error_or_None)."""
-    try:
-        with tarfile.open(archive_path, "r:gz") as t:
-            names = t.getnames()
-    except (tarfile.TarError, OSError) as e:
-        return set(), f"Failed to read archive: {e}"
-    return {n.split("/")[0] for n in names if n}, None
-
-
-def _find_archive(archive_dir: Path, base: str) -> Path | None:
-    tar_path = archive_dir / f"{base}.tar.gz"
-    return tar_path if tar_path.exists() else None
 
 
 @mcp.tool()
@@ -213,56 +27,45 @@ def list_threads(workspace_dir: str) -> str:
     """List all discussion threads sorted by most recent activity.
 
     Resolves the workspace from `workspace_dir` (local threads/ first, then configured
-    default). Returns `Error: NO_WORKSPACE` if neither is available.
+    default).
+
+    Every operating tool answers a failed resolution the same way:
+    `{"error": "NO_WORKSPACE", "tried": ...}`. Ask the user for their workspace
+    path, call set_default_workspace, then retry the original call.
 
     Args:
         workspace_dir: Directory hint for locating the workspace; typically the
             tracked workspace path from session context, or the caller's cwd on
             a fresh invocation. The tool probes this directory for threads/,
-            falls back to the configured default, and returns NO_WORKSPACE if neither works.
+            falls back to the configured default.
     """
-    workspace, _ = _resolve_workspace(workspace_dir)
-    if workspace is None:
-        return _no_workspace_message(workspace_dir)
-    threads_dir = workspace / "threads"
-
-    if not threads_dir.exists():
-        return "No threads directory found. Use /threads create to start one."
-
-    entries = []
-    for item in threads_dir.iterdir():
-        if item.is_dir():
-            readme = item / "README.md"
-            if readme.exists():
-                entries.append((item.name, readme.stat().st_mtime))
-
-    if not entries:
-        return "No threads found. Use /threads create to start one."
-
-    entries.sort(key=lambda x: x[1], reverse=True)
-    return "\n".join(f"{i}. {name}" for i, (name, _) in enumerate(entries, 1))
+    return _ws.list_threads(workspace_dir)
 
 
 @mcp.tool()
 def resume_thread(workspace_dir: str, thread_name: str) -> str:
-    """Resolve the workspace and thread path, and return the full README content.
+    """Resolve the workspace and thread path, and return the thread's context.
+
+    On a schema 2 thread the reply is composed rather than read from a file:
+    `memory.md` in full if there is one, then Status, About, the header, the
+    Next steps window, the todo backlog, every in-force decision with the
+    `summary:` read from its file, the artifacts index, and the last ten
+    sessions. A `## Thread size` heading appears only when the thread has grown
+    expensive to open.
+
+    A thread this plugin cannot read returns `{"error": CODE, "thread": ...,
+    "schema": <n>, "reads": [<low>, <high>]}`: `SCHEMA_TOO_NEW` (upgrade the
+    plugin), `SCHEMA_RETIRED` (migrate it with a version that still reads it),
+    or `UNREADABLE_SCHEMA` (its marker file is not an integer).
 
     Args:
         workspace_dir: Directory hint for locating the workspace; typically the
             tracked workspace path from session context, or the caller's cwd on
             a fresh invocation. The tool probes this directory for threads/,
-            falls back to the configured default, and returns NO_WORKSPACE if neither works.
+            falls back to the configured default.
         thread_name: Name of the thread (kebab-case).
     """
-    workspace, _ = _resolve_workspace(workspace_dir)
-    if workspace is None:
-        return _no_workspace_message(workspace_dir)
-    readme_path = workspace / "threads" / thread_name / "README.md"
-
-    if not readme_path.exists():
-        return f"Error: Thread '{thread_name}' not found."
-
-    return _with_focus(workspace, thread_name, readme_path.read_text())
+    return _threads.resume(workspace_dir, thread_name)
 
 
 @mcp.tool()
@@ -272,9 +75,10 @@ def create_thread(workspace_dir: str, thread_name: str) -> str:
     Resolves the workspace from `workspace_dir`. If `workspace_dir` has a threads/ dir, the thread
     is created there. If not, the tool may return a status the LLM must surface
     to the user:
-    - `Status: AMBIGUOUS_WORKSPACE` when a configured default workspace exists
+    - `{"error": "AMBIGUOUS_WORKSPACE", "tried": ..., "configured": ...}` when a
+      configured default exists
       (user picks between configured workspace vs initialising a new one here).
-    - `Status: NEEDS_INIT` when no workspace exists anywhere (user picks between
+    - `{"error": "NEEDS_INIT", "tried": ...}` when none exists anywhere (user picks between
       initialising here vs supplying a path).
 
     Args:
@@ -285,87 +89,19 @@ def create_thread(workspace_dir: str, thread_name: str) -> str:
             (AMBIGUOUS_WORKSPACE or NEEDS_INIT) if neither works.
         thread_name: Name of the thread (kebab-case: lowercase letters, numbers, hyphens).
     """
-    if not validate_thread_name(thread_name):
-        return (
-            f"Error: Invalid thread name '{thread_name}'. "
-            "Thread names must be kebab-case (lowercase letters, numbers, hyphens). "
-            "Examples: my-thread, api-redesign, auth-refactor"
-        )
-
-    ws_path = Path(workspace_dir)
-    if (ws_path / "threads").is_dir():
-        workspace = ws_path
-    else:
-        config = read_config()
-        default = config.get("default_workspace")
-        if default and (Path(default) / "threads").is_dir():
-            return (
-                "Status: AMBIGUOUS_WORKSPACE\n"
-                f"No threads/ directory at {workspace_dir}, but a configured workspace "
-                f"exists at {default}.\n"
-                f'Ask the user: "Create the new thread in the configured '
-                f'workspace at {default}, or initialize a new workspace here '
-                f'at {workspace_dir}?"\n'
-                f"- If they pick the configured workspace, retry create_thread "
-                f"with workspace_dir={default}.\n"
-                f"- If they pick \"here\", run the ai-workspace:init skill at "
-                f"{workspace_dir}, then retry."
-            )
-        return (
-            "Status: NEEDS_INIT\n"
-            "No threads workspace found.\n"
-            f'Ask the user: "Initialize a new workspace at {workspace_dir}, or use one '
-            f'elsewhere?"\n'
-            f"- If \"here\", run the ai-workspace:init skill at {workspace_dir}, then "
-            f"retry.\n"
-            f"- If \"elsewhere\", get the path from the user, call "
-            f"set_default_workspace, then retry."
-        )
-
-    thread_dir = workspace / "threads" / thread_name
-
-    if thread_dir.exists():
-        return f"Error: Thread '{thread_name}' already exists."
-
-    # Create directory structure
-    for subdir in ("sessions", "decisions", "attachments", "artifacts"):
-        (thread_dir / subdir).mkdir(parents=True, exist_ok=True)
-
-    # Write README from template, substituting placeholders
-    today = date.today().isoformat()
-    template = get_template_path("thread-template.md").read_text()
-    readme = re.sub(r"\[Thread Name\]", thread_name, template)
-    readme = re.sub(r"\[YYYY-MM-DD\]", today, readme)
-    (thread_dir / "README.md").write_text(readme)
-
-    return _with_focus(
-        workspace, thread_name, f"Created thread '{thread_name}' at {thread_dir}"
-    )
-
+    return _threads.create(workspace_dir, thread_name)
 
 
 @mcp.tool()
 def get_skill_file(relative_path: str) -> str:
     """Return the contents of a file from the plugin directory.
 
-    Use this to read skill reference files (e.g. commands/save-thread.md)
-    without needing direct filesystem access. Paths are resolved relative
-    to the plugin root and must not escape it.
+    Paths are resolved relative to the plugin root and must not escape it.
 
     Args:
-        relative_path: Path relative to the plugin root (e.g., "skills/threads/commands/save-thread.md").
+        relative_path: Path relative to the plugin root (e.g., "skills/threads/v1/save-thread.md").
     """
-    plugin_root = get_plugin_dir().resolve()
-    target = (plugin_root / relative_path).resolve()
-    try:
-        target.relative_to(plugin_root)
-    except ValueError:
-        return "Error: Path escapes plugin directory."
-    if not target.exists():
-        return f"Error: File '{relative_path}' not found in plugin."
-    if not target.is_file():
-        return f"Error: '{relative_path}' is not a file."
-    return target.read_text()
+    return _plugin.get_skill_file(relative_path=relative_path)
 
 
 @mcp.tool()
@@ -373,8 +109,7 @@ def resolve_workspace(workspace_dir: str) -> str:
     """Resolve which workspace directory to use for thread operations.
 
     Checks for a local threads/ directory first, then falls back to the
-    configured default workspace. Kept as an optional diagnostic — operating
-    tools (list_threads, create_thread, etc.) resolve internally now.
+    configured default workspace.
 
     Args:
         workspace_dir: Directory hint for locating the workspace; typically the
@@ -382,435 +117,398 @@ def resolve_workspace(workspace_dir: str) -> str:
             for threads/, falls back to the configured default, and returns the
             result with its source ("local", "config", or "none").
     """
-    workspace, source = _resolve_workspace(workspace_dir)
-    return json.dumps(
-        {
-            "workspace_dir": str(workspace) if workspace is not None else None,
-            "source": source,
-        }
-    )
+    return _ws.resolve_workspace(workspace_dir=workspace_dir)
 
 
 @mcp.tool()
 def set_default_workspace(workspace_path: str) -> str:
     """Set the default workspace directory for thread operations.
 
-    This is used when running /threads from outside a workspace directory.
     The path is persisted in the plugin's global config.
 
     Args:
         workspace_path: Absolute path to a directory containing a threads/ folder.
     """
-    ws_path = Path(workspace_path)
-
-    if not ws_path.is_dir():
-        return f"Error: Directory '{workspace_path}' does not exist."
-
-    if not (ws_path / "threads").is_dir():
-        return (
-            f"Error: No threads/ directory found in '{workspace_path}'. "
-            "The workspace must contain a threads/ directory."
-        )
-
-    config = read_config()
-    config["default_workspace"] = str(ws_path.resolve())
-    write_config(config)
-
-    return f"Default workspace set to '{ws_path.resolve()}'."
+    return _ws.set_default_workspace(workspace_path=workspace_path)
 
 
 @mcp.tool()
-def archive_thread(
-    workspace_dir: str,
-    thread_name: str,
-    summary: str,
-    keywords: list,
-    body: str,
-) -> str:
-    """Archive a thread: compress its directory, write a searchable summary, delete the original.
+def archive_thread(workspace_dir: str, thread_name: str) -> str:
+    """Archive a thread: move it out of threads/ and into archive/.
 
     Args:
         workspace_dir: Directory hint for locating the workspace; typically the
             tracked workspace path from session context, or the caller's cwd on
             a fresh invocation. The tool probes this directory for threads/,
-            falls back to the configured default, and returns NO_WORKSPACE if neither works.
-        thread_name: Name of the thread to archive (kebab-case).
-        summary: One-line summary; goes into frontmatter `summary:` field.
-        keywords: List of short keyword strings for search; normalised (lowercased, deduped).
-        body: Topic-rich markdown narrative — the embedding payload. Cover what was discussed,
-              decisions made, systems/files/people touched, key vocabulary and synonyms.
+            falls back to the configured default.
+        thread_name: Name of the thread to archive.
     """
-    if not validate_thread_name(thread_name):
-        return f"Error: Invalid thread name '{thread_name}'."
+    return _ws.archive(workspace_dir, thread_name)
 
-    workspace, _ = _resolve_workspace(workspace_dir)
-    if workspace is None:
-        return _no_workspace_message(workspace_dir)
-    thread_dir = workspace / "threads" / thread_name
-    readme_path = thread_dir / "README.md"
-    if not readme_path.exists():
-        return f"Error: Thread '{thread_name}' not found."
-
-    symlinks = _find_symlinks(thread_dir)
-    if symlinks:
-        rels = ", ".join(
-            str(p.relative_to(thread_dir)) if p != thread_dir else "."
-            for p in symlinks[:5]
-        )
-        more = f" (+{len(symlinks) - 5} more)" if len(symlinks) > 5 else ""
-        return (
-            f"Error: Thread '{thread_name}' contains symlinks: {rels}{more}. "
-            "Remove or resolve them before archiving — symlinks would leak "
-            "out-of-thread paths into the archive."
-        )
-
-    normalised_keywords = list(
-        dict.fromkeys(k.strip().lower() for k in (keywords or []) if k and k.strip())
-    )
-
-    started, last_active = _parse_readme_dates(readme_path, thread_dir)
-    archived = date.today().isoformat()
-
-    base = f"{date.today().year}-{thread_name}"
-    archive_dir = workspace / "archive"
-    archive_path = archive_dir / f"{base}.tar.gz"
-    summary_path = archive_dir / f"{base}.md"
-
-    if summary_path.exists() or archive_path.exists():
-        return f"Error: Archive '{base}' already exists."
-
-    archive_dir.mkdir(parents=True, exist_ok=True)
-
-    try:
-        with tarfile.open(archive_path, "w:gz") as t:
-            t.add(thread_dir, arcname=thread_name)
-    except OSError as e:
-        archive_path.unlink(missing_ok=True)
-        return f"Error: Failed to write archive: {e}"
-
-    err = _verify_archive(archive_path, thread_name)
-    if err:
-        archive_path.unlink(missing_ok=True)
-        return f"Error: {err}"
-
-    try:
-        summary_text = _emit_summary_yaml(
-            thread_name=thread_name,
-            started=started,
-            last_active=last_active,
-            archived=archived,
-            archive_file=f"{base}.tar.gz",
-            summary=summary,
-            keywords=normalised_keywords,
-            body=body,
-        )
-        summary_path.write_text(summary_text)
-    except OSError as e:
-        archive_path.unlink(missing_ok=True)
-        return f"Error: Failed to write summary: {e}"
-
-    shutil.rmtree(thread_dir)
-
-    return (
-        f"Archived '{thread_name}' to archive/{base}.tar.gz "
-        f"(summary: archive/{base}.md)"
-    )
 
 
 @mcp.tool()
-def restore_thread(workspace_dir: str, archive_base: str) -> str:
-    """Restore an archived thread back into threads/, deleting the archive on success.
+def restore_thread(workspace_dir: str, thread_name: str) -> str:
+    """Restore an archived thread: move it back from archive/ into threads/.
 
-    Writes a sessions/{YYYYMMDD}-restored.md file inside the restored thread
-    capturing the archive-time summary and body, so the LLM's interpretation
-    survives as thread history.
+    Takes the thread's own name. Archives created before 3.0 are tarballs and
+    are not unpacked by this tool; it returns
+    `{"error": "LEGACY_ARCHIVE", "tarball": ..., "reference": ...}` naming
+    the reference to follow.
 
     Args:
         workspace_dir: Directory hint for locating the workspace; typically the
             tracked workspace path from session context, or the caller's cwd on
             a fresh invocation. The tool probes this directory for threads/,
-            falls back to the configured default, and returns NO_WORKSPACE if neither works.
-        archive_base: Filename stem of the archive (e.g. '2026-last-months-project').
+            falls back to the configured default.
+        thread_name: Name of the archived thread.
     """
-    if not _validate_archive_base(archive_base):
-        return f"Error: Invalid archive base '{archive_base}'."
+    return _ws.restore(workspace_dir, thread_name)
 
-    workspace, _ = _resolve_workspace(workspace_dir)
-    if workspace is None:
-        return _no_workspace_message(workspace_dir)
-    archive_dir = workspace / "archive"
-
-    archive_path = _find_archive(archive_dir, archive_base)
-    if archive_path is None:
-        return f"Error: Archive '{archive_base}' not found."
-
-    if not _is_within(archive_path, archive_dir):
-        return f"Error: Archive '{archive_base}' resolves outside workspace/archive/."
-
-    top_levels, err = _read_top_level(archive_path)
-    if err:
-        return f"Error: {err}"
-    if len(top_levels) != 1:
-        return (
-            f"Error: Archive must have a single top-level directory; "
-            f"got {sorted(top_levels)}"
-        )
-    original_name = top_levels.pop()
-
-    threads_dir = workspace / "threads"
-    target_name = _pick_restore_name(threads_dir, original_name)
-    if target_name is None:
-        return (
-            f"Error: Too many '-restored' collisions for '{original_name}'. "
-            "Resolve manually."
-        )
-
-    staging = archive_dir / "tmp" / f"_restore_{archive_base}"
-    if staging.exists():
-        shutil.rmtree(staging)
-    staging.mkdir(parents=True, exist_ok=True)
-
-    err = _safe_extract(archive_path, staging)
-    if err:
-        shutil.rmtree(staging, ignore_errors=True)
-        return f"Error: {err}"
-
-    extracted = staging / original_name
-    if not extracted.is_dir():
-        shutil.rmtree(staging, ignore_errors=True)
-        return f"Error: Extracted archive missing expected top-level '{original_name}'."
-
-    summary_path = archive_dir / f"{archive_base}.md"
-    session_err = _write_restored_session(extracted, summary_path)
-    if session_err:
-        shutil.rmtree(staging, ignore_errors=True)
-        return f"Error: {session_err}"
-
-    threads_dir.mkdir(parents=True, exist_ok=True)
-    shutil.move(str(extracted), str(threads_dir / target_name))
-    shutil.rmtree(staging, ignore_errors=True)
-
-    archive_path.unlink()
-    summary_path.unlink(missing_ok=True)
-
-    suffix_note = ""
-    if target_name != original_name:
-        suffix_note = f" (renamed from '{original_name}' to avoid collision)"
-    return f"Restored to threads/{target_name}{suffix_note}"
-
-
-def _pick_restore_name(threads_dir: Path, original: str) -> str | None:
-    if not (threads_dir / original).exists():
-        return original
-    base = f"{original}-restored"
-    if not (threads_dir / base).exists():
-        return base
-    for i in range(2, 100):
-        candidate = f"{base}-{i}"
-        if not (threads_dir / candidate).exists():
-            return candidate
-    return None
-
-
-def _write_restored_session(thread_root: Path, summary_path: Path) -> str | None:
-    """Write a sessions/{YYYYMMDD}-restored.md file inside thread_root.
-
-    Pulls summary, body, and archive dates from summary_path's frontmatter.
-    Returns an error message on failure, None on success. Missing summary_path
-    is non-fatal — restore should still succeed.
-    """
-    if not summary_path.exists():
-        return None
-    try:
-        text = summary_path.read_text()
-    except OSError as e:
-        return f"Failed to read archive summary: {e}"
-
-    archived_date = _extract_yaml_field(text, "archived") or "?"
-    last_active = _extract_yaml_field(text, "last_active") or "?"
-    summary = _extract_yaml_field(text, "summary") or ""
-    body = _extract_body(text)
-
-    sessions_dir = thread_root / "sessions"
-    try:
-        sessions_dir.mkdir(parents=True, exist_ok=True)
-    except OSError as e:
-        return f"Failed to create sessions/ in restored thread: {e}"
-
-    today_compact = date.today().strftime("%Y%m%d")
-    session_name = f"{today_compact}-restored.md"
-    session_path = sessions_dir / session_name
-    n = 2
-    while session_path.exists():
-        session_path = sessions_dir / f"{today_compact}-restored-{n}.md"
-        n += 1
-
-    content = (
-        "# Session: Restored from archive\n\n"
-        f"**Date**: {date.today().isoformat()}\n"
-        f"**Archived**: {archived_date}\n"
-        f"**Last active before archive**: {last_active}\n\n"
-        "## Summary at archive time\n\n"
-        f"{summary or '(no summary recorded)'}\n\n"
-        "## Archive notes\n\n"
-        f"{body if body else '(no body recorded)'}\n"
-    )
-    try:
-        session_path.write_text(content)
-    except OSError as e:
-        return f"Failed to write restored-session file: {e}"
-    return None
-
-
-def _extract_body(text: str) -> str:
-    """Return the markdown body that follows the closing '---' of frontmatter."""
-    lines = text.splitlines(keepends=True)
-    if not lines or lines[0].strip() != "---":
-        return text.strip()
-    for i in range(1, len(lines)):
-        if lines[i].strip() == "---":
-            return "".join(lines[i + 1:]).strip()
-    return ""
 
 
 @mcp.tool()
 def list_archived_threads(workspace_dir: str) -> str:
-    """List archived threads with metadata for quick search.
+    """List the threads under archive/, numbered.
+
+    A thread archived before 3.0 is listed as a tarball, with the reference to
+    follow for unpacking it.
 
     Args:
         workspace_dir: Directory hint for locating the workspace; typically the
             tracked workspace path from session context, or the caller's cwd on
             a fresh invocation. The tool probes this directory for threads/,
-            falls back to the configured default, and returns NO_WORKSPACE if neither works.
+            falls back to the configured default.
     """
-    workspace, _ = _resolve_workspace(workspace_dir)
-    if workspace is None:
-        return _no_workspace_message(workspace_dir)
-    archive_dir = workspace / "archive"
-    if not archive_dir.exists():
-        return "No archived threads found."
-
-    entries = []
-    for md_path in archive_dir.glob("*.md"):
-        base = md_path.stem
-        if not _validate_archive_base(base):
-            continue
-        archive_path = _find_archive(archive_dir, base)
-        if archive_path is None:
-            continue
-        text = md_path.read_text()
-        started = _extract_yaml_field(text, "started") or "?"
-        last_active = _extract_yaml_field(text, "last_active") or "?"
-        archived = _extract_yaml_field(text, "archived") or "?"
-        keywords = _extract_yaml_keywords(text)
-        sort_key = archived if archived != "?" else "0"
-        entries.append((sort_key, base, started, last_active, archived, keywords))
-
-    if not entries:
-        return "No archived threads found."
-
-    entries.sort(key=lambda e: e[0], reverse=True)
-    lines = []
-    for _, base, started, last_active, archived, keywords in entries:
-        kw_str = ", ".join(keywords) if keywords else "—"
-        lines.append(
-            f"{base} — started {started}, last active {last_active}, "
-            f"archived {archived} [keywords: {kw_str}]"
-        )
-    return "\n".join(lines)
+    return _ws.list_archived_threads(workspace_dir)
 
 
-def _extract_yaml_field(text: str, field: str) -> str | None:
-    m = re.search(rf'^{field}:\s*"?([^"\n]+?)"?\s*$', text, re.MULTILINE)
-    return m.group(1).strip() if m else None
 
-
-def _extract_yaml_keywords(text: str) -> list:
-    inline = re.search(r"^keywords:\s*\[\s*\]\s*$", text, re.MULTILINE)
-    if inline:
-        return []
-    block = re.search(
-        r"^keywords:\s*\n((?:  - .+\n?)+)", text, re.MULTILINE
-    )
-    if not block:
-        return []
-    items = []
-    for line in block.group(1).splitlines():
-        m = re.match(r'^  - "?([^"]*)"?\s*$', line)
-        if m:
-            items.append(m.group(1).strip())
-    return items
 
 
 @mcp.tool()
-def inspect_archive(workspace_dir: str, archive_base: str) -> str:
-    """Extract an archive into archive/tmp/{base}/ for inspection without restoring.
+def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
+             state: str = "active") -> str:
+    """Add a todo to the thread's backlog.
 
-    The original .md and .tar.gz are left in place. Repeated calls overwrite cleanly.
-    Use /threads purge-tmp when done. The extraction target stays inside the workspace.
+    Every todo carries a link, always. Use a file under todos/ when the item has
+    state of its own, an external URL when there is an issue or PR, and
+    otherwise the session it came out of. A bare line cannot be expanded later,
+    which is the whole complaint about one-line next steps.
+
+    Returns `{"id": ...}`, the minted todo id. `set_window` and the retire
+    tools take it.
+
+    A refusal returns `{"error": CODE, ...}` and writes nothing: `STATE_UNKNOWN`
+    or `STATUS_UNKNOWN` with the `allowed` values, `NO_SUCH_ENTRY`,
+    `LINK_REQUIRED`.
 
     Args:
-        workspace_dir: Directory hint for locating the workspace; typically the
-            tracked workspace path from session context, or the caller's cwd on
-            a fresh invocation. The tool probes this directory for threads/,
-            falls back to the configured default, and returns NO_WORKSPACE if neither works.
-        archive_base: Filename stem of the archive (e.g. '2026-last-months-project').
+        workspace_dir: The tracked workspace path from session context.
+        thread_name: Name of the thread (kebab-case).
+        title: Short label for the todo.
+        link: Path or URL. Never omit; use the originating session if nothing else.
+        state: `active` or `parked`. Parked means deliberately not now.
     """
-    if not _validate_archive_base(archive_base):
-        return f"Error: Invalid archive base '{archive_base}'."
-
-    workspace, _ = _resolve_workspace(workspace_dir)
-    if workspace is None:
-        return _no_workspace_message(workspace_dir)
-    archive_dir = workspace / "archive"
-
-    archive_path = _find_archive(archive_dir, archive_base)
-    if archive_path is None:
-        return f"Error: Archive '{archive_base}' not found."
-
-    if not _is_within(archive_path, archive_dir):
-        return f"Error: Archive '{archive_base}' resolves outside workspace/archive/."
-
-    top_levels, err = _read_top_level(archive_path)
-    if err:
-        return f"Error: {err}"
-    thread_name = next(iter(top_levels), archive_base)
-
-    target = archive_dir / "tmp" / archive_base
-    if target.exists():
-        shutil.rmtree(target)
-    target.mkdir(parents=True, exist_ok=True)
-
-    err = _safe_extract(archive_path, target)
-    if err:
-        shutil.rmtree(target, ignore_errors=True)
-        return f"Error: {err}"
-
-    return (
-        f"Extracted to archive/tmp/{archive_base}/{thread_name}/ — read directly to inspect. "
-        f"Use /threads restore {archive_base} to bring it back, "
-        "or /threads purge-tmp when done."
-    )
+    return _threads.add_todo(workspace_dir, thread_name, title, link, state)
 
 
 @mcp.tool()
-def purge_archive_tmp(workspace_dir: str) -> str:
-    """Wipe archive/tmp/ entirely. Safe — every file in it is regeneratable from sibling archives.
+def retire_todo(workspace_dir: str, thread_name: str, todo_id: str, state: str) -> str:
+    """Retire a todo as done or dropped, removing it from any window.
+
+    Returns `{"id": ...}`.
 
     Args:
-        workspace_dir: Directory hint for locating the workspace; typically the
-            tracked workspace path from session context, or the caller's cwd on
-            a fresh invocation. The tool probes this directory for threads/,
-            falls back to the configured default, and returns NO_WORKSPACE if neither works.
+        workspace_dir: The tracked workspace path from session context.
+        thread_name: Name of the thread (kebab-case).
+        todo_id: The id from the index line, e.g. 20260808-growcer-prep.
+        state: `done` for something finished, `dropped` for something deliberately abandoned.
     """
-    workspace, _ = _resolve_workspace(workspace_dir)
-    if workspace is None:
-        return _no_workspace_message(workspace_dir)
-    tmp_dir = workspace / "archive" / "tmp"
-    if not tmp_dir.exists():
-        return "archive/tmp/ is already clean."
-    shutil.rmtree(tmp_dir)
-    return "Purged archive/tmp/."
+    return _threads.retire_todo(workspace_dir, thread_name, todo_id, state)
+
+
+@mcp.tool()
+def set_todo_state(workspace_dir: str, thread_name: str, todo_id: str, state: str) -> str:
+    """Park or unpark a todo without retiring it.
+
+    Returns `{"id": ...}`.
+
+    Args:
+        workspace_dir: The tracked workspace path from session context.
+        thread_name: Name of the thread (kebab-case).
+        todo_id: The id from the index line.
+        state: `active` or `parked`.
+    """
+    return _threads.set_todo_state(workspace_dir, thread_name, todo_id, state)
+
+
+@mcp.tool()
+def set_window(workspace_dir: str, thread_name: str, entry_ids: list[str],
+               section: str = "next_steps", kind: str = "todos") -> str:
+    """Choose which entries the README shows, and in what order.
+
+    Aim for about five ids.
+
+    Returns `{"window": ..., "size": ...}`.
+
+    Args:
+        workspace_dir: The tracked workspace path from session context.
+        thread_name: Name of the thread (kebab-case).
+        entry_ids: Ids in the order they should appear.
+        section: README section the window drives. Default `next_steps`.
+        kind: Index the ids belong to. Default `todos`.
+    """
+    return _threads.set_window(workspace_dir, thread_name, entry_ids, section, kind)
+
+
+@mcp.tool()
+def log_decision(workspace_dir: str, thread_name: str, title: str, summary: str,
+                 body: str, status: str = "proposed",
+                 supersedes: list[str] | None = None) -> str:
+    """Write a decision file and index it.
+
+    `summary` is read on every resume, so it carries real cost: one sentence,
+    one subject, what was decided and not why. If it needs "and" twice, that is
+    the signal to log several decisions instead.
+
+    `supersedes` retires the decisions it names.
+
+    Returns `{"id": ...}`, plus `superseded` listing what it retired. The file
+    is at ./decisions/<id>.md.
+
+    A refusal returns `{"error": CODE, ...}` and writes nothing: `STATE_UNKNOWN`
+    or `STATUS_UNKNOWN` with the `allowed` values, `NO_SUCH_ENTRY`,
+    `LINK_REQUIRED`.
+
+    Args:
+        workspace_dir: The tracked workspace path from session context.
+        thread_name: Name of the thread (kebab-case).
+        title: Short title for the decision.
+        summary: One sentence, one subject. WHAT was decided, no rationale.
+        body: Markdown body. Claim first, argument after.
+        status: `proposed`, `partially-locked` or `locked`.
+        supersedes: Ids of decisions this replaces; each is retired as superseded.
+    """
+    return _threads.log_decision(workspace_dir, thread_name, title, summary, body,
+                                 status, supersedes)
+
+
+@mcp.tool()
+def retire_decision(workspace_dir: str, thread_name: str, decision_id: str,
+                    state: str) -> str:
+    """Retire a decision, updating both the index and the file's own status.
+
+    Returns `{"id": ...}`.
+
+    Args:
+        workspace_dir: The tracked workspace path from session context.
+        thread_name: Name of the thread (kebab-case).
+        decision_id: The id from the index line.
+        state: `superseded` when something replaced it, `withdrawn` when it was
+            abandoned with nothing taking its place.
+    """
+    return _threads.retire_decision(workspace_dir, thread_name, decision_id, state)
+
+
+@mcp.tool()
+def index_directory(workspace_dir: str, thread_name: str, link: str) -> str:
+    """Index every file in one directory that is not indexed yet.
+
+    A description cannot be passed here, so an artifact that needs one is
+    indexed by index_file instead.
+
+    Idempotent, so a run that refused some files can be repeated once they are
+    fixed without duplicating what went in. A refusal does not stop the rest.
+
+    Returns JSON, and reports only deviations. `{}` means every file went in,
+    including when there were none to do; you asked for the directory, so
+    silence is the answer that it got them.
+
+        {"undated": ["notes"],
+         "refused": {"STATUS_UNKNOWN": ["20260301-old.md"]}}
+
+    `undated` names anything given the 19700101 date because nothing said when
+    it was from. It is indexed and usable; the id just sorts at the epoch.
+
+    `refused` maps a code to the files it applies to. Fix those and run again.
+
+    - `FRONTMATTER_UNPARSEABLE` — not valid YAML, so a decision's status cannot
+      be read. Usually an unquoted value containing ": ". Call index_file on
+      one of them for the parser's own message.
+    - `STATUS_UNKNOWN` — a decision declares a status this schema does not use.
+      Substitute the vocabulary in the file's frontmatter.
+    - `UNREADABLE` — the file could not be opened.
+
+    A bad request returns `{"error": CODE, "detail": ...}` and indexes nothing:
+    `OUTSIDE_THREAD`, `NOT_INDEXABLE`, or `NO_SUCH_DIRECTORY` when the kind is
+    valid but the thread has no such directory, which means it is malformed.
+
+    Args:
+        workspace_dir: The tracked workspace path from session context.
+        thread_name: Name of the thread (kebab-case).
+        link: Directory relative to the thread, e.g. ./sessions.
+    """
+    return _threads.index_directory(workspace_dir, thread_name, link)
+
+
+@mcp.tool()
+def index_file(workspace_dir: str, thread_name: str, link: str,
+               description: str = "", date: str = "") -> str:
+    """Index a file that is already in the thread.
+
+    It refuses a link that does not resolve, so write the file first.
+
+    Everything on the index line is derived from the file. The kind comes from
+    the directory, the id from a date found in the filename, and a decision's
+    state from its `status:` frontmatter, which must already use this schema's
+    vocabulary. A file whose name states no date takes the `date` you pass, and
+    is marked unknown if you pass none.
+
+    Calling it again on a file that is already indexed returns the id it
+    already has rather than adding a second entry, and replaces the description
+    if you pass a different one. That is how an artifact description gets
+    corrected or shortened, and how an unknown date is repaired; there is no
+    other way, since a file is never renamed and an index line is never
+    hand-edited. Passing no description leaves the existing one alone.
+
+    Returns JSON: `{"id": "20260316-summary-auth-flow"}`, with `"undated": true`
+    when nothing said what date the file is from, so it took 19700101, and
+    `"was"` carrying the previous id when a date changed it. Use the new one
+    from then on: ids are what set_window and the retire tools take.
+
+    A refusal returns `{"error": CODE, "detail": ...}` and writes nothing. Same
+    codes as index_directory, plus `MISSING` when the link resolves to nothing,
+    `METADATA` for a dotfile, which is never content,
+    `DESCRIPTION_TOO_LONG`, whose `detail` is the limit in characters, and
+    `DATE_INVALID`.
+
+    Args:
+        workspace_dir: The tracked workspace path from session context.
+        thread_name: Name of the thread (kebab-case).
+        link: Path relative to the thread, e.g. ./artifacts/20260813-notes-x.md.
+        description: One line saying what an artifact contains. Artifacts only,
+            and the only thing not read from the file: decisions and sessions
+            carry a `summary:` in their own frontmatter, artifacts have nowhere
+            to put one. It is read on every resume, so it costs something
+            permanently, the same way a decision's summary does. One sentence,
+            and refused beyond 200 characters. A thread whose sixteen artifacts
+            averaged 255 characters spent 30% of its resume on them.
+        date: `YYYY-MM-DD`, when the file is from. Only read when the filename
+            states no date, and the only way to repair an entry that was
+            indexed as unknown. Take it from the file's own contents, or from
+            the decision or session that produced it, or ask. Leave it out
+            rather than guessing: an unknown date is visibly unknown and can be
+            fixed later, where a plausible wrong one reads as fact and nothing
+            will ever flag it.
+    """
+    return _threads.index_file(workspace_dir, thread_name, link, description, date or None)
+
+
+@mcp.tool()
+def retire_artifact(workspace_dir: str, thread_name: str, artifact_id: str,
+                    state: str) -> str:
+    """Retire an artifact so it stops appearing as current.
+
+    Returns `{"id": ...}`.
+
+    Args:
+        workspace_dir: The tracked workspace path from session context.
+        thread_name: Name of the thread (kebab-case).
+        artifact_id: The id from the index line.
+        state: `superseded` when something replaced it, `stale` when it no longer
+            describes reality.
+    """
+    return _threads.retire_artifact(workspace_dir, thread_name, artifact_id, state)
+
+
+
+@mcp.tool()
+def save_session(workspace_dir: str, thread_name: str, slug: str, summary: str,
+                 keywords: str, next_context: str, body: str = "",
+                 status: str = "") -> str:
+    """Save the session log and the thread's Status paragraph.
+
+    `body` is optional. Leave it empty when the session file has already been
+    written or extended directly — a long body in one tool call has to fit the
+    model's output budget in a single response, where writing the file
+    incrementally does not. With no body, this updates the frontmatter, the
+    index entry and the dates and leaves the prose alone.
+
+    Returns `{"id": ..., "status_written": ...}`. A refusal returns
+    `{"error": CODE, ...}` and writes nothing.
+
+    Args:
+        workspace_dir: The tracked workspace path from session context.
+        thread_name: Name of the thread (kebab-case).
+        slug: Short kebab-case topic for the session, used in its id and filename.
+        summary: Up to 150 words on what was discussed and settled.
+        keywords: Comma-separated terms to search for later.
+        next_context: One or two sentences on where things stand and what is next.
+        body: Full markdown body. Omit to keep what the file already has.
+        status: The thread's Status paragraph. Omit to leave it unchanged.
+    """
+    # The tool surface takes "" because MCP needs a concrete default; the
+    # operation distinguishes "no body given" from "replace the body with
+    # nothing", so the empty string has to become None here.
+    return _threads.save_session(workspace_dir, thread_name, slug, summary,
+                                 keywords, next_context, body or None,
+                                 status or None)
+
+
+
+@mcp.tool()
+def migration_safety_check(workspace_dir: str, thread_name: str) -> str:
+    """Report whether a thread could be recovered if its migration goes wrong.
+
+    Advice, not a gate: the plugin never commits, so the user decides. The
+    migration keeps the original either way, but that only covers mistakes up
+    to the swap. Relay what it says.
+
+    Args:
+        workspace_dir: The tracked workspace path from session context.
+        thread_name: Name of the thread about to be migrated (kebab-case).
+    """
+    return _threads.migration_safety_check(workspace_dir, thread_name)
+
+
+@mcp.tool()
+def audit_migration(workspace_dir: str, original_thread: str,
+                    converted_thread: str) -> str:
+    """Compare a converted copy against the original and report what it lost.
+
+    It checks the parts that are decidable — files present in one tree and not the other, index entries
+    pointing at nothing, indexes out of date order, entries with no derivable
+    date. It cannot tell you whether the Quick Resume prose survived as todos
+    and Status; read that yourself.
+
+    Returns JSON. `{"clean": true}` when nothing mechanical is wrong; branch on
+    that before reading anything else. Otherwise the keys name what to fix:
+
+    - `unindexed` — {kind: [filenames]} present in the original and in no index.
+    - `missing_from_copy` — {kind: [filenames]} in the original, absent from the copy.
+    - `dangling` — {kind: [links]} indexed but pointing at nothing.
+    - `out_of_date_order` — [kind] whose index is not sorted by id.
+    - `v1_readme_sections` — schema 1 headings still in the converted README.
+
+    - `undated_entries` — how many took the 19700101 date. Not a problem by
+      itself, so it does not clear `clean`.
+    - `readme_sections_to_place` — `##` headings the original README carried
+      beyond the schema 1 template. Schema 1 read the README in full, so anyone
+      could add one; schema 2 composes from fixed slots, so an unplaced section
+      survives in the backup and is never read again. Also does not clear
+      `clean`: whether each found a home is judgement, and this tool cannot
+      see the answer.
+
+    `clean` never covers judgement: whether Quick Resume survived as todos and
+    Status is for a reader, and this tool does not look.
+
+    Args:
+        workspace_dir: The tracked workspace path from session context.
+        original_thread: The untouched original, e.g. my-thread-v1.
+        converted_thread: The converted copy, e.g. my-thread-v2.
+    """
+    return _threads.audit_migration(workspace_dir, original_thread, converted_thread)
 
 
 if __name__ == "__main__":

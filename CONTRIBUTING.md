@@ -34,9 +34,16 @@ ai-workspace-plugin/
 │   ├── init/SKILL.md
 │   └── threads/
 │       ├── SKILL.md
-│       └── scripts/mcp_server.py
-├── lib/
-│   └── workspace_utils.py           # Shared Python helpers
+│       └── scripts/mcp_server.py    # Tool declarations; delegates to lib/ai_workspace/
+├── lib/ai_workspace/                # Where the server's work happens
+│   ├── workspace.py                 # which workspace, where things live, archive/restore
+│   ├── config.py                    # the user-global config.json
+│   ├── plugin.py                    # plugin root, templates
+│   ├── text.py                      # frontmatter and YAML helpers
+│   └── threads/                     # the thread concept
+│       ├── __init__.py              # the API: one function per operation
+│       ├── schema.py                # schema -> module
+│       └── v1/                      # schema 1: the README is the thread
 ├── templates/
 │   ├── AGENTS.md.template           # Workspace instructions (vendor-neutral)
 │   ├── CLAUDE.md.template           # One-line "@AGENTS.md" import for Claude
@@ -58,7 +65,7 @@ ai-workspace-plugin/
 
 ```bash
 # Run unit tests
-uv run --with pytest --with 'mcp>=2' python3 -m pytest tests/ -v
+uv run --with pytest --with-requirements skills/threads/scripts/mcp_server.py python3 -m pytest tests/ -v
 ```
 
 ### Basic Testing
@@ -148,7 +155,7 @@ codex
 - **Clear description**: Explain what changes and why
 - **Update documentation**: If behavior changes, update relevant docs
 - **No workspace/ files**: PRs must not include workspace/ content
-- **Tests pass**: Run `uv run --with pytest --with 'mcp>=2' python3 -m pytest tests/ -v`
+- **Tests pass**: Run `uv run --with pytest --with-requirements skills/threads/scripts/mcp_server.py python3 -m pytest tests/ -v`
 
 ## Common Tasks
 
@@ -173,7 +180,7 @@ vim skills/threads/SKILL.md
 vim skills/threads/scripts/mcp_server.py
 
 # Run tests
-uv run --with pytest --with 'mcp>=2' python3 -m pytest tests/ -v
+uv run --with pytest --with-requirements skills/threads/scripts/mcp_server.py python3 -m pytest tests/ -v
 
 # Test the skill
 /ai-workspace:threads

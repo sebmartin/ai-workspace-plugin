@@ -15,7 +15,6 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parent.parent
 AGENTS_DIR = REPO_ROOT / "agents"
 CODEX_AGENTS_DIR = REPO_ROOT / ".codex-plugin" / "agents"
