@@ -525,8 +525,8 @@ class TestSaveSession:
         assert split_frontmatter(text)[0]["summary"] == "s"
 
     def test_a_file_written_before_the_save_is_indexed(self, tmp_path):
-        """ensure_stub once returned early for an existing file, before the
-        index write, so a log written directly never appeared on resume."""
+        """A session file that exists before the save still gets an index
+        entry, so resume lists it."""
         d = _thread(tmp_path)
         from datetime import date
 
@@ -540,8 +540,8 @@ class TestSaveSession:
         assert [e.id for e in idx.read(d, "sessions")[0]] == [sid]
 
     def test_a_blank_body_is_refused_and_the_file_kept(self, tmp_path):
-        """Required is not enough: an empty string would still write a log
-        holding only frontmatter over what the file had."""
+        """A blank body would replace the file with frontmatter alone, so it is
+        refused and the file is left as it was."""
         d = _thread(tmp_path)
         from datetime import date
 
