@@ -539,6 +539,22 @@ class TestSaveSession:
         save_session(str(tmp_path), "t", "topic", "s", "k", "n", "# Session\n")
         assert [e.id for e in idx.read(d, "sessions")[0]] == [sid]
 
+    def test_a_blank_body_is_refused_and_the_file_kept(self, tmp_path):
+        """Required is not enough: an empty string would still write a log
+        holding only frontmatter over what the file had."""
+        d = _thread(tmp_path)
+        from datetime import date
+
+        from ai_workspace.threads.v2 import ids, session
+        from mcp_server import save_session
+        p = session.session_path(d, ids.make_id(date.today(), "topic"))
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("# Session: topic\n\nWritten directly.\n")
+        for blank in ("", " \n"):
+            reply = save_session(str(tmp_path), "t", "topic", "s", "k", "n", blank)
+            assert json.loads(reply) == {"error": "BODY_EMPTY"}
+        assert p.read_text() == "# Session: topic\n\nWritten directly.\n"
+
     def test_saving_twice_indexes_once(self, tmp_path):
         d = _thread(tmp_path)
         from mcp_server import save_session

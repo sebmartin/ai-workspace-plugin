@@ -76,8 +76,8 @@ def save(thread_dir: Path, slug: str, summary: str, keywords: str,
     The body replaces whatever the file holds, including the stub's list of
     what the session created, which the body is expected to cover. One call
     writes the whole log: the output budget a session log competes for runs to
-    six figures of tokens and a log runs to thousands, so accommodating a size
-    that never arrives only bought a decision to get wrong.
+    six figures of tokens and a log runs to thousands, so the option was
+    removed.
     """
     today = today or date.today()
     session_id = ensure_stub(thread_dir, slug, today=today)

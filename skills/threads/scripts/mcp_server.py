@@ -429,11 +429,13 @@ def save_session(workspace_dir: str, thread_name: str, slug: str, summary: str,
                  status: str = "") -> str:
     """Save the session log and the thread's Status paragraph.
 
-    One call writes the whole log. The body travels in it like every other
-    field; there is no size at which that stops working, and nothing to decide.
+    One call writes the whole log. The body replaces everything the session
+    file holds, including anything written to it earlier, so it must be the
+    complete log.
 
     Returns `{"id": ..., "status_written": ...}`. A refusal returns
-    `{"error": CODE, ...}` and writes nothing.
+    `{"error": CODE, ...}` and writes nothing. `BODY_EMPTY` means the body was
+    blank; nothing was saved, and the call needs the full log.
 
     Args:
         workspace_dir: The tracked workspace path from session context.

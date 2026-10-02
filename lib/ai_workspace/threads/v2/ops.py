@@ -468,6 +468,8 @@ def save_session(thread, slug: str, summary: str, keywords: str,
     """
     from ai_workspace.threads.v2 import readme as readme_mod
 
+    if not body.strip():
+        return json.dumps({"error": "BODY_EMPTY"})
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
     session_id, _ = session.save(thread.dir, slug, summary, keywords, next_context, body)
