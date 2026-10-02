@@ -150,13 +150,7 @@ Read its files directly, whenever another thread holds something you need. Do no
 
 A schema 1 thread keeps all of that inline in its README, so one read covers it.
 
-### Writing to another thread
-
-**Hand it to a subagent.** Resuming loads the other thread's status, decisions and sessions into your context, where they mix with the thread you are working on. Give a subagent the workspace path, the thread name and the task. It invokes this skill, resumes that thread, does the work, and returns a short report of what it wrote: ids and file paths, not the thread's content. Its context is discarded, so yours is unchanged and your active thread stays the same.
-
-Do not resume the other thread yourself, and do not call a write tool on it. The write tools take a thread name and will do it, so nothing stops you but this. If you cannot start a subagent, say so and ask whether to switch to that thread.
-
-Linking two threads is the exception, and `link-thread.md` says why.
+**Never write to a thread you have not resumed.** The write tools take a thread name and will do it, so nothing stops you but this.
 
 ### What resume returns
 

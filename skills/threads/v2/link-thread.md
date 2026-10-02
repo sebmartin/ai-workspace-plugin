@@ -32,10 +32,9 @@ For `create child`, create the thread first, then link it.
 
 ## Look at the other thread before you write to it
 
-This is the one operation on another thread that you do yourself instead of
-handing to a subagent: it changes a header line on each end, and it needs what you
-already know about the current thread. It is still someone else's thread. Open
-its README before editing it.
+This is the one operation that writes to a thread you have not resumed, so it is
+the one place the rule against that does not apply. It is still someone else's
+thread. Open its README before editing it.
 
 **Check its schema.** A `schema-version` file at its root holding `2` means the
 model you are working in. Anything else, or no file at all, means an older
