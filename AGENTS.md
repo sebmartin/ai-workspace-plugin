@@ -299,10 +299,11 @@ are erased by the next render without a word.
 - **Docstrings and signatures are the model-facing API.** Changing one changes
   behaviour for every user. When refactoring underneath, compare them against
   the previous revision programmatically rather than by eye.
-- **Convert at the boundary.** MCP needs concrete defaults, so a tool takes
-  `body: str = ""` while the operation distinguishes "not given" from "set it
-  to nothing". The tool passes `body or None`. Dropping that conversion once
-  wiped session files that had been written incrementally.
+- **An optional argument is a decision the caller can get wrong.** Make one
+  optional only when leaving it out and passing it are both correct. `status`
+  on `save_session` qualifies, since a save that leaves the Status paragraph
+  alone is a valid save. `body` does not, since a session log without one is
+  not a log.
 
 ### Thread Structure
 

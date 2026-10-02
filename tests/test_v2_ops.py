@@ -509,24 +509,65 @@ class TestSaveSession:
         assert "Round 3 booked for Friday." in readme
         assert "**Last Session**:" in readme
 
-    def test_body_is_optional_and_keeps_what_is_there(self, tmp_path):
+    def test_the_body_replaces_the_stub(self, tmp_path):
+        """The stub lists what the session created; the body is expected to
+        cover it, so a save is one write rather than an append."""
         d = _thread(tmp_path)
         from ai_workspace.threads.v2 import session
         from mcp_server import save_session
         sid = session.ensure_stub(d, "topic")
         p = session.session_path(d, sid)
-        p.write_text(p.read_text() + "\nWritten incrementally by hand.\n")
-        save_session(str(tmp_path), "t", "topic", "s", "k", "n")
+        session.note_created(d, sid, "todo 20260101-x")
+        save_session(str(tmp_path), "t", "topic", "s", "k", "n", "# Session\n\nWhat happened.\n")
         text = p.read_text()
-        assert "Written incrementally by hand." in text
+        assert "Created during this session" not in text
+        assert "What happened." in text
         assert split_frontmatter(text)[0]["summary"] == "s"
+
+    def test_a_file_written_before_the_save_is_indexed(self, tmp_path):
+        """A session file that exists before the save still gets an index
+        entry, so resume lists it."""
+        d = _thread(tmp_path)
+        from datetime import date
+
+        from ai_workspace.threads.v2 import ids, session
+        from mcp_server import save_session
+        sid = ids.make_id(date.today(), "topic")
+        p = session.session_path(d, sid)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("# Session: topic\n\nWritten directly.\n")
+        save_session(str(tmp_path), "t", "topic", "s", "k", "n", "# Session\n")
+        assert [e.id for e in idx.read(d, "sessions")[0]] == [sid]
+
+    def test_a_blank_body_is_refused_and_the_file_kept(self, tmp_path):
+        """A blank body would replace the file with frontmatter alone, so it is
+        refused and the file is left as it was."""
+        d = _thread(tmp_path)
+        from datetime import date
+
+        from ai_workspace.threads.v2 import ids, session
+        from mcp_server import save_session
+        p = session.session_path(d, ids.make_id(date.today(), "topic"))
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("# Session: topic\n\nWritten directly.\n")
+        for blank in ("", " \n"):
+            reply = save_session(str(tmp_path), "t", "topic", "s", "k", "n", blank)
+            assert json.loads(reply) == {"error": "BODY_EMPTY"}
+        assert p.read_text() == "# Session: topic\n\nWritten directly.\n"
+
+    def test_saving_twice_indexes_once(self, tmp_path):
+        d = _thread(tmp_path)
+        from mcp_server import save_session
+        save_session(str(tmp_path), "t", "topic", "s", "k", "n", "# Session\n")
+        save_session(str(tmp_path), "t", "topic", "s", "k", "n", "# Session\n")
+        assert len(idx.read(d, "sessions")[0]) == 1
 
     def test_saving_clears_the_unsaved_marker(self, tmp_path):
         d = _thread(tmp_path)
         from ai_workspace.threads.v2 import session
         from mcp_server import save_session
         session.ensure_stub(d, "topic")
-        save_session(str(tmp_path), "t", "topic", "s", "k", "n")
+        save_session(str(tmp_path), "t", "topic", "s", "k", "n", "# Session\n")
         sid = _only_id(d, "sessions")
         assert session.STUB_MARKER not in (d / "sessions" / f"{sid}.md").read_text()
 
@@ -534,7 +575,7 @@ class TestSaveSession:
         """archive_thread greps this line; a render must never drop it."""
         d = _thread(tmp_path)
         from mcp_server import save_session
-        save_session(str(tmp_path), "t", "topic", "s", "k", "n", status="x")
+        save_session(str(tmp_path), "t", "topic", "s", "k", "n", "# Session\n", status="x")
         import re
         assert re.search(r"(?m)^\*\*Last Session\*\*: \d{4}-\d{2}-\d{2}$",
                          (d / "README.md").read_text())
@@ -542,7 +583,8 @@ class TestSaveSession:
     def test_refused_on_schema_1(self, tmp_path):
         _thread(tmp_path, "old", schema=1)
         from mcp_server import save_session
-        assert "NEEDS_MIGRATION" in save_session(str(tmp_path), "old", "s", "s", "k", "n")
+        assert "NEEDS_MIGRATION" in save_session(
+            str(tmp_path), "old", "s", "s", "k", "n", "# Session\n")
 
 
 class TestDating:
