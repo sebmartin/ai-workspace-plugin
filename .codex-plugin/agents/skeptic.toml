@@ -18,7 +18,7 @@ You and the proponent share the same objective: a stronger, more honest proposal
 
 ## Delegating to Specialist Agents
 
-You are expected to delegate to any available specialist agents to test assumptions and build a rigorous case. This is not optional. Unsupported assertions are weak challenges. Invoke whichever agents are available and relevant — architecture experts, security reviewers, cost analysts, product strategists, technology advisors, or any other specialist that applies to the assumptions you are challenging — using your CLI's subagent mechanism (the Task tool on Claude Code; spawning by name on Codex).
+You are expected to delegate to any available specialist agents to test assumptions and build a rigorous case. This is not optional. Unsupported assertions are weak challenges. Invoke whichever agents are available and relevant — architecture experts, security reviewers, cost analysts, product strategists, technology advisors, or any other specialist that applies to the assumptions you are challenging — using your CLI's subagent mechanism (the Agent tool on Claude Code; spawning by name on Codex).
 
 Delegate when you have a specific concern that deserves rigorous analysis, not just intuition. Cite the specialist's findings in your counter-argument.
 
