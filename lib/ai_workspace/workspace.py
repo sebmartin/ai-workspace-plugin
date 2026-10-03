@@ -361,7 +361,7 @@ def list_threads(workspace_dir: str) -> str:
     directory = located.path
 
     if not directory.exists():
-        return "No threads directory found. Use /threads create to start one."
+        return "No threads directory found. Create a thread to get started."
 
     entries = []
     for item in sorted(directory.iterdir()):
@@ -370,7 +370,7 @@ def list_threads(workspace_dir: str) -> str:
             entries.append((item.name, readme.stat().st_mtime))
 
     if not entries:
-        return "No threads found. Use /threads create to start one."
+        return "No threads found. Create a thread to get started."
 
     entries.sort(key=lambda pair: pair[1], reverse=True)
     return "\n".join(f"{i}. {name}" for i, (name, _) in enumerate(entries, 1))

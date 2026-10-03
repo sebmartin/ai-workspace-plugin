@@ -12,8 +12,8 @@ Pressure-test the current proposal by running a structured dialogue between a `p
 ```
 /ai-workspace:debate        # 2 rounds (default, Claude Code)
 /ai-workspace:debate 3      # custom number of rounds (Claude Code)
-/debate                     # 2 rounds (default, Codex CLI)
-/debate 3                   # custom number of rounds (Codex CLI)
+$debate                     # 2 rounds (default, Codex CLI)
+$debate 3                   # custom number of rounds (Codex CLI)
 ```
 
 ## Steps
@@ -21,8 +21,8 @@ Pressure-test the current proposal by running a structured dialogue between a `p
 ### 1. Extract the Proposal
 
 Identify the current proposal or idea from:
-- The active thread's README.md Quick Resume section
 - The current conversation context
+- The active thread's Status and the context `resume_thread` returned
 
 Summarize it in 2-3 sentences: what is being proposed, what problem it solves, and what the key assumptions are.
 
@@ -61,7 +61,7 @@ Each round follows this structure:
 
 Invoke each agent as a subagent so they run in isolated context. The exact mechanism depends on the CLI:
 
-- **Claude Code**: use the `Task` tool with `subagent_type: "proponent"` or `subagent_type: "skeptic"`. Multiple subagents can run in parallel.
+- **Claude Code**: use the Agent tool with `subagent_type: "ai-workspace:proponent"` or `subagent_type: "ai-workspace:skeptic"`. The bare names do not resolve. Multiple subagents can run in parallel.
 - **Codex CLI**: ask Codex to spawn the `proponent` or `skeptic` subagent by name (Codex spawns subagents on explicit request). Requires the agent `.toml` files to be present in `~/.codex/agents/` — the `init` skill installs these.
 
 In either case, pass the full debate context so far so each agent builds on, not repeats, what came before.
@@ -82,7 +82,7 @@ Wait for the user's answer. Resume the debate from where it paused with the new 
 
 #### Specialist Agent Delegation
 
-Either agent may delegate to any available specialist agents (architect, security reviewer, cost analyst, etc.) to validate assumptions. On Claude Code these are invoked via the Task tool; on Codex CLI they are spawned by name from `~/.codex/agents/`. Their findings are included in that agent's turn output and carried forward in the debate context. The richer the set of available specialist agents, the more rigorous the debate.
+Either agent may delegate to any available specialist agents (architect, security reviewer, cost analyst, etc.) to validate assumptions. On Claude Code these are invoked via the Agent tool; on Codex CLI they are spawned by name from `~/.codex/agents/`. Their findings are included in that agent's turn output and carried forward in the debate context. The richer the set of available specialist agents, the more rigorous the debate.
 
 ---
 
@@ -106,10 +106,10 @@ Present the synthesis to the user before saving.
 
 Save to the active thread:
 
-- **First debate on this thread**: Create `threads/{thread-name}/artifacts/debate-YYYYMMDD.md`
-- **Additional rounds requested**: Update the existing debate artifact in place. Do not create a new file.
+- **First debate on this thread**: Create `threads/{thread-name}/artifacts/YYYYMMDD-debate-{slug}.md`, then index it with `index_file` and a one-sentence description of what was debated and where it landed. An artifact that is not indexed never appears on resume.
+- **Additional rounds requested**: Update the existing debate artifact in place. Do not create a new file. If the conclusion changed, call `index_file` again with the new description.
 
-Show the relative file path (e.g. `./threads/my-thread/artifacts/debate-20260307.md`) so the user can open it directly.
+Show the relative file path (e.g. `./threads/my-thread/artifacts/20260307-debate-auth-flow.md`) so the user can open it directly.
 
 If no active thread is set, present the synthesis inline and ask the user if they want to save it.
 

@@ -5,16 +5,15 @@ description: Thread management for organizing long-running discussions. Use when
 
 # Threads Skill
 
-You are a thread management assistant that helps organize and navigate long-running discussion threads.
-
+Threads organize long-running discussions so they can be picked up across sessions.
 
 ## Behavioral Principles
 
-**Don't be a sycophant.** Telling me what I want to hear, softening criticism to avoid friction, or agreeing when you actually disagree is actively harmful — not a safe default. I'd rather hear a hard truth than comfortable validation. Push back when you disagree. Correct me when I'm wrong. If you don't know, say so.
+**Don't be a sycophant.** Telling the user what they want to hear, softening criticism to avoid friction, or agreeing when you actually disagree is actively harmful, and it is never the safe default. A hard truth serves them better than comfortable validation. Push back when you disagree. Correct them when they are wrong. If you don't know, say so.
 
 **Exercise inference carefully.** Reading between the lines is fine, but follow these rules when you're guessing or uncertain:
 
-1. **Exhaust cheap options first.** Before inferring, try all reasonable ways to find a confident answer: read the thread's files, search the web, check context and tools. A "reasonable" search is one that takes under 5 minutes and doesn't burn excessive tokens.
+1. **Exhaust cheap options first.** Before inferring, try all reasonable ways to find a confident answer: read the thread's files and any other files at hand, search the web, check context and tools. A "reasonable" search is one that takes under 5 minutes and doesn't burn excessive tokens.
 2. **Keep what you found apart from what you are inferring.** Don't pretend to know. Say which part is a guess and how confident you are in it.
 3. **If only expensive options remain**, offer your best guess with that confidence, and name the expensive operation(s) that could raise it.
 
@@ -22,7 +21,7 @@ You are a thread management assistant that helps organize and navigate long-runn
 and both are working states. A dirty tree while you work on a thread is the normal
 condition and needs no remark; no repository at all is not a gap to fill. Do not
 suggest committing, staging, or initialising anything for the sake of a thread's
-files, and do not report on the state of the index. The check before a migration
+files, and do not remark on whether they are committed. The check before a migration
 is the one place to ask, and it asks once. When a thread's subject is git,
 branches or pull requests, discuss them as you would any other topic, even when
 the workspace is the repository in question.
@@ -163,7 +162,7 @@ A schema 1 thread keeps all of that inline in its README, so one read covers it.
 
 ### Writing
 
-Never hand-edit an index or the README's Next steps section; both are rendered from what the tools write, and a hand edit will be overwritten. Status, About, the header fields and `memory.md` are yours to edit directly, and no tool writes any of them.
+Never hand-edit an index or the README's Next steps section; both are rendered from what the tools write, and a hand edit will be overwritten. Status is written by `save_session`'s `status` argument, or edited directly between saves. About, the header fields and `memory.md` have no tool; edit them directly.
 
 A render replaces `## Next steps` down to the next `##`, so never leave it as the last section of a README. Anything below it is swallowed without a word.
 
@@ -179,6 +178,16 @@ A render replaces `## Next steps` down to the next `##`, so never leave it as th
 | Index a whole directory at once | `index_directory` |
 | Retire an artifact | `retire_artifact` |
 | Save | `save_session` |
+
+**Writing an artifact.** Put it in `artifacts/`, named `YYYYMMDD-kind-slug.md`: the
+date it was written, a kind such as `spec`, `notes`, `report` or `bug`, and a short
+slug. Write the file, then call `index_file` with a one-sentence description. The
+id's date comes from the filename, so a name without one is indexed as undated
+unless you pass `date`.
+
+**A todo with state of its own gets a file.** Name it `todos/YYYYMMDD-slug.md`,
+start it from `get_skill_file("templates/v2/todo-template.md")`, and pass its path
+as `add_todo`'s link.
 
 **Linking two threads has no tool.** The three link fields in the header are
 hand-edited, and the work is judgement rather than mechanism: you have to look
@@ -218,7 +227,7 @@ up belongs in a file you open when the question comes up.
 one still being argued, which is a decision with `proposed` status. Its `summary:` already
 loads on every resume.
 
-Date and attribute each entry, `[Seb, 2026-08-13]`, so it stays possible to tell which
+Date and attribute each entry with the user's name, `[Name, 2026-08-13]`, so it stays possible to tell which
 ones still apply.
 
 **Check the file before adding to it**, since you are holding all of it. When something new
@@ -271,7 +280,7 @@ For trivial commands, instructions are inline. For complex commands, read the re
 |---|---|---|
 | `list` | Call `list_threads`, output directly, no commentary | inline |
 | `resume` | Call `resume_thread`; schema 2 is described above, anything older needs its file | inline |
-| `open` | Open `threads/{name}` or `threads` under the resolved `Workspace:` path with the platform's opener (`open` on macOS, `xdg-open` on Linux, `start` on Windows); confirm | inline |
+| `open` | Open `threads/{name}` or `threads` under the resolved `Workspace:` path with the platform's opener (`open` on macOS, `xdg-open` on Linux, `explorer` on Windows); confirm | inline |
 | `set-workspace` | Call `set_default_workspace` with provided path, then offer to install global permissions | inline |
 | `archive-thread` | Archive, restore, and list archived threads | `skills/threads/archive-thread.md` |
 | `unpack-legacy-archive` | Restore a `.tar.gz` archive from before 3.0 | `skills/threads/unpack-legacy-archive.md` |

@@ -112,7 +112,7 @@ You've lined up a septic designer and structural engineer. You open the thread t
 >
 > ---
 >
-> **Working on thread: cottage-build** (schema 2)
+> **Working on thread: cottage-build** (schema 1)
 
 You ask what's still needed for a complete permit application:
 

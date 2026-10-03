@@ -27,9 +27,9 @@ restore it first, which moves it back into `threads/`.
 **Codex CLI:**
 
 ```
-/threads create <name>
-/threads resume <name>
-/threads
+$threads create <name>
+$threads resume <name>
+$threads
 ```
 
 Or just describe what you want, both clients understand natural language.

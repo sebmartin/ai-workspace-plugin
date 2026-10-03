@@ -56,7 +56,7 @@ failure it exists to prevent.
 
 ## Migration
 
-A schema 1 thread cannot be saved with the current tools; every schema 2 write tool returns `Status: NEEDS_MIGRATION`.
+A schema 1 thread cannot be saved with the current tools; every schema 2 write tool returns `{"error": "NEEDS_MIGRATION", ...}`.
 
 **Raise it on resume, as a question, not at save time.** The resume format
 above carries both the banner and the ask. A session that discovers this at
