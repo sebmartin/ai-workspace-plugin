@@ -2,13 +2,10 @@
   "permissions": {
     "allow": [
       "Bash(cp:*)",
-      "Bash(explorer:*)",
       "Bash(find:*)",
       "Bash(ls:*)",
       "Bash(mkdir:*)",
       "Bash(mv:*)",
-      "Bash(open:*)",
-      "Bash(xdg-open:*)",
       "Edit(threads/**)",
       "Glob(*)",
       "Read(archive/**)",

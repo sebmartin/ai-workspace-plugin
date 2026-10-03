@@ -105,22 +105,6 @@ def get_skill_file(relative_path: str) -> str:
 
 
 @mcp.tool()
-def resolve_workspace(workspace_dir: str) -> str:
-    """Resolve which workspace directory to use for thread operations.
-
-    Checks for a local threads/ directory first, then falls back to the
-    configured default workspace.
-
-    Args:
-        workspace_dir: Directory hint for locating the workspace; typically the
-            caller's current working directory. The tool probes this directory
-            for threads/, falls back to the configured default, and returns the
-            result with its source ("local", "config", or "none").
-    """
-    return _ws.resolve_workspace(workspace_dir=workspace_dir)
-
-
-@mcp.tool()
 def set_default_workspace(workspace_path: str) -> str:
     """Set the default workspace directory for thread operations.
 
@@ -193,8 +177,7 @@ def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
 
     Every todo carries a link, always. Use a file under todos/ when the item has
     state of its own, an external URL when there is an issue or PR, and
-    otherwise the session it came out of. A bare line cannot be expanded later,
-    which is the whole complaint about one-line next steps.
+    otherwise the session it came out of.
 
     Returns `{"id": ...}`, the minted todo id. `set_window` and the retire
     tools take it.
@@ -244,9 +227,8 @@ def set_todo_state(workspace_dir: str, thread_name: str, todo_id: str, state: st
 
 
 @mcp.tool()
-def set_window(workspace_dir: str, thread_name: str, entry_ids: list[str],
-               section: str = "next_steps", kind: str = "todos") -> str:
-    """Choose which entries the README shows, and in what order.
+def set_window(workspace_dir: str, thread_name: str, entry_ids: list[str]) -> str:
+    """Choose which todos the README's Next steps shows, and in what order.
 
     Aim for about five ids.
 
@@ -255,11 +237,9 @@ def set_window(workspace_dir: str, thread_name: str, entry_ids: list[str],
     Args:
         workspace_dir: The tracked workspace path from session context.
         thread_name: Name of the thread (kebab-case).
-        entry_ids: Ids in the order they should appear.
-        section: README section the window drives. Default `next_steps`.
-        kind: Index the ids belong to. Default `todos`.
+        entry_ids: Todo ids in the order they should appear.
     """
-    return _threads.set_window(workspace_dir, thread_name, entry_ids, section, kind)
+    return _threads.set_window(workspace_dir, thread_name, entry_ids)
 
 
 @mcp.tool()
@@ -322,8 +302,7 @@ def index_directory(workspace_dir: str, thread_name: str, link: str) -> str:
     fixed without duplicating what went in. A refusal does not stop the rest.
 
     Returns JSON, and reports only deviations. `{}` means every file went in,
-    including when there were none to do; you asked for the directory, so
-    silence is the answer that it got them.
+    including when there were none to do.
 
         {"undated": ["notes"],
          "refused": {"STATUS_UNKNOWN": ["20260301-old.md"]}}
@@ -367,10 +346,9 @@ def index_file(workspace_dir: str, thread_name: str, link: str,
 
     Calling it again on a file that is already indexed returns the id it
     already has rather than adding a second entry, and replaces the description
-    if you pass a different one. That is how an artifact description gets
-    corrected or shortened, and how an unknown date is repaired; there is no
-    other way, since a file is never renamed and an index line is never
-    hand-edited. Passing no description leaves the existing one alone.
+    if you pass a different one. That is the only way to correct an artifact
+    description or repair an unknown date. Passing no description leaves the
+    existing one alone.
 
     Returns JSON: `{"id": "20260316-summary-auth-flow"}`, with `"undated": true`
     when nothing said what date the file is from, so it took 19700101, and
@@ -387,20 +365,14 @@ def index_file(workspace_dir: str, thread_name: str, link: str,
         workspace_dir: The tracked workspace path from session context.
         thread_name: Name of the thread (kebab-case).
         link: Path relative to the thread, e.g. ./artifacts/20260813-notes-x.md.
-        description: One line saying what an artifact contains. Artifacts only,
-            and the only thing not read from the file: decisions and sessions
-            carry a `summary:` in their own frontmatter, artifacts have nowhere
-            to put one. It is read on every resume, so it costs something
-            permanently, the same way a decision's summary does. One sentence,
-            and refused beyond 200 characters. A thread whose sixteen artifacts
-            averaged 255 characters spent 30% of its resume on them.
+        description: One sentence saying what an artifact contains, refused
+            beyond 200 characters. Artifacts only; decisions and sessions carry
+            a `summary:` in their own frontmatter. It is read on every resume.
         date: `YYYY-MM-DD`, when the file is from. Only read when the filename
-            states no date, and the only way to repair an entry that was
-            indexed as unknown. Take it from the file's own contents, or from
-            the decision or session that produced it, or ask. Leave it out
-            rather than guessing: an unknown date is visibly unknown and can be
-            fixed later, where a plausible wrong one reads as fact and nothing
-            will ever flag it.
+            states no date. Take it from the file's own contents, or from the
+            decision or session that produced it, or ask. Leave it out rather
+            than guessing: an unknown date can be repaired later, and a wrong
+            one is never flagged.
     """
     return _threads.index_file(workspace_dir, thread_name, link, description, date or None)
 
@@ -457,9 +429,9 @@ def save_session(workspace_dir: str, thread_name: str, slug: str, summary: str,
 def migration_safety_check(workspace_dir: str, thread_name: str) -> str:
     """Report whether a thread could be recovered if its migration goes wrong.
 
-    Advice, not a gate: the plugin never commits, so the user decides. The
-    migration keeps the original either way, but that only covers mistakes up
-    to the swap. Relay what it says.
+    The result is advice for the user, who decides whether to go ahead; the
+    plugin never commits. The migration keeps the original either way, but
+    that only covers mistakes up to the swap. Relay what it says.
 
     Args:
         workspace_dir: The tracked workspace path from session context.
@@ -473,10 +445,10 @@ def audit_migration(workspace_dir: str, original_thread: str,
                     converted_thread: str) -> str:
     """Compare a converted copy against the original and report what it lost.
 
-    It checks the parts that are decidable — files present in one tree and not the other, index entries
-    pointing at nothing, indexes out of date order, entries with no derivable
-    date. It cannot tell you whether the Quick Resume prose survived as todos
-    and Status; read that yourself.
+    It checks the parts that are decidable: files present in one tree and
+    missing from the other, index entries pointing at nothing, indexes out of
+    date order, entries with no derivable date. It cannot tell you whether the
+    Quick Resume prose survived as todos and Status; read that yourself.
 
     Returns JSON. `{"clean": true}` when nothing mechanical is wrong; branch on
     that before reading anything else. Otherwise the keys name what to fix:
@@ -490,14 +462,9 @@ def audit_migration(workspace_dir: str, original_thread: str,
     - `undated_entries` — how many took the 19700101 date. Not a problem by
       itself, so it does not clear `clean`.
     - `readme_sections_to_place` — `##` headings the original README carried
-      beyond the schema 1 template. Schema 1 read the README in full, so anyone
-      could add one; schema 2 composes from fixed slots, so an unplaced section
-      survives in the backup and is never read again. Also does not clear
-      `clean`: whether each found a home is judgement, and this tool cannot
-      see the answer.
-
-    `clean` never covers judgement: whether Quick Resume survived as todos and
-    Status is for a reader, and this tool does not look.
+      beyond the schema 1 template. A section left unplaced is never read
+      again. Also does not clear `clean`, since whether each found a home is
+      judgement.
 
     Args:
         workspace_dir: The tracked workspace path from session context.

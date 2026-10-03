@@ -148,7 +148,6 @@ You don't need to memorize these. You can tell Claude what you want in plain Eng
 | `/ai-workspace:threads create-child <name>` | Create a child thread linked to the current thread |
 | `/ai-workspace:threads link-parent <name>` | Set a parent thread (bidirectional) |
 | `/ai-workspace:threads link-related <name>` | Link two threads as related |
-| `/ai-workspace:threads open <name>` | Open the thread folder in the file manager |
 | `/ai-workspace:threads set-workspace <path>` | Set default workspace for cross-directory access |
 | `/ai-workspace:threads archive <name>` | Move a thread to archive/ |
 | `/ai-workspace:threads restore <name>` | Move an archived thread back to threads/ |

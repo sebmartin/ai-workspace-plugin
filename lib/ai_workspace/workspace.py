@@ -53,28 +53,6 @@ def _no_workspace_message(workspace_dir: str) -> str:
     return json.dumps({"error": "NO_WORKSPACE", "tried": workspace_dir})
 
 
-def resolve_workspace(workspace_dir: str) -> str:
-    """Resolve which workspace directory to use for thread operations.
-
-    Checks for a local threads/ directory first, then falls back to the
-    configured default workspace. Kept as an optional diagnostic — operating
-    tools (list_threads, create_thread, etc.) resolve internally now.
-
-    Args:
-        workspace_dir: Directory hint for locating the workspace; typically the
-            caller's current working directory. The tool probes this directory
-            for threads/, falls back to the configured default, and returns the
-            result with its source ("local", "config", or "none").
-    """
-    workspace, source = _resolve_workspace(workspace_dir)
-    return json.dumps(
-        {
-            "workspace_dir": str(workspace) if workspace is not None else None,
-            "source": source,
-        }
-    )
-
-
 def set_default_workspace(workspace_path: str) -> str:
     """Set the default workspace directory for thread operations.
 
