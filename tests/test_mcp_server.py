@@ -21,7 +21,6 @@ from mcp_server import (
     get_skill_file,
     list_archived_threads,
     list_threads,
-    resolve_workspace,
     restore_thread,
     resume_thread,
     set_default_workspace,
@@ -279,10 +278,15 @@ class TestCreateThread:
         assert (workspace / "threads" / "from-retry" / "README.md").exists()
 
 
+def _resolve(hint):
+    path, source = ws_module._resolve_workspace(hint)
+    return {"workspace_dir": str(path) if path is not None else None, "source": source}
+
+
 class TestResolveWorkspace:
     def test_local_threads_dir(self, tmp_path):
         (tmp_path / "threads").mkdir()
-        result = json.loads(resolve_workspace(str(tmp_path)))
+        result = _resolve(str(tmp_path))
         assert result["source"] == "local"
         assert result["workspace_dir"] == str(tmp_path)
 
@@ -304,7 +308,7 @@ class TestResolveWorkspace:
         cwd = tmp_path / "other-repo"
         cwd.mkdir()
 
-        result = json.loads(resolve_workspace(str(cwd)))
+        result = _resolve(str(cwd))
         assert result["source"] == "config"
         assert result["workspace_dir"] == str(workspace)
 
@@ -313,7 +317,7 @@ class TestResolveWorkspace:
         data_dir.mkdir()
         monkeypatch.setenv("AI_WORKSPACE_CONFIG_DIR", str(data_dir))
 
-        result = json.loads(resolve_workspace(str(tmp_path)))
+        result = _resolve(str(tmp_path))
         assert result["source"] == "none"
         assert result["workspace_dir"] is None
 
@@ -326,7 +330,7 @@ class TestResolveWorkspace:
         config_path = data_dir / "config.json"
         config_path.write_text(json.dumps({"default_workspace": "/nonexistent/path"}))
 
-        result = json.loads(resolve_workspace(str(tmp_path)))
+        result = _resolve(str(tmp_path))
         assert result["source"] == "none"
         assert result["workspace_dir"] is None
 
@@ -344,7 +348,7 @@ class TestResolveWorkspace:
             json.dumps({"default_workspace": str(remote)})
         )
 
-        result = json.loads(resolve_workspace(str(tmp_path)))
+        result = _resolve(str(tmp_path))
         assert result["source"] == "local"
         assert result["workspace_dir"] == str(tmp_path)
 

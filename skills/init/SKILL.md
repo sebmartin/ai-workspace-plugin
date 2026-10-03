@@ -79,7 +79,7 @@ Skipped (already exists):
 
 Start your first thread:
   /ai-workspace:threads create my-first-thread   (Claude Code)
-  /threads create my-first-thread                (Codex CLI)
+  $threads create my-first-thread                (Codex CLI)
 
 On Claude Code, restart the CLI for the new permissions to take effect.
 ```

@@ -138,7 +138,7 @@ def test_server_lists_its_tools(tools):
 
 @pytest.mark.parametrize("name", [
     "list_threads", "resume_thread", "create_thread", "get_skill_file",
-    "resolve_workspace", "set_default_workspace",
+    "set_default_workspace",
     "archive_thread", "restore_thread", "list_archived_threads",
     "add_todo", "retire_todo", "set_todo_state", "set_window",
     "log_decision", "retire_decision", "index_file", "retire_artifact",

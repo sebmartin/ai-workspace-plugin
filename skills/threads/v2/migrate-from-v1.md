@@ -47,8 +47,8 @@ If `{name}-v2` already exists when you start, a previous attempt was abandoned.
 Stop and ask; do not overwrite it.
 
 `{name}-v1` is terminal and never renamed back. To abandon a migration, stop and
-say so: `{name}-v1` is already a working thread that every schema 1 tool
-operates on, and `{name}-v2` is an inert directory the user can remove when they
+say so: `{name}-v1` is the original thread, unchanged and still readable, and
+`{name}-v2` is an inert directory the user can remove when they
 choose. Say which is which and leave them both.
 
 ## Converting the copy

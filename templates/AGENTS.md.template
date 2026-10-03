@@ -8,14 +8,6 @@ Threads are organized conversations stored in `threads/`. Each thread has its ow
 
 Use natural language to manage them, or the explicit commands below.
 
-### Archived threads are read-only
-
-Archiving moves a thread from `threads/` to `archive/`. It keeps its shape there, so an
-archived thread looks exactly like a live one.
-
-**Read an archived thread when asked. Never write to one.** To work on an archived thread,
-restore it first, which moves it back into `threads/`.
-
 **Claude Code:**
 
 ```
@@ -27,9 +19,9 @@ restore it first, which moves it back into `threads/`.
 **Codex CLI:**
 
 ```
-/threads create <name>
-/threads resume <name>
-/threads
+$threads create <name>
+$threads resume <name>
+$threads
 ```
 
 Or just describe what you want, both clients understand natural language.
