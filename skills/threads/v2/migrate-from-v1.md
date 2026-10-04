@@ -176,9 +176,10 @@ whether the user meets it on resume.
 `memory.md` is the cell schema 1 had no file for, and that is why these sections
 became custom headings in the first place. Schema 1 said the README was the
 thread and to read it whole, so a heading was enough to guarantee it got read.
-Anything you would need to have read in order to behave correctly goes there:
-house rules, who is who, what a term means in this thread, what the record does
-not cover. Carry it across verbatim, keep the attribution if the original had
+What passes SKILL.md's test for memory goes there: durable, and about this
+thread, such as house rules, who is who, or what a term means here. Anything
+tied to one past task belongs in an artifact or a session log instead. Carry
+what goes into memory across verbatim, keep the attribution if the original had
 one, and add one if you know it.
 
 A choice that was made is a decision even where the prose is still arguing it,

@@ -51,7 +51,7 @@ context has a slot here:
 
 | what it is | where it goes |
 |---|---|
-| what you have to know before you act | `memory.md` |
+| a standing instruction for every task in this thread | `memory.md` |
 | a choice that was made | a decision |
 | something still to do | a todo |
 | something established, produced, or worth keeping | an artifact |
@@ -132,13 +132,18 @@ can be written to at all. Fetch
 
 ### Memory
 
-`memory.md` is read in full at the top of every resume. It holds what you have to know to act correctly in this thread: how the user wants you to work here, who the people in it are, what a term means. There is no tool; edit the file directly. Anything you would merely look up belongs in another file, and a choice that was made is a decision.
+`memory.md` holds standing instructions for this thread, and `resume_thread` loads all of it at the top of every resume. An entry belongs there only if it is both:
 
-Date and attribute each entry with the user's name, `[Name, 2026-08-13]`. When something new contradicts or narrows an entry, edit that entry instead of appending below it.
+- **Durable**: still true in six months, and relevant to every task in this thread.
+- **About this thread**: its subject, the people in it, what a term means here, or how the user wants this thread run.
+
+Anything tied to the current session or task, such as a particular PR, is something you keep in mind while you work. It does not get written down. Guidance about how you should behave in general, which would apply in any thread, belongs in the user's own instructions, such as their `CLAUDE.md`; suggest it to them and leave that file to them. A choice that was made is a decision.
+
+Add or change an entry only when the user asks you to remember something or agrees to an entry you proposed. There is no tool; edit the file directly. Date and attribute each entry with the user's name, `[Name, 2026-08-13]`. When something new contradicts or narrows an entry, edit that entry instead of appending below it.
 
 ### Saving
 
-A save writes the session log and the Status paragraph, because todos, decisions and artifacts were written when they happened. It is also the moment to read `memory.md` through, if the thread has one, and drop what no longer applies. A session that ends without a save still leaves its stub and a record of what it touched.
+A save writes the session log and the Status paragraph, because todos, decisions and artifacts were written when they happened. It is also the moment to read `memory.md` through, if the thread has one, and propose dropping anything that no longer applies. A session that ends without a save still leaves its stub and a record of what it touched.
 
 Everything from here on applies whatever the schema, except where a schema's own file says otherwise.
 
