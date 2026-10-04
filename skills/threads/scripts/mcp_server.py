@@ -175,6 +175,10 @@ def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
              state: str = "active") -> str:
     """Add a todo to the thread's backlog.
 
+    Call this only when the user asked for the todo or agreed to one you
+    proposed. If you think something should be a todo, say so and let the
+    user decide.
+
     Every todo carries a link, always. Use a file under todos/ when the item has
     state of its own, an external URL when there is an issue or PR, and
     otherwise the session it came out of.
@@ -247,6 +251,10 @@ def log_decision(workspace_dir: str, thread_name: str, title: str, summary: str,
                  body: str, status: str = "proposed",
                  supersedes: list[str] | None = None) -> str:
     """Write a decision file and index it.
+
+    Call this only when the user made the decision, asked for it to be logged,
+    or agreed to one you proposed. If you think something should be logged,
+    say so and let the user decide.
 
     `summary` is read on every resume, so it carries real cost: one sentence,
     one subject, what was decided and not why. If it needs "and" twice, that is
@@ -397,7 +405,7 @@ def retire_artifact(workspace_dir: str, thread_name: str, artifact_id: str,
 
 @mcp.tool()
 def save_session(workspace_dir: str, thread_name: str, slug: str, summary: str,
-                 keywords: str, next_context: str, body: str,
+                 keywords: str, body: str,
                  status: str = "") -> str:
     """Save the session log and the thread's Status paragraph.
 
@@ -415,13 +423,11 @@ def save_session(workspace_dir: str, thread_name: str, slug: str, summary: str,
         slug: Short kebab-case topic for the session, used in its id and filename.
         summary: Up to 150 words on what was discussed and settled.
         keywords: Comma-separated terms to search for later.
-        next_context: One or two sentences on where things stand and what is next.
         body: Full markdown body of the session log.
         status: The thread's Status paragraph. Omit to leave it unchanged.
     """
     return _threads.save_session(workspace_dir, thread_name, slug, summary,
-                                 keywords, next_context, body,
-                                 status or None)
+                                 keywords, body, status or None)
 
 
 

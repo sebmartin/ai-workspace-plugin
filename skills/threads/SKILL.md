@@ -102,6 +102,8 @@ A schema 1 thread keeps all of that inline in its README, so one read covers it.
 
 ### Writing
 
+**Todos and decisions are the user's lists.** Add a todo or log a decision only when the user asks for one or agrees to one you proposed. If you think something belongs on either list, say so and let the user decide. An idea the user has not agreed to does not get written down anywhere in the thread.
+
 Never hand-edit an index or the README's Next steps section; both are rendered from what the tools write, and a hand edit will be overwritten. Status is written by `save_session`'s `status` argument, or edited directly between saves. About, the header fields and `memory.md` have no tool; edit them directly.
 
 A render replaces `## Next steps` down to the next `##`, so never leave it as the last section of a README. Anything below it is swallowed without a word.
@@ -124,7 +126,7 @@ can be written to at all. Fetch
 
 **A decision is a choice that was made.** Its summary loads on every resume, so log one only when you can name the alternative that was rejected.
 
-**Next steps is the user's commitments, not your suggestions.** An idea you had belongs in the session log. The backlog is allowed to be long; the window is what is scarce.
+**The Next steps window is the user's commitments.** The backlog can be long; the window is what is scarce.
 
 **Propose, do not reorder on your own.** Change the window when the user says what is next, or when something completes and leaves a hole. Read the whole backlog when you do, since the item that most needs promoting is usually the stale one, which recency hides.
 
