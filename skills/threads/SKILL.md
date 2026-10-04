@@ -44,10 +44,12 @@ A `Schema: 2` header needs nothing loaded. Any other value, load that row's file
 
 The README is what a person reads. The indexes are the record, and they are what you read.
 
-**Thread context belongs in the thread.** Not in `CLAUDE.md`, `AGENTS.md`, or whatever your
-harness offers as its own memory. Those load in every session in that directory, including
-sessions on a different thread, and nothing scopes them back afterwards. Every kind of
-context has a slot here:
+**Thread context belongs in the thread.** Not in `CLAUDE.md`, `AGENTS.md`, or your
+harness's own project memory, such as Claude Code's auto memory under
+`~/.claude/projects/<project>/memory/`. That memory stays on one machine and loads in every
+session in the directory, including sessions on other threads, while a thread is resumed
+from different machines and hosts and its files go with it. Every kind of context has a
+slot here:
 
 | what it is | where it goes |
 |---|---|
@@ -132,7 +134,7 @@ can be written to at all. Fetch
 
 ### Memory
 
-`memory.md` holds standing instructions for this thread, and `resume_thread` loads all of it at the top of every resume. An entry belongs there only if it is both:
+`memory.md` holds standing instructions for this thread, and `resume_thread` loads all of it at the top of every resume. It replaces the harness's project memory for anything about the thread, so it follows the thread to whichever machine resumes it. Don't write thread context to the harness's memory. An entry belongs in `memory.md` only if it is both:
 
 - **Durable**: still true in six months, and relevant to every task in this thread.
 - **About this thread**: its subject, the people in it, what a term means here, or how the user wants this thread run.
