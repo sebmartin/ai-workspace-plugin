@@ -154,7 +154,7 @@ Everything from here on applies whatever the schema, except where a schema's own
 - If a thread name was given, resume it. If not, call `list_threads`, show them numbered, ask which, and wait.
 - **Archive fallback**: if the name is not among active threads, call `list_archived_threads`. If it is there, say it is archived and offer to restore it. An archived thread is read-only until it is restored.
 - Call `resume_thread` and read the `Schema:` header. Schema 2 is described above; anything older, load its file first.
-- End with: "**Working on thread: [thread-name]** (schema N)"
+- End that reply with "**Working on thread: [thread-name]**", adding "(schema N)" only when the thread is not on the current schema. Only in that reply.
 
 ## Commands
 
