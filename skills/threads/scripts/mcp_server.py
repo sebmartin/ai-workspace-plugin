@@ -175,9 +175,9 @@ def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
              state: str = "active") -> str:
     """Add a todo to the thread's backlog.
 
-    Call this only when the user asked for the todo or agreed to one you
-    proposed. If you think something should be a todo, say so and let the
-    user decide.
+    Every todo is read on every resume and commits the user to something, so
+    add one only when the user asked for it or agreed to your suggestion. If
+    you think something should be a todo, suggest it in your reply.
 
     Every todo carries a link, always. Use a file under todos/ when the item has
     state of its own, an external URL when there is an issue or PR, and
@@ -252,9 +252,9 @@ def log_decision(workspace_dir: str, thread_name: str, title: str, summary: str,
                  supersedes: list[str] | None = None) -> str:
     """Write a decision file and index it.
 
-    Call this only when the user made the decision, asked for it to be logged,
-    or agreed to one you proposed. If you think something should be logged,
-    say so and let the user decide.
+    Every decision is read on every resume and shapes later sessions, so log
+    one only when the user asked for it or agreed to your suggestion. If you
+    think a decision should be logged, suggest it in your reply.
 
     `summary` is read on every resume, so it carries real cost: one sentence,
     one subject, what was decided and not why. If it needs "and" twice, that is

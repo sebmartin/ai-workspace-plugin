@@ -104,7 +104,7 @@ A schema 1 thread keeps all of that inline in its README, so one read covers it.
 
 ### Writing
 
-**Todos and decisions are the user's lists.** Add a todo or log a decision only when the user asks for one or agrees to one you proposed. If you think something belongs on either list, say so and let the user decide. An idea the user has not agreed to does not get written down anywhere in the thread.
+**Adding to the record is the user's call.** Every index entry (a todo, a decision, an artifact) and every `memory.md` entry is read on every resume from then on, so add one only when the user asked for it. The ask can be implicit: "write up your research" means write an artifact and index it, without checking first. When nobody asked and you think something belongs on the record, suggest it in your reply and add it once the user agrees.
 
 Never hand-edit an index or the README's Next steps section; both are rendered from what the tools write, and a hand edit will be overwritten. Status is written by `save_session`'s `status` argument, or edited directly between saves. About, the header fields and `memory.md` have no tool; edit them directly.
 
