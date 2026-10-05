@@ -6,6 +6,10 @@ every write needed already exists. This is the procedure.
 **Nothing is converted in place.** The original survives untouched until a
 verified swap, and nothing is ever deleted.
 
+**Everything this procedure carries across is already on the record**, so the
+rule about adding to the record doesn't apply to it, nor to the backup todo in
+step 7, which is part of the procedure the user asked for.
+
 **Never delete anything, and never offer to.** Not the staging copy, not the
 backup, not a file inside either. Leave both directories in place and tell the
 user which one they can remove. Deleting a thread is a judgment call with no
