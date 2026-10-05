@@ -53,7 +53,7 @@ slot here:
 
 | what it is | where it goes |
 |---|---|
-| a standing instruction for every task in this thread | `memory.md` |
+| a standing instruction for this thread | `memory.md` |
 | a choice that was made | a decision |
 | something still to do | a todo |
 | something established, produced, or worth keeping | an artifact |
@@ -136,10 +136,10 @@ can be written to at all. Fetch
 
 `memory.md` holds standing instructions for this thread, and `resume_thread` loads all of it at the top of every resume. It replaces the harness's project memory for anything about the thread, so it follows the thread to whichever machine resumes it. Don't write thread context to the harness's memory. An entry belongs in `memory.md` only if it is both:
 
-- **Durable**: still true in six months, and relevant to every task in this thread.
+- **Durable**: still true in six months, and useful again whenever the same situation comes up in this thread, beyond the task at hand.
 - **About this thread**: its subject, the people in it, what a term means here, or how the user wants this thread run.
 
-Anything tied to the current session or task, such as a particular PR, is something you keep in mind while you work. It does not get written down. Guidance about how you should behave in general, which would apply in any thread, belongs in the user's own instructions, such as their `CLAUDE.md`; suggest it to them and leave that file to them. A choice that was made is a decision.
+Anything tied to the current session or task, such as a particular PR, stays out of `memory.md`. Keep it in mind while you work; if it is part of what happened, the session log records it. Guidance about how you should behave in general, which would apply in any thread, belongs in the user's own instructions, such as their `CLAUDE.md`; suggest it to them and leave that file to them. A choice that was made is a decision.
 
 Add or change an entry only when the user asks you to remember something or agrees to an entry you proposed. There is no tool; edit the file directly. Date and attribute each entry with the user's name, `[Name, 2026-08-13]`. When something new contradicts or narrows an entry, edit that entry instead of appending below it.
 
