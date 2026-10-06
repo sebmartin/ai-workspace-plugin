@@ -110,7 +110,7 @@ One source tree serves both CLIs. Maximum deduplication:
 
 **Templates:**
 - All templates in `templates/`
-- Accessed via `get_template_path()` in `lib/ai_workspace/plugin.py` or the `get_template` MCP tool
+- Accessed via `get_template_path()` in `lib/ai_workspace/plugin.py`, or by an agent through the `get_skill_file` MCP tool (e.g. `get_skill_file("templates/v2/todo-template.md")`)
 
 ## Development Workflow
 
