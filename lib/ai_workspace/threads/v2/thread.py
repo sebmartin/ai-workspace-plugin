@@ -107,13 +107,18 @@ def compose(thread_dir: Path, thread_name: str) -> str:
         out.append("\n## About\n\n" + about)
 
     todos = idx.read(thread_dir, "todos")
-    next_up, parked = todos_mod.next_up(todos), todos_mod.parked(todos)
-    # Both counts, because an empty list is ambiguous on its own: nothing to do
-    # and everything deliberately parked read the same, and only one of them
-    # means the thread is finished with.
-    out.append(f"\n## Next steps ({len(next_up)} active, {len(parked)} parked)\n")
-    out.extend(e.render() for e in next_up)
-    if not next_up:
+    active, parked = todos_mod.next_up(todos), todos_mod.parked(todos)
+    shown = todos_mod.window(todos)
+    # Every count, because the section is bounded and each number answers a
+    # different question: what is on screen, how much is waiting behind it, and
+    # how much was set aside. Without the last two an empty list cannot be told
+    # from a thread that is finished with.
+    out.append(
+        f"\n## Next steps ({len(shown)} of {len(active)} active, "
+        f"{len(parked)} parked)\n"
+    )
+    out.extend(e.render() for e in shown)
+    if not shown:
         out.append("- None")
     if waiting := todos_mod.crowded(todos):
         out.append(f"\n{waiting} active todos; ask the user which to park.")

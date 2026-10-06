@@ -50,9 +50,10 @@ def resume_thread(workspace_dir: str, thread_name: str) -> str:
     `memory.md` in full if there is one, then Status, About, the header, the
     Next steps, any parked todos, every in-force decision with the
     `summary:` read from its file, the artifacts index, and the last ten
-    sessions. Next steps is every active todo in priority order, and says so
-    when more than five are active. A `## Thread size` heading appears only
-    when the thread has grown expensive to open.
+    sessions. Next steps is the top of the todo list in priority order, bounded
+    to five, and its heading counts what is shown, what is active and what is
+    parked. A `## Thread size` heading appears only when the thread has grown
+    expensive to open.
 
     A thread this plugin cannot read returns `{"error": CODE, "thread": ...,
     "schema": <n>, "reads": [<low>, <high>]}`: `SCHEMA_TOO_NEW` (upgrade the
@@ -185,7 +186,9 @@ def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
     otherwise the session it came out of.
 
     The list is in priority order and the new todo goes at the end unless you
-    place it. Say where you put it, so the user can move it.
+    place it. Say where you put it, so the user can move it. Next steps shows
+    the top five, so a todo added at the end is in the list without being on
+    the README; that is what the backlog of a long list looks like here.
 
     Returns `{"id": ...}`, the minted todo id, which `order_todos` and the
     retire tools take. `active` is present only when more than five todos are
@@ -193,8 +196,10 @@ def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
 
     A refusal returns `{"error": CODE, ...}` and writes nothing:
     `STATE_UNKNOWN` or `PLACE_UNKNOWN` with the `allowed` values,
-    `LINK_REQUIRED`, and `NO_SUCH_ENTRY` naming an anchor that is not in the
-    list.
+    `LINK_REQUIRED`, `NO_SUCH_ENTRY` naming an anchor that is not in the list,
+    and `UNREPRESENTABLE` when the title or link carries a character an index
+    line cannot hold, whose `detail` names the field and the character. Reword
+    it; a title cannot contain `]` and a link cannot contain `)`.
 
     Args:
         workspace_dir: The tracked workspace path from session context.
@@ -205,9 +210,10 @@ def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
             puts it at the top, or `parked` for deliberately not now.
         place: Where it goes. `top` for something to do next, such as a piece
             of the task in hand. `before:<todo id>` or `after:<todo id>` for
-            something that belongs beside a particular todo. `end`, or leave
-            it out, for the backlog. `top` and `end` are read off the list as
-            it is now, so they are right even if you have not looked at it.
+            something that belongs beside a particular todo. `end`, or leave it
+            out, for everything else. `top` and `end` are read off the list as
+            it is now, so they are right even if you have not looked at it,
+            where an id you believe is first may have been overtaken.
     """
     return _threads.add_todo(workspace_dir, thread_name, title, link, state, place)
 
@@ -216,7 +222,8 @@ def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
 def retire_todo(workspace_dir: str, thread_name: str, todo_id: str, state: str) -> str:
     """Retire a todo as done or dropped.
 
-    Returns `{"id": ...}`.
+    Returns `{"id": ...}`. A refusal returns `{"error": CODE, ...}` and writes
+    nothing: `STATE_UNKNOWN` with the `allowed` states, or `NO_SUCH_ENTRY`.
 
     Args:
         workspace_dir: The tracked workspace path from session context.
@@ -232,11 +239,15 @@ def set_todo_state(workspace_dir: str, thread_name: str, todo_id: str, state: st
     """Start, park or unpark a todo without retiring it.
 
     Two of the states move the todo as well as labelling it. `started` sends it
-    to the top of the list, so call it when the user says to work on something.
-    Unparking sends it to the end, because parked meant for later.
+    to the top of the list and clears the label from whatever held it before,
+    since it names the one thing being worked on; call it when the user says to
+    work on something. Unparking sends it to the end, because parked meant for
+    later.
 
-    Returns `{"id": ...}`, or `{"error": "STATE_UNKNOWN", "allowed": [...]}` or
-    `{"error": "NO_SUCH_ENTRY"}`.
+    Returns `{"id": ...}`, with `active` carrying the count when more than five
+    todos are active, which unparking can be what causes. A refusal returns
+    `{"error": "STATE_UNKNOWN", "allowed": [...]}` or
+    `{"error": "NO_SUCH_ENTRY"}` and writes nothing.
 
     Args:
         workspace_dir: The tracked workspace path from session context.
@@ -257,12 +268,17 @@ def order_todos(workspace_dir: str, thread_name: str, todo_ids: list[str],
     leaves the rest alone. The order is the user's, so propose one and call
     this once they agree.
 
+    This is also how what Next steps shows changes, because what it shows is
+    the top of the list. Nothing has to be promoted when a todo is retired:
+    the sixth becomes the fifth by itself.
+
     Returns `{"ordered": <how many were named>}`. A refusal returns
     `{"error": CODE, "detail": ...}` and writes nothing: `NO_SUCH_ENTRY`
     naming the ids that are not in the list, including the anchor;
     `PLACE_UNKNOWN` with the `allowed` forms; `DUPLICATE_ID` naming one given
     twice; `ANCHOR_IS_MOVING` when the anchor is one of the todos being moved,
-    so its place is the thing in question.
+    so its place is the thing in question; and `IDS_REQUIRED` when no ids were
+    given at all.
 
     Args:
         workspace_dir: The tracked workspace path from session context.
@@ -316,7 +332,8 @@ def retire_decision(workspace_dir: str, thread_name: str, decision_id: str,
                     state: str) -> str:
     """Retire a decision, updating both the index and the file's own status.
 
-    Returns `{"id": ...}`.
+    Returns `{"id": ...}`. A refusal returns `{"error": CODE, ...}` and writes
+    nothing: `STATE_UNKNOWN` with the `allowed` states, or `NO_SUCH_ENTRY`.
 
     Args:
         workspace_dir: The tracked workspace path from session context.
@@ -395,8 +412,9 @@ def index_file(workspace_dir: str, thread_name: str, link: str,
     A refusal returns `{"error": CODE, "detail": ...}` and writes nothing. Same
     codes as index_directory, plus `MISSING` when the link resolves to nothing,
     `METADATA` for a dotfile, which is never content,
-    `DESCRIPTION_TOO_LONG`, whose `detail` is the limit in characters, and
-    `DATE_INVALID`.
+    `DESCRIPTION_TOO_LONG`, whose `detail` is the limit in characters,
+    `UNREPRESENTABLE` for a filename carrying `)`, which an index line cannot
+    hold, and `DATE_INVALID`.
 
     Args:
         workspace_dir: The tracked workspace path from session context.
@@ -419,7 +437,8 @@ def retire_artifact(workspace_dir: str, thread_name: str, artifact_id: str,
                     state: str) -> str:
     """Retire an artifact so it stops appearing as current.
 
-    Returns `{"id": ...}`.
+    Returns `{"id": ...}`. A refusal returns `{"error": CODE, ...}` and writes
+    nothing: `STATE_UNKNOWN` with the `allowed` states, or `NO_SUCH_ENTRY`.
 
     Args:
         workspace_dir: The tracked workspace path from session context.
@@ -491,8 +510,8 @@ def audit_migration(workspace_dir: str, original_thread: str,
     - `unindexed` — {kind: [filenames]} present in the original and in no index.
     - `missing_from_copy` — {kind: [filenames]} in the original, absent from the copy.
     - `dangling` — {kind: [links]} indexed but pointing at nothing.
-    - `out_of_date_order` — [kind] whose index is not sorted by id. Todos are
-      exempt: that list is in the user's priority order, not date order.
+    - `out_of_date_order`: [kind] whose index is not sorted by id. Todos are
+      exempt, since that list carries the user's priority rather than dates.
     - `v1_readme_sections` — schema 1 headings still in the converted README.
 
     - `undated_entries` — how many took the 19700101 date. Not a problem by

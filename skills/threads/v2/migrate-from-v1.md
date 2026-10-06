@@ -153,9 +153,10 @@ supersession, to tell which superseded which — the live one declares
 
 **Extract todos** from Next steps, Parked and Open Questions. Each needs a link:
 the session it came from when it has nothing of its own. A todo goes on the end
-of the list, so add the Next steps items first, in the order the README listed
-them, and add the rest parked. Parked entries that are already resolved should
-be retired rather than carried over.
+of the list and Next steps shows the top five, so add the Next steps items
+first, in the order the README listed them, and the rest after. Only carry
+something over as parked if the v1 README had it parked, and retire a parked
+entry that is already resolved rather than carrying it.
 
 **Collapse Quick Resume into Status**: one or two sentences on what changed,
 taken from Current focus.
@@ -175,8 +176,9 @@ loaded before you can act?
 | **for you** | `memory.md` | a decision or an artifact: its index line loads, its body does not |
 | **for the user** | Status, and Next steps | About, a session log, an artifact |
 
-Anything still to do is a todo whichever row it came from. Whether it is parked
-decides whether the user meets it on resume.
+Anything still to do is a todo whichever row it came from. Where it sits in the
+list decides whether the user meets it on resume, since Next steps shows the
+top five.
 
 `memory.md` is the cell schema 1 had no file for, and that is why these sections
 became custom headings in the first place. Schema 1 said the README was the
@@ -215,8 +217,8 @@ description gets authored.
 
 **Leave the backup as a todo, not as a sentence.** A migration ends with exactly
 one outstanding commitment, deciding what happens to `{name}-v1`, and saying it
-in conversation loses it the moment the session ends. Write a `todos/` file for
-it:
+in conversation loses it the moment the session ends. Write a `todos/` file for it and
+order it where it belongs:
 
 ```
 Title: Remove or archive threads/{name}-v1
