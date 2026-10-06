@@ -76,28 +76,62 @@ class Entry:
         return f"Entry({self.id!r}, {self.state!r}, {self.title!r})"
 
 
-# A title carrying "]" ends its own field, and a link carrying ")" ends its
-# own, so the line written is one `_LINE_RE` cannot match. The entry reports
-# success, reads back as absent, and disappears the next time anything rewrites
-# the file. `Merge_(SQL)` is an ordinary Wikipedia URL, so this is reachable
-# without trying.
-#
-# Refused rather than escaped, for the reason an over-long description is: the
-# caller wrote the text and is still holding it, so it is the only party that
-# can fix it, and an escape scheme is a second parser to keep in agreement with
-# the first.
-_FORBIDDEN = (("title", "]"), ("link", ")"))
+def _parts(entry: Entry) -> dict[str, str]:
+    """The entry's fields by the name `_LINE_RE` gives each group."""
+    return {"id": entry.id, "state": entry.state or "", "title": entry.title,
+            "link": entry.link, "description": entry.description}
 
 
-def unrepresentable(title: str, link: str) -> str | None:
-    """Why these cannot survive a round trip through an index line, or None."""
-    for field, value in (("title", title), ("link", link)):
-        if "\n" in value or "\r" in value:
+def _with(entry: Entry, field: str, value: str) -> Entry:
+    parts = _parts(entry)
+    parts[field] = value
+    return Entry(**parts)
+
+
+def _round_trips(entry: Entry) -> bool:
+    """Whether reading this entry's own line back gives the entry again."""
+    hit = _LINE_RE.match(entry.render())
+    if hit is None:
+        return False
+    return all((hit[field] or "") == value for field, value in _parts(entry).items())
+
+
+def unrepresentable(entry: Entry) -> str | None:
+    r"""Which of this entry's fields would not survive a line, or None.
+
+    A field that ends its own delimiter writes a line `_LINE_RE` reads back
+    differently or not at all. A title carrying "]" and a link carrying ")"
+    lose the entry outright; a description carrying a line break truncates and
+    orphans the rest. `Merge_(SQL)` is an ordinary Wikipedia URL, so none of
+    this needs trying.
+
+    Rendered and read back rather than screened against a list of characters,
+    so the check cannot disagree with the pattern that does the reading: it is
+    that pattern. A field added to the line later is covered without anyone
+    remembering to extend a table.
+
+    The line-break test is separate because `read` splits the file into lines
+    before matching, so a break inside a field makes a line the pattern never
+    sees, and `[^\]]` matches a newline in any case.
+
+    Refused rather than escaped, for the reason an over-long description is:
+    the caller wrote the text and is still holding it, so it is the only party
+    that can fix it, and an escape scheme is a second parser to keep in
+    agreement with the first.
+    """
+    for field, value in _parts(entry).items():
+        if value and ("\n" in value or "\r" in value):
             return f"{field} contains a line break"
-    for field, char in _FORBIDDEN:
-        if char in (title if field == "title" else link):
-            return f"{field} contains {char!r}"
-    return None
+    if _round_trips(entry):
+        return None
+    # Name the field at fault by putting a value known to be safe in its place.
+    # The one whose replacement makes the line read back is the one that broke
+    # it, and asking the pattern is the only way to find out that cannot
+    # disagree with the pattern.
+    for field, value in _parts(entry).items():
+        if value and _round_trips(_with(entry, field, "x")):
+            return f"{field} cannot be read back from a line"
+    return "the line it makes cannot be read back"
 
 
 def is_content(path: Path) -> bool:
@@ -167,7 +201,12 @@ def read(thread_dir: Path, kind: str, retired: bool = False) -> list[Entry]:
         if hit:
             entries.append(Entry(hit["id"], hit["state"], hit["title"], hit["link"],
                                  hit["description"] or ""))
-    return _window_first(text, entries)
+    # Only where one was ever written, and only where order means anything: a
+    # retired index is a chronology, so a block in one would be reordering a
+    # record of what happened.
+    if kind in ORDERED and not retired:
+        return _window_first(text, entries)
+    return entries
 
 
 def write(thread_dir: Path, kind: str, entries: list[Entry],
