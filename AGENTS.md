@@ -110,7 +110,7 @@ One source tree serves both CLIs. Maximum deduplication:
 
 **Templates:**
 - All templates in `templates/`
-- Accessed via `get_template_path()` in `lib/ai_workspace/plugin.py` or the `get_template` MCP tool
+- Accessed via `get_template_path()` in `lib/ai_workspace/plugin.py`, or by an agent through the `get_skill_file` MCP tool (e.g. `get_skill_file("templates/v2/todo-template.md")`)
 
 ## Development Workflow
 
@@ -341,16 +341,17 @@ a library.
 The threads MCP server is declared in both `.claude-plugin/plugin.json` and `.codex-plugin/plugin.json`. Tools are exposed under the `threads` server name with a vendor-prefixed bridge:
 
 ```
-mcp__plugin_ai-workspace_threads__resolve_workspace(workspace_dir="/abs/path")  # diagnostic only
 mcp__plugin_ai-workspace_threads__list_threads(workspace_dir="/abs/path")
-mcp__plugin_ai-workspace_threads__get_thread_status(workspace_dir, thread_name)
+mcp__plugin_ai-workspace_threads__resume_thread(workspace_dir, thread_name)
 mcp__plugin_ai-workspace_threads__create_thread(workspace_dir, thread_name)
 mcp__plugin_ai-workspace_threads__set_default_workspace(workspace_path)
-mcp__plugin_ai-workspace_threads__get_template(template_name)
+mcp__plugin_ai-workspace_threads__get_skill_file(relative_path)
 ```
 
+The full list is whatever `mcp_server.py` declares.
+
 - Plugin location at runtime: each vendor's plugin cache
-- Pass the workspace path hint as `workspace_dir` (literal path, not `$(pwd)`). Operating tools resolve internally — probe `workspace_dir/threads/`, then the persisted default, then return `Error: NO_WORKSPACE` (or `Status: AMBIGUOUS_WORKSPACE` / `NEEDS_INIT` for `create_thread`).
+- Pass the workspace path hint as `workspace_dir` (literal path, not `$(pwd)`). Operating tools resolve internally: probe `workspace_dir/threads/`, then the persisted default, then return `{"error": "NO_WORKSPACE", ...}` (or `AMBIGUOUS_WORKSPACE` / `NEEDS_INIT` for `create_thread`).
 
 ## Verification Practices
 
@@ -361,8 +362,8 @@ mcp__plugin_ai-workspace_threads__get_template(template_name)
 
 **When working with threads (as a user would):**
 - Threads live in the user's workspace, not the plugin repo
-- Pass the caller's current working directory as `workspace_dir` on the first operating tool call. The server probes it, falls back to the persisted default, and either uses it or returns `Error: NO_WORKSPACE`. `resolve_workspace` is diagnostic only — do not call it before every operation.
-- After `create_thread` or `get_thread_status`, treat the `Workspace:`/`Thread:` headers as the tracked workspace path for the rest of the session.
+- Pass the caller's current working directory as `workspace_dir` on the first operating tool call. The server probes it, falls back to the persisted default, and either uses it or returns `NO_WORKSPACE`.
+- After `create_thread` or `resume_thread`, treat the `Workspace:`/`Thread:` headers as the tracked workspace path for the rest of the session.
 - Read `threads/{name}/README.md` for thread details
 - Never assume thread content, always verify
 

@@ -1,1 +1,1 @@
-If the user wants to create, resume, list, or otherwise work with threads, invoke the `ai-workspace:threads` skill via the Skill tool. Do not use Bash (`ls`, `find`, `cat`, `tree`) to re-implement thread operations — if an MCP tool fails, report the failure and fix the underlying issue rather than working around it with raw filesystem reads.
+If the user wants to create, resume, list, or otherwise work with threads, invoke the `ai-workspace:threads` skill via the Skill tool.

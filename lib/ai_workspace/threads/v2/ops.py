@@ -353,6 +353,8 @@ def set_state(thread, kind: str, entry_id: str, state: str) -> str:
         return json.dumps({"error": "NO_SUCH_ENTRY", "detail": entry_id})
     entry.state = state
     idx.write(thread.dir, kind, entries, fm)
+    if state == "parked":
+        _drop_from_windows(thread.dir, kind, entry_id)
     render.render(thread.dir)
     return json.dumps({"id": entry_id})
 
@@ -456,8 +458,7 @@ def retire_artifact(thread, artifact_id: str, state: str) -> str:
     return json.dumps({"id": artifact_id})
 
 
-def save_session(thread, slug: str, summary: str, keywords: str,
-                 next_context: str, body: str,
+def save_session(thread, slug: str, summary: str, keywords: str, body: str,
                  status: str | None = None) -> str:
     """Everything a save does that is not synthesis.
 
@@ -472,7 +473,7 @@ def save_session(thread, slug: str, summary: str, keywords: str,
         return json.dumps({"error": "BODY_EMPTY"})
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
-    session_id, _ = session.save(thread.dir, slug, summary, keywords, next_context, body)
+    session_id, _ = session.save(thread.dir, slug, summary, keywords, body)
     if status:
         readme_mod.set_status(thread.dir, status)
     readme_mod.touch_dates(thread.dir)

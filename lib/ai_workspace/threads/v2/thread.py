@@ -108,9 +108,10 @@ def compose(thread_dir: Path, thread_name: str) -> str:
     todos, fm = idx.read(thread_dir, "todos")
     window = (fm.get("windows") or {}).get("next_steps") or []
     by_id = {e.id: e for e in todos}
-    out.append("\n## Next steps\n")
-    out.extend(by_id[i].render() for i in window if i in by_id)
-    if not window:
+    shown = [by_id[i] for i in window if i in by_id]
+    out.append(f"\n## Next steps ({len(shown)} of {len(todos)} todos)\n")
+    out.extend(e.render() for e in shown)
+    if not shown:
         out.append("- None")
 
     parked = [e for e in todos if e.state == "parked"]

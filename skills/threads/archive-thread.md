@@ -30,5 +30,5 @@ asked. Never write to one: no sessions, no decisions, no edits. To work on it, r
 ## Archives from before 3.0
 
 Those are `.tar.gz` files and this plugin does not unpack them. `restore_thread` returns
-`Status: LEGACY_ARCHIVE` and names the reference to follow; see
+`{"error": "LEGACY_ARCHIVE", ...}` and names the reference to follow; see
 `skills/threads/unpack-legacy-archive.md`.

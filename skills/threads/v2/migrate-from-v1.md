@@ -6,6 +6,10 @@ every write needed already exists. This is the procedure.
 **Nothing is converted in place.** The original survives untouched until a
 verified swap, and nothing is ever deleted.
 
+**Everything this procedure carries across is already on the record**, so the
+rule about adding to the record doesn't apply to it, nor to the backup todo in
+step 7, which is part of the procedure the user asked for.
+
 **Never delete anything, and never offer to.** Not the staging copy, not the
 backup, not a file inside either. Leave both directories in place and tell the
 user which one they can remove. Deleting a thread is a judgment call with no
@@ -47,8 +51,8 @@ If `{name}-v2` already exists when you start, a previous attempt was abandoned.
 Stop and ask; do not overwrite it.
 
 `{name}-v1` is terminal and never renamed back. To abandon a migration, stop and
-say so: `{name}-v1` is already a working thread that every schema 1 tool
-operates on, and `{name}-v2` is an inert directory the user can remove when they
+say so: `{name}-v1` is the original thread, unchanged and still readable, and
+`{name}-v2` is an inert directory the user can remove when they
 choose. Say which is which and leave them both.
 
 ## Converting the copy
@@ -176,9 +180,10 @@ whether the user meets it on resume.
 `memory.md` is the cell schema 1 had no file for, and that is why these sections
 became custom headings in the first place. Schema 1 said the README was the
 thread and to read it whole, so a heading was enough to guarantee it got read.
-Anything you would need to have read in order to behave correctly goes there:
-house rules, who is who, what a term means in this thread, what the record does
-not cover. Carry it across verbatim, keep the attribution if the original had
+What passes SKILL.md's test for memory goes there: durable, and about this
+thread, such as house rules, who is who, or what a term means here. Anything
+tied to one past task belongs in an artifact or a session log instead. Carry
+what goes into memory across verbatim, keep the attribution if the original had
 one, and add one if you know it.
 
 A choice that was made is a decision even where the prose is still arguing it,

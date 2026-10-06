@@ -12,7 +12,7 @@ Applies to any thread whose directory has no `schema-version` file. `resume_thre
 > next render. The reverse is safe, because the schema 2 write tools refuse a
 > schema 1 thread outright.
 
-**This file overrides SKILL.md's "Working with a schema 2 thread" section entirely**, plus the schema 2 rows of its Commands table. Everything else in SKILL.md still applies: workspace resolution, the read-only rule for archives, thread tracking, and the pause before planning.
+**This file overrides SKILL.md's "Working with a schema 2 thread" section entirely.** Everything else in SKILL.md still applies: the git and outgoing-text rules, workspace resolution, resuming, and the commands.
 
 ## The README model
 
@@ -56,7 +56,7 @@ failure it exists to prevent.
 
 ## Migration
 
-A schema 1 thread cannot be saved with the current tools; every schema 2 write tool returns `Status: NEEDS_MIGRATION`.
+A schema 1 thread cannot be saved with the current tools; every schema 2 write tool returns `{"error": "NEEDS_MIGRATION", ...}`.
 
 **Raise it on resume, as a question, not at save time.** The resume format
 above carries both the banner and the ask. A session that discovers this at

@@ -6,7 +6,6 @@
       "Bash(ls:*)",
       "Bash(mkdir:*)",
       "Bash(mv:*)",
-      "Bash(open:*)",
       "Edit(threads/**)",
       "Glob(*)",
       "Read(archive/**)",

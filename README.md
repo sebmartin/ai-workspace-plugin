@@ -140,48 +140,41 @@ You don't need to memorize these. You can tell Claude what you want in plain Eng
 | `/ai-workspace:threads create <name>` | Start a new thread |
 | `/ai-workspace:threads resume <name>` | Switch to a thread mid-session |
 | `/ai-workspace:threads save` | Update thread context |
-| `/ai-workspace:threads snapshot` | Generate a shareable summary |
+| `/ai-workspace:threads summarize this for <person>` | Write a standalone summary as an artifact |
 | `/ai-workspace:threads log-decision` | Record a decision |
 | `/ai-workspace:threads park "<topic>"` | Park a topic for later |
-| `/ai-workspace:threads pop` | Resume the next parked topic |
+| `/ai-workspace:threads unpark "<topic>"` | Move a parked topic back to the active backlog |
 | `/ai-workspace:threads parked` | List parked topics |
-| `/ai-workspace:threads status <name>` | Show a thread's Quick Resume |
 | `/ai-workspace:threads create-child <name>` | Create a child thread linked to the current thread |
 | `/ai-workspace:threads link-parent <name>` | Set a parent thread (bidirectional) |
 | `/ai-workspace:threads link-related <name>` | Link two threads as related |
-| `/ai-workspace:threads open <name>` | Open thread in Finder (macOS) |
 | `/ai-workspace:threads set-workspace <path>` | Set default workspace for cross-directory access |
-| `/ai-workspace:threads archive <name>` | Archive a completed thread (compress and move to archive/) |
-| `/ai-workspace:threads restore <base>` | Restore an archived thread back to threads/ |
-| `/ai-workspace:threads list-archived` | Show all archived threads with keywords |
-| `/ai-workspace:threads inspect <base>` | Extract an archive to archive/tmp/ for inspection |
-| `/ai-workspace:threads purge-tmp` | Clean up temporary archive extractions |
+| `/ai-workspace:threads archive <name>` | Move a thread to archive/ |
+| `/ai-workspace:threads restore <name>` | Move an archived thread back to threads/ |
+| `/ai-workspace:threads list-archived` | Show archived threads |
+| `/ai-workspace:threads unpack-legacy-archive <file>` | Restore a `.tar.gz` archive made before 3.0 |
 
 ## Archiving Old Threads
 
-When a thread has run its course, compress it into a searchable archive:
+When a thread has run its course, move it out of the way:
 
 ```bash
 /ai-workspace:threads archive my-old-project
-# → Moves to archive/2026-my-old-project.tar.gz + creates archive/2026-my-old-project.md
+# → Moves threads/my-old-project to archive/my-old-project
 ```
 
-The archive summary (.md) includes the thread's title, dates, and keywords so you can search for it later without opening the tarball. Browse archived threads with `/ai-workspace:threads list-archived`.
-
-A restored thread automatically captures the archived summary as a session file, preserving the LLM's interpretation as thread history:
+Nothing is compressed or deleted. An archived thread is read-only until it is restored. Browse archived threads with `/ai-workspace:threads list-archived`, and bring one back with:
 
 ```bash
-/ai-workspace:threads restore 2026-my-old-project
-# → Restores to threads/my-old-project and writes sessions/20260523-restored.md
+/ai-workspace:threads restore my-old-project
+# → Moves it back to threads/my-old-project
 ```
 
-Use `/ai-workspace:threads inspect <base>` to peek into an archive without restoring it.
+Archives made before 3.0 are `.tar.gz` files, which `restore` does not unpack. Use `/ai-workspace:threads unpack-legacy-archive` for those.
 
-If you ask to resume or find a thread that isn't in your active threads, Claude will automatically check the archive and offer to restore it if found.
+If you ask to resume or find a thread that isn't in your active threads, Claude will check the archive and offer to restore it if found.
 
-On Codex CLI, drop the `/ai-workspace:` namespace prefix: `/threads`, `/threads create <name>`, and so on. Or just describe what you want in plain English.
-
-> `/init` is an exception — it collides with Codex's built-in command. To run the plugin's init skill on Codex, use the natural-language form: `> initialize the ai-workspace`.
+On Codex CLI, invoke a skill with `$` and its name: `$threads`, `$threads create <name>`, and so on. Or just describe what you want in plain English, which also works for init: `> initialize the ai-workspace`.
 
 ## Migrating from the pre-plugin version
 

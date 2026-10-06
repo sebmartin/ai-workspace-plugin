@@ -68,8 +68,7 @@ def note_created(thread_dir: Path, session_id: str, line: str) -> None:
     path.write_text(text)
 
 
-def save(thread_dir: Path, slug: str, summary: str, keywords: str,
-         next_context: str, body: str,
+def save(thread_dir: Path, slug: str, summary: str, keywords: str, body: str,
          today: date | None = None) -> tuple[str, str]:
     """Write the session log. Returns (session_id, note).
 
@@ -84,7 +83,6 @@ def save(thread_dir: Path, slug: str, summary: str, keywords: str,
         f"date: {today.isoformat()}\n"
         f"summary: {yaml_value(summary)}\n"
         f"keywords: {yaml_value(keywords)}\n"
-        f"next_context: {yaml_value(next_context)}\n"
         "---\n\n"
     )
     path.write_text(front + body.rstrip() + "\n")

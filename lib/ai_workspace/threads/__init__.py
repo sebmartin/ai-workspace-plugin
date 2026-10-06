@@ -196,13 +196,12 @@ def set_todo_state(workspace_dir: str, thread_name: str, todo_id: str, state: st
     return call.fn(call.thread, "todos", todo_id, state)
 
 
-def set_window(workspace_dir: str, thread_name: str, entry_ids: list[str],
-               section: str = "next_steps", kind: str = "todos") -> str:
-    """Choose which entries the README shows, and in what order."""
+def set_window(workspace_dir: str, thread_name: str, entry_ids: list[str]) -> str:
+    """Choose which todos the README's Next steps shows, and in what order."""
     call = _for(workspace_dir, thread_name, "set_window")
     if isinstance(call, str):
         return call
-    return call.fn(call.thread, kind, section, entry_ids)
+    return call.fn(call.thread, "todos", "next_steps", entry_ids)
 
 
 def log_decision(workspace_dir: str, thread_name: str, title: str, summary: str,
@@ -254,13 +253,13 @@ def retire_artifact(workspace_dir: str, thread_name: str, artifact_id: str,
 
 
 def save_session(workspace_dir: str, thread_name: str, slug: str, summary: str,
-                 keywords: str, next_context: str, body: str,
+                 keywords: str, body: str,
                  status: str | None = None) -> str:
     """Write the session log and the Status paragraph in one call."""
     call = _for(workspace_dir, thread_name, "save_session")
     if isinstance(call, str):
         return call
-    return call.fn(call.thread, slug, summary, keywords, next_context, body, status)
+    return call.fn(call.thread, slug, summary, keywords, body, status)
 
 
 def migration_safety_check(workspace_dir: str, thread_name: str) -> str:

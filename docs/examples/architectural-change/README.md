@@ -78,7 +78,7 @@ You've done some reading on the queue options. You pick up where you left off.
 >
 > ---
 >
-> **Working on thread: notifications-extraction**
+> **Working on thread: notifications-extraction** (schema 1)
 
 You work through the queue decision and log it. Redis Streams wins: already running Redis for caching, no new infrastructure, local dev stays simple.
 
@@ -119,7 +119,7 @@ claude
 >
 > ---
 >
-> **Working on thread: notifications-extraction**
+> **Working on thread: notifications-extraction** (schema 1)
 
 You're in the API repo with the full thread context loaded. You start implementing the event publisher. Midway through, a question comes up: should the API wait for Redis to acknowledge the event before returning a response?
 

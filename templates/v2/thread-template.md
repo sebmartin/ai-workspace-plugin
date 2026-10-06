@@ -9,7 +9,7 @@
 
 ## Status
 
-Where things stand, in a few sentences. Written for a person, by hand.
+Where things stand, in a few sentences, written for a person. A save rewrites it when it passes `status`.
 
 ## Next steps
 

@@ -98,7 +98,7 @@ claude --plugin-dir ~/ai-workspace-plugin
 # Test thread operations
 /ai-workspace:threads
 /ai-workspace:threads save
-/ai-workspace:threads snapshot
+/ai-workspace:threads resume test-thread
 
 # Clean up
 cd ~ && rm -rf /tmp/test-workspace
@@ -200,7 +200,7 @@ Merging to `main` ships the plugin, so this is the pre-merge checklist for every
   - [ ] `threads create` works
   - [ ] `threads` lists threads
   - [ ] `threads save` works
-  - [ ] `threads snapshot` works
+  - [ ] `threads resume` works
 - [ ] Debate works (both CLIs):
   - [ ] Proponent and skeptic subagents spawn in isolated contexts
   - [ ] Final artifact is saved to the active thread
