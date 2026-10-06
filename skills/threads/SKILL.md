@@ -147,7 +147,7 @@ Add or change an entry only when the user asks you to remember something or agre
 
 ### Saving
 
-A save writes the session log and the Status paragraph, because todos, decisions and artifacts were written when they happened. It is also the moment to read `memory.md` through, if the thread has one, and propose dropping anything that no longer applies. A session that ends without a save still leaves its stub and a record of what it touched.
+A save writes the session log and the Status paragraph, because todos, decisions and artifacts were written when they happened. It is also the moment to read `memory.md` through, if the thread has one, and propose dropping anything that no longer applies. A session that ends without a save leaves no log, and what it produced is still in the indexes.
 
 Everything from here on applies whatever the schema, except where a schema's own file says otherwise.
 

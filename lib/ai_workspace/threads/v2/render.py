@@ -38,18 +38,20 @@ def _links_line(thread_dir: Path) -> str:
 def next_steps_body(thread_dir: Path) -> str:
     """The top of the todo list, bounded, or a placeholder.
 
-    Says how many it is not showing, because a section that hides the rest in
-    silence is worse for the person reading it than one that points at the
-    index.
+    Says how much it is not showing, whether that is todos below the window or
+    todos that were parked, because a section that hides the rest in silence is
+    worse for the person reading it than one that points at the index.
     """
     entries = idx.read(thread_dir, "todos")
     active = todos_mod.next_up(entries)
     shown = todos_mod.window(entries)
-    if not shown:
-        return "- None\n"
-    lines = [e.render() for e in shown]
-    if (hidden := len(active) - len(shown)):
+    lines = [e.render() for e in shown] or ["- None"]
+    if hidden := len(active) - len(shown):
         lines.append(f"\n{hidden} more in [todos](./todos-index.md).")
+    elif not shown and (parked := len(todos_mod.parked(entries))):
+        # Otherwise `- None` on its own reads as a thread with nothing left to
+        # do, where everything was set aside on purpose.
+        lines.append(f"\n{parked} parked in [todos](./todos-index.md).")
     return "\n".join(lines) + "\n"
 
 

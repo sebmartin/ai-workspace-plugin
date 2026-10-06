@@ -52,8 +52,8 @@ def resume_thread(workspace_dir: str, thread_name: str) -> str:
     `summary:` read from its file, the artifacts index, and the last ten
     sessions. Next steps is the top of the todo list in priority order, bounded
     to five, and its heading counts what is shown, what is active and what is
-    parked. A `## Thread size` heading appears only when the thread has grown
-    expensive to open.
+    parked, so a long list is visible without being printed. A `## Thread size`
+    heading appears only when the thread has grown expensive to open.
 
     A thread this plugin cannot read returns `{"error": CODE, "thread": ...,
     "schema": <n>, "reads": [<low>, <high>]}`: `SCHEMA_TOO_NEW` (upgrade the
@@ -191,15 +191,16 @@ def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
     the README; that is what the backlog of a long list looks like here.
 
     Returns `{"id": ...}`, the minted todo id, which `order_todos` and the
-    retire tools take. `active` is present only when more than five todos are
-    active, carrying that count: tell the user and ask which to park.
+    retire tools take. `active` is present only on the add that takes the list
+    past five, carrying the count: tell the user and ask which to park. Later
+    adds are quiet, and the resume heading keeps the count.
 
     A refusal returns `{"error": CODE, ...}` and writes nothing:
     `STATE_UNKNOWN` or `PLACE_UNKNOWN` with the `allowed` values,
     `LINK_REQUIRED`, `NO_SUCH_ENTRY` naming an anchor that is not in the list,
-    and `UNREPRESENTABLE` when the title or link carries a character an index
-    line cannot hold, whose `detail` names the field and the character. Reword
-    it; a title cannot contain `]` and a link cannot contain `)`.
+    and `UNREPRESENTABLE` when a field would not survive an index line, whose
+    `detail` names the field. Reword that field; a title cannot contain `]`, a
+    link cannot contain `)`, and nothing may contain a line break.
 
     Args:
         workspace_dir: The tracked workspace path from session context.
@@ -244,8 +245,8 @@ def set_todo_state(workspace_dir: str, thread_name: str, todo_id: str, state: st
     work on something. Unparking sends it to the end, because parked meant for
     later.
 
-    Returns `{"id": ...}`, with `active` carrying the count when more than five
-    todos are active, which unparking can be what causes. A refusal returns
+    Returns `{"id": ...}`, with `active` carrying the count when unparking is
+    what takes the list past five. A refusal returns
     `{"error": "STATE_UNKNOWN", "allowed": [...]}` or
     `{"error": "NO_SUCH_ENTRY"}` and writes nothing.
 
@@ -372,6 +373,8 @@ def index_directory(workspace_dir: str, thread_name: str, link: str) -> str:
     - `STATUS_UNKNOWN` — a decision declares a status this schema does not use.
       Substitute the vocabulary in the file's frontmatter.
     - `UNREADABLE` — the file could not be opened.
+    - `UNREPRESENTABLE` — the filename carries a character an index line cannot
+      hold, so the entry could not be read back. Rename the file.
 
     A bad request returns `{"error": CODE, "detail": ...}` and indexes nothing:
     `OUTSIDE_THREAD`, `NOT_INDEXABLE`, or `NO_SUCH_DIRECTORY` when the kind is
@@ -413,16 +416,17 @@ def index_file(workspace_dir: str, thread_name: str, link: str,
     codes as index_directory, plus `MISSING` when the link resolves to nothing,
     `METADATA` for a dotfile, which is never content,
     `DESCRIPTION_TOO_LONG`, whose `detail` is the limit in characters,
-    `UNREPRESENTABLE` for a filename carrying `)`, which an index line cannot
-    hold, and `DATE_INVALID`.
+    `UNREPRESENTABLE` when the link or the description would not survive an
+    index line, whose `detail` names the field, and `DATE_INVALID`.
 
     Args:
         workspace_dir: The tracked workspace path from session context.
         thread_name: Name of the thread (kebab-case).
         link: Path relative to the thread, e.g. ./artifacts/20260813-notes-x.md.
         description: One sentence saying what an artifact contains, refused
-            beyond 200 characters. Artifacts only; decisions and sessions carry
-            a `summary:` in their own frontmatter. It is read on every resume.
+            beyond 200 characters or if it carries a line break. Artifacts
+            only; decisions and sessions carry a `summary:` in their own
+            frontmatter. It is read on every resume.
         date: `YYYY-MM-DD`, when the file is from. Only read when the filename
             states no date. Take it from the file's own contents, or from the
             decision or session that produced it, or ask. Leave it out rather
@@ -468,7 +472,8 @@ def save_session(workspace_dir: str, thread_name: str, slug: str, summary: str,
     Args:
         workspace_dir: The tracked workspace path from session context.
         thread_name: Name of the thread (kebab-case).
-        slug: Short kebab-case topic for the session, used in its id and filename.
+        slug: Short kebab-case topic for the session, used in its id, its
+            filename and its index title, which is the slug as the id spells it.
         summary: Up to 150 words on what was discussed and settled.
         keywords: Comma-separated terms to search for later.
         body: Full markdown body of the session log.

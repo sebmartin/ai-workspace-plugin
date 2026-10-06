@@ -45,7 +45,8 @@ _INDEXABLE = {
 # thread's payload. This refuses rather than truncating: a slug cut short is
 # still an identifier, where a sentence cut short reads as whole and the reader
 # cannot tell. Refusing also reaches the only party that can fix it, since the
-# caller wrote the sentence and is still holding it.
+# caller wrote the sentence and is still holding it. The same field is checked
+# against the line format, which is what a line break in it defeats.
 MAX_DESCRIPTION = 200
 
 
@@ -164,11 +165,9 @@ def _index_one(thread, link: str, description: str = "",
     if kind not in _INDEXABLE:
         return Indexed(""), Refusal("NOT_INDEXABLE", kind)
 
+    description = description.strip()
     if len(description) > MAX_DESCRIPTION:
         return Indexed(""), Refusal("DESCRIPTION_TOO_LONG", str(MAX_DESCRIPTION))
-
-    if (unreadable := idx.unrepresentable("", f"./{relative}")) is not None:
-        return Indexed(""), Refusal("UNREPRESENTABLE", unreadable)
 
     path = thread.dir / relative
     if not path.exists():
@@ -186,7 +185,10 @@ def _index_one(thread, link: str, description: str = "",
         # boundary. Without it, re-indexing to correct a link would silently
         # erase the sentence.
         if description and takes_description and entry.description != description:
-            entry.description = description
+            was, entry.description = entry.description, description
+            if (unreadable := idx.unrepresentable(entry)) is not None:
+                entry.description = was
+                return Indexed(""), Refusal("UNREPRESENTABLE", unreadable)
             idx.write(thread.dir, kind, entries, retired)
         if when is None:
             return Indexed(entry.id), None
@@ -204,15 +206,18 @@ def _index_one(thread, link: str, description: str = "",
         ids_mod.make_id(when, rest), idx.taken_ids(thread.dir, kind)
     )
 
-    idx.add(thread.dir, kind, idx.Entry(
+    entry = idx.Entry(
         entry_id, state, entry_id, f"./{relative}",
         description if takes_description else "",
-    ))
+    )
+    if (unreadable := idx.unrepresentable(entry)) is not None:
+        return Indexed(""), Refusal("UNREPRESENTABLE", unreadable)
+    idx.add(thread.dir, kind, entry)
     return Indexed(entry_id), None
 
 
 def index_file(thread, link: str, description: str = "",
-               when: str | None = None, session_id: str | None = None) -> str:
+               when: str | None = None) -> str:
     """Index a file that is already in the thread.
 
     The only way an index entry for a file is minted; the tools that author one
@@ -236,7 +241,6 @@ def index_file(thread, link: str, description: str = "",
     if refusal is not None:
         return json.dumps({"error": refusal.code, "detail": refusal.detail})
     render.render(thread.dir)
-    _record(thread.dir, session_id, f"{PurePosixPath(link).parts[-2][:-1]} {indexed.id}")
     reply: dict = {"id": indexed.id}
     if indexed.was:
         reply["was"] = indexed.was
@@ -245,7 +249,7 @@ def index_file(thread, link: str, description: str = "",
     return json.dumps(reply)
 
 
-def index_directory(thread, link: str, session_id: str | None = None) -> str:
+def index_directory(thread, link: str) -> str:
     """Index every top-level entry in one directory that is not indexed yet.
 
     Migration is the reason this exists. A thread with sixty-six sessions is
@@ -298,7 +302,6 @@ def index_directory(thread, link: str, session_id: str | None = None) -> str:
 
     if indexed:
         render.render(thread.dir)
-        _record(thread.dir, session_id, f"{len(indexed)} {kind} indexed")
 
     # No news is good news. Asking to index a directory and being told every
     # file went in is a hundred filenames of nothing; the caller asked for all
@@ -310,11 +313,6 @@ def index_directory(thread, link: str, session_id: str | None = None) -> str:
     if refused:
         reply["refused"] = refused
     return json.dumps(reply)
-
-
-def _record(thread_dir: Path, session_id: str | None, line: str) -> None:
-    if session_id:
-        session.note_created(thread_dir, session_id, line)
 
 
 def _unplaceable(where) -> str:
@@ -331,7 +329,7 @@ def _unplaceable(where) -> str:
 
 
 def add_todo(thread, title: str, link: str, state: str = "active",
-             place: str = "", session_id: str | None = None) -> str:
+             place: str = "") -> str:
     """Add a todo at a chosen place in the list.
 
     The caller places it because only the caller knows what the todo is for:
@@ -345,8 +343,6 @@ def add_todo(thread, title: str, link: str, state: str = "active",
         return json.dumps({"error": "STATE_UNKNOWN", "detail": state, "allowed": allowed})
     if not link:
         return json.dumps({"error": "LINK_REQUIRED"})
-    if (unreadable := idx.unrepresentable(title, link)) is not None:
-        return json.dumps({"error": "UNREPRESENTABLE", "detail": unreadable})
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
 
@@ -360,12 +356,15 @@ def add_todo(thread, title: str, link: str, state: str = "active",
         at = where.at
 
     todo_id = _new_id(thread.dir, "todos", title)
-    entries.insert(at, idx.Entry(todo_id, state, title, link))
+    entry = idx.Entry(todo_id, state, title.strip(), link.strip())
+    if (unreadable := idx.unrepresentable(entry)) is not None:
+        return json.dumps({"error": "UNREPRESENTABLE", "detail": unreadable})
+    was = list(entries)
+    entries.insert(at, entry)
     idx.write(thread.dir, "todos", entries)
     render.render(thread.dir)
-    _record(thread.dir, session_id, f"todo {todo_id}")
     reply: dict = {"id": todo_id}
-    if waiting := todos_mod.crowded(entries):
+    if waiting := todos_mod.just_crowded(was, entries):
         reply["active"] = waiting
     return json.dumps(reply)
 
@@ -396,6 +395,7 @@ def set_state(thread, kind: str, entry_id: str, state: str) -> str:
     entry = idx.find(entries, entry_id)
     if entry is None:
         return json.dumps({"error": "NO_SUCH_ENTRY", "detail": entry_id})
+    before = [idx.Entry(e.id, e.state, e.title, e.link, e.description) for e in entries]
     was, entry.state = entry.state, state
     if kind == "todos":
         if state == todos_mod.STARTED:
@@ -405,7 +405,7 @@ def set_state(thread, kind: str, entry_id: str, state: str) -> str:
     idx.write(thread.dir, kind, entries)
     render.render(thread.dir)
     reply: dict = {"id": entry_id}
-    if kind == "todos" and (waiting := todos_mod.crowded(entries)):
+    if kind == "todos" and (waiting := todos_mod.just_crowded(before, entries)):
         reply["active"] = waiting
     return json.dumps(reply)
 
@@ -445,13 +445,11 @@ def order_todos(thread, todo_ids: list[str], place: str = "") -> str:
 
 
 def log_decision(thread, title: str, summary: str, body: str,
-                 status: str = "proposed", supersedes: list[str] | None = None,
-                 session_id: str | None = None) -> str:
+                 status: str = "proposed",
+                 supersedes: list[str] | None = None) -> str:
     if status not in idx.IN_FORCE["decisions"]:
         return json.dumps({"error": "STATUS_UNKNOWN", "detail": status,
                            "allowed": list(idx.IN_FORCE["decisions"])})
-    if (unreadable := idx.unrepresentable(title, "")) is not None:
-        return json.dumps({"error": "UNREPRESENTABLE", "detail": unreadable})
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
     supersedes = supersedes or []
@@ -472,7 +470,7 @@ def log_decision(thread, title: str, summary: str, body: str,
     path.write_text("\n".join(front) + body.rstrip() + "\n")
     # Indexed the same way a pre-existing file is, so the id it just chose for
     # the filename is the id that lands on the line. Nothing can disagree.
-    indexed = index_file(thread, f"./decisions/{decision_id}.md", session_id=session_id)
+    indexed = index_file(thread, f"./decisions/{decision_id}.md")
     if indexed.startswith("Error:"):
         return indexed
 

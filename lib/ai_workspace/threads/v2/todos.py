@@ -54,6 +54,17 @@ def crowded(entries: list[Entry]) -> int:
     return waiting if waiting > COMFORTABLE else 0
 
 
+def just_crowded(before: list[Entry], after: list[Entry]) -> int:
+    """The count, but only on the change that takes the list past the window.
+
+    Reported on every change past it, this would instruct on each of the adds
+    from six to twenty and be ignored by the twentieth. The bound is what keeps
+    the README cheap, so one instruction is enough and the resume heading is
+    what goes on reporting.
+    """
+    return 0 if crowded(before) else crowded(after)
+
+
 def index_of(entries: list[Entry], entry_id: str) -> int | None:
     found = (i for i, e in enumerate(entries) if e.id == entry_id)
     return next(found, None)

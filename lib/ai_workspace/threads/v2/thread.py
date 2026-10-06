@@ -120,8 +120,6 @@ def compose(thread_dir: Path, thread_name: str) -> str:
     out.extend(e.render() for e in shown)
     if not shown:
         out.append("- None")
-    if waiting := todos_mod.crowded(todos):
-        out.append(f"\n{waiting} active todos; ask the user which to park.")
 
     # Its own section rather than a tail on the list above, because the skill
     # has the agent print Next steps and parked todos are the ones the user

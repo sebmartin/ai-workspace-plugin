@@ -114,7 +114,8 @@ class TestTodos:
         d = _thread(tmp_path)
         ws = str(tmp_path)
         out = _reply(add_todo(ws, "t", "Fix [bug] in parser", "./sessions/s.md"))
-        assert out["error"] == "UNREPRESENTABLE" and "]" in out["detail"]
+        assert out["error"] == "UNREPRESENTABLE"
+        assert out["detail"] == "title cannot be read back from a line"
         assert idx.read(d, "todos") == []
 
     def test_a_link_that_cannot_be_read_back_is_refused(self, tmp_path):
@@ -122,7 +123,8 @@ class TestTodos:
         d = _thread(tmp_path)
         ws = str(tmp_path)
         out = _reply(add_todo(ws, "t", "Read the spec", "https://en.wikipedia.org/wiki/Merge_(SQL)"))
-        assert out["error"] == "UNREPRESENTABLE" and ")" in out["detail"]
+        assert out["error"] == "UNREPRESENTABLE"
+        assert out["detail"] == "link cannot be read back from a line"
         assert idx.read(d, "todos") == []
 
     def test_a_newline_in_a_title_is_refused(self, tmp_path):
@@ -426,13 +428,24 @@ class TestTodos:
         a = _only_id(d, "todos")
         assert _reply(order_todos(ws, "t", [a, a]))["error"] == "DUPLICATE_ID"
 
-    def test_a_crowded_list_says_so_when_a_todo_is_added(self, tmp_path):
+    def test_the_add_that_crosses_the_line_says_so(self, tmp_path):
         """Deterministic, so it does not rely on the skill being remembered."""
         _thread(tmp_path)
         ws = str(tmp_path)
         for n in range(5):
             assert "active" not in _reply(add_todo(ws, "t", f"T{n}", "./s.md"))
         assert _reply(add_todo(ws, "t", "T5", "./s.md"))["active"] == 6
+
+    def test_the_adds_after_it_do_not_say_so_again(self, tmp_path):
+        """The bound is what keeps the README cheap, so this instructs once
+        rather than on every add from six to twenty. The resume heading is
+        what keeps reporting."""
+        _thread(tmp_path)
+        ws = str(tmp_path)
+        for n in range(6):
+            add_todo(ws, "t", f"T{n}", "./s.md")
+        assert "active" not in _reply(add_todo(ws, "t", "T6", "./s.md"))
+        assert "active" not in _reply(add_todo(ws, "t", "T7", "./s.md"))
 
     def test_a_parked_todo_does_not_count_towards_crowding(self, tmp_path):
         _thread(tmp_path)
@@ -458,7 +471,7 @@ class TestTodos:
         add_todo(ws, "t", "B", "./s.md", place="   ")
         assert [e.title for e in idx.read(d, "todos")] == ["A", "B"]
 
-    def test_unparking_past_the_window_says_so(self, tmp_path):
+    def test_the_unpark_that_crosses_the_line_says_so(self, tmp_path):
         """The other way the list crosses the line, and the only one that was
         silent about it."""
         _thread(tmp_path)
@@ -466,6 +479,13 @@ class TestTodos:
         ids = [json.loads(add_todo(ws, "t", f"T{n}", "./s.md"))["id"] for n in range(6)]
         set_todo_state(ws, "t", ids[0], "parked")
         assert _reply(set_todo_state(ws, "t", ids[0], "active"))["active"] == 6
+
+    def test_an_unpark_that_does_not_cross_it_is_quiet(self, tmp_path):
+        _thread(tmp_path)
+        ws = str(tmp_path)
+        ids = [json.loads(add_todo(ws, "t", f"T{n}", "./s.md"))["id"] for n in range(8)]
+        set_todo_state(ws, "t", ids[0], "parked")
+        assert "active" not in _reply(set_todo_state(ws, "t", ids[0], "active"))
 
     def test_a_comfortable_list_says_nothing_on_a_state_change(self, tmp_path):
         _thread(tmp_path)
@@ -811,6 +831,61 @@ class TestIndexDirectory:
         assert _reply(index_directory(str(tmp_path), "t", "./todos"))["error"] == "NOT_INDEXABLE"
 
 
+class TestRoundTrip:
+    """Nothing is written that the index cannot read back."""
+
+    def test_a_description_with_a_line_break_is_refused(self, tmp_path):
+        """The third field on the line, and the one that is free prose. It
+        truncated at the break and orphaned the rest."""
+        d = _thread(tmp_path)
+        (d / "artifacts" / "20260101-a-note.md").write_text("x")
+        out = _reply(index_file(str(tmp_path), "t", "./artifacts/20260101-a-note.md",
+                                "one\ntwo"))
+        assert out["error"] == "UNREPRESENTABLE" and "description" in out["detail"]
+        assert idx.read(d, "artifacts") == []
+
+    def test_a_description_is_stored_without_its_padding(self, tmp_path):
+        """Trailing space does not survive a line, and stripping it is right
+        where refusing it would only be pedantic."""
+        d = _thread(tmp_path)
+        (d / "artifacts" / "20260101-a-note.md").write_text("x")
+        index_file(str(tmp_path), "t", "./artifacts/20260101-a-note.md", "  one  ")
+        assert idx.read(d, "artifacts")[0].description == "one"
+
+    def test_a_decision_title_may_hold_a_bracket(self, tmp_path):
+        """Its index line carries the id, not the title, so there is nothing
+        for a bracket in the title to break."""
+        d = _thread(tmp_path)
+        out = _reply(log_decision(str(tmp_path), "t", "Use [brackets] here",
+                                  "Chose brackets.", "body"))
+        assert "error" not in out
+        assert len(idx.read(d, "decisions")) == 1
+
+    def test_a_session_slug_cannot_corrupt_its_line(self, tmp_path):
+        """The slug reached the title raw, so one bracket lost the entry."""
+        d = _thread(tmp_path)
+        from mcp_server import save_session
+        save_session(str(tmp_path), "t", "my [topic]", "s", "k", body="# x\n")
+        assert len(idx.read(d, "sessions")) == 1
+
+    def test_the_check_follows_the_line_format(self, tmp_path):
+        """Not a second list of characters to keep in step with the pattern:
+        the entry is rendered and read back through the pattern itself."""
+        entry = idx.Entry("20260101-a", "active", "Fine title", "./todos/a.md", "fine")
+        assert idx.unrepresentable(entry) is None
+        entry.description = "one -- two"
+        assert idx.unrepresentable(entry) is None
+        entry.title = "broken ] title"
+        assert idx.unrepresentable(entry) == "title cannot be read back from a line"
+
+    def test_a_field_that_comes_back_changed_counts_as_lost(self, tmp_path):
+        """The line still matches, so matching is not the test: the fields are
+        compared. Trailing space on the last field is eaten by the pattern's
+        own `\\s*$`, which is why the tools strip before they build an entry."""
+        entry = idx.Entry("20260101-a", "active", "T", "./todos/a.md", "padded  ")
+        assert idx.unrepresentable(entry) == "description cannot be read back from a line"
+
+
 class TestReadmeShape:
     def test_a_v1_readme_is_refused_rather_than_appended_to(self, tmp_path):
         """The Frankenstein case: a real migration hit this and was told it worked.
@@ -879,18 +954,15 @@ class TestSaveSession:
         assert "Round 3 booked for Friday." in readme
         assert "**Last Session**:" in readme
 
-    def test_the_body_replaces_the_stub(self, tmp_path):
-        """The stub lists what the session created; the body is expected to
-        cover it, so a save is one write rather than an append."""
+    def test_the_body_replaces_whatever_the_file_held(self, tmp_path):
+        """A save is one write rather than an append, so the body is the log."""
         d = _thread(tmp_path)
         from ai_workspace.threads.v2 import session
         from mcp_server import save_session
         sid = session.ensure_stub(d, "topic")
         p = session.session_path(d, sid)
-        session.note_created(d, sid, "todo 20260101-x")
         save_session(str(tmp_path), "t", "topic", "s", "k", "# Session\n\nWhat happened.\n")
         text = p.read_text()
-        assert "Created during this session" not in text
         assert "What happened." in text
         assert split_frontmatter(text)[0]["summary"] == "s"
 
@@ -932,14 +1004,13 @@ class TestSaveSession:
         save_session(str(tmp_path), "t", "topic", "s", "k", "# Session\n")
         assert len(idx.read(d, "sessions")) == 1
 
-    def test_saving_clears_the_unsaved_marker(self, tmp_path):
+    def test_saving_twice_writes_one_session(self, tmp_path):
         d = _thread(tmp_path)
         from ai_workspace.threads.v2 import session
         from mcp_server import save_session
         session.ensure_stub(d, "topic")
         save_session(str(tmp_path), "t", "topic", "s", "k", "# Session\n")
-        sid = _only_id(d, "sessions")
-        assert session.STUB_MARKER not in (d / "sessions" / f"{sid}.md").read_text()
+        assert len(idx.read(d, "sessions")) == 1
 
     def test_last_session_survives_for_archive(self, tmp_path):
         """archive_thread greps this line; a render must never drop it."""
