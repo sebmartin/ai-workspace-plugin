@@ -377,28 +377,59 @@ class TestRender:
 
 
 class TestSessionFile:
-    def test_a_session_gets_an_id_and_an_index_entry(self, tmp_path):
+    def test_a_session_is_named_before_it_is_written(self, tmp_path):
         d = _v2_thread(tmp_path)
-        sid = session.ensure_stub(d, "my-topic", today=date(2026, 5, 4))
-        assert sid == "20260504-my-topic"
-        assert session.session_path(d, sid).exists()
-        entries = idx.read(d, "sessions")
-        assert entries[0].id == sid
+        assert session.next_id(d, "my-topic", date(2026, 5, 4)) == "20260504-my-topic"
+        assert not (d / "sessions" / "20260504-my-topic.md").exists()
+        assert idx.read(d, "sessions") == []
 
-    def test_a_session_file_is_created_once(self, tmp_path):
+    def test_the_file_exists_before_the_index_points_at_it(self, tmp_path):
+        """An index entry for a file that was never written is what the audit
+        reports as dangling."""
         d = _v2_thread(tmp_path)
-        session.ensure_stub(d, "topic", today=date(2026, 5, 4))
-        session.ensure_stub(d, "topic", today=date(2026, 5, 4))
-        entries = idx.read(d, "sessions")
-        assert len(entries) == 1
+        session.save(d, "topic", "s", "k", "# body\n", today=date(2026, 5, 4))
+        entry = idx.read(d, "sessions")[0]
+        assert (d / entry.link.lstrip("./")).is_file()
+
+    def test_a_failed_write_leaves_no_entry_pointing_at_nothing(self, tmp_path,
+                                                                monkeypatch):
+        """Which is the whole reason the file is written first. Only a failing
+        write shows the ordering; the end state is the same either way."""
+        d = _v2_thread(tmp_path)
+        real = Path.write_text
+
+        def refuse(self, *args, **kwargs):
+            if self.parent.name == "sessions":
+                raise OSError("no space left on device")
+            return real(self, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "write_text", refuse)
+        with pytest.raises(OSError):
+            session.save(d, "topic", "s", "k", "# body\n", today=date(2026, 5, 4))
+        assert idx.read(d, "sessions") == []
+
+    def test_the_same_day_and_slug_is_the_same_session(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        for _ in range(2):
+            session.save(d, "topic", "s", "k", "# body\n", today=date(2026, 5, 4))
+        assert len(idx.read(d, "sessions")) == 1
 
     def test_the_index_title_is_the_slug_as_the_id_spells_it(self, tmp_path):
         """Passed through raw, a slug carrying `]` wrote a line the index could
         not read back, losing the entry."""
         d = _v2_thread(tmp_path)
-        sid = session.ensure_stub(d, "my [topic]", today=date(2026, 5, 4))
-        entries = idx.read(d, "sessions")
-        assert [(e.id, e.title) for e in entries] == [(sid, "my-topic")]
+        sid, _ = session.save(d, "my [topic]", "s", "k", "# b\n", today=date(2026, 5, 4))
+        assert [(e.id, e.title) for e in idx.read(d, "sessions")] == [(sid, "my-topic")]
+
+    def test_a_slug_past_the_id_cap_takes_the_capped_spelling(self, tmp_path):
+        """`slugify` caps the id, so title and id still agree, which is the
+        point, but the title is then the shortened form."""
+        d = _v2_thread(tmp_path)
+        long = "a-very-long-session-slug-that-runs-past-the-identifier-length-cap"
+        sid, _ = session.save(d, long, "s", "k", "# b\n", today=date(2026, 5, 4))
+        title = idx.read(d, "sessions")[0].title
+        assert title == sid[len("20260504-"):]
+        assert len(title) <= ids.MAX_SLUG
 
 
 class TestIds:

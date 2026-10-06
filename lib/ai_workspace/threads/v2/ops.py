@@ -341,6 +341,8 @@ def add_todo(thread, title: str, link: str, state: str = "active",
     if state not in idx.IN_FORCE["todos"]:
         allowed = list(idx.IN_FORCE["todos"])
         return json.dumps({"error": "STATE_UNKNOWN", "detail": state, "allowed": allowed})
+    if not title.strip():
+        return json.dumps({"error": "TITLE_REQUIRED"})
     if not link:
         return json.dumps({"error": "LINK_REQUIRED"})
     if (unwritable := render.blocked(thread.dir)) is not None:

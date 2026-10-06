@@ -197,7 +197,8 @@ def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
 
     A refusal returns `{"error": CODE, ...}` and writes nothing:
     `STATE_UNKNOWN` or `PLACE_UNKNOWN` with the `allowed` values,
-    `LINK_REQUIRED`, `NO_SUCH_ENTRY` naming an anchor that is not in the list,
+    `TITLE_REQUIRED`, `LINK_REQUIRED`, `NO_SUCH_ENTRY` naming an anchor that is
+    not in the list,
     and `UNREPRESENTABLE` when a field would not survive an index line, whose
     `detail` names the field. Reword that field; a title cannot contain `]`, a
     link cannot contain `)`, and nothing may contain a line break.
@@ -473,7 +474,8 @@ def save_session(workspace_dir: str, thread_name: str, slug: str, summary: str,
         workspace_dir: The tracked workspace path from session context.
         thread_name: Name of the thread (kebab-case).
         slug: Short kebab-case topic for the session, used in its id, its
-            filename and its index title, which is the slug as the id spells it.
+            filename and its index title, which is the slug as the id spells
+            it and so is shortened past the id's length cap.
         summary: Up to 150 words on what was discussed and settled.
         keywords: Comma-separated terms to search for later.
         body: Full markdown body of the session log.

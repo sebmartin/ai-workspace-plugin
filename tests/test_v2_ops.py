@@ -87,6 +87,13 @@ class TestRefusalOnSchema1:
 
 
 class TestTodos:
+    def test_add_requires_a_title(self, tmp_path):
+        """Stripped to nothing, it renders an empty link label."""
+        d = _thread(tmp_path)
+        out = _reply(add_todo(str(tmp_path), "t", "   ", "./s.md"))
+        assert out["error"] == "TITLE_REQUIRED"
+        assert idx.read(d, "todos") == []
+
     def test_add_requires_a_link(self, tmp_path):
         _thread(tmp_path)
         assert _reply(add_todo(str(tmp_path), "t", "Email the contractor", ""))["error"] == "LINK_REQUIRED"
@@ -959,9 +966,8 @@ class TestSaveSession:
         d = _thread(tmp_path)
         from ai_workspace.threads.v2 import session
         from mcp_server import save_session
-        sid = session.ensure_stub(d, "topic")
-        p = session.session_path(d, sid)
         save_session(str(tmp_path), "t", "topic", "s", "k", "# Session\n\nWhat happened.\n")
+        p = session.session_path(d, _only_id(d, "sessions"))
         text = p.read_text()
         assert "What happened." in text
         assert split_frontmatter(text)[0]["summary"] == "s"
@@ -1006,11 +1012,11 @@ class TestSaveSession:
 
     def test_saving_twice_writes_one_session(self, tmp_path):
         d = _thread(tmp_path)
-        from ai_workspace.threads.v2 import session
         from mcp_server import save_session
-        session.ensure_stub(d, "topic")
         save_session(str(tmp_path), "t", "topic", "s", "k", "# Session\n")
+        save_session(str(tmp_path), "t", "topic", "s2", "k", "# Again\n")
         assert len(idx.read(d, "sessions")) == 1
+        assert "Again" in (d / "sessions" / f"{_only_id(d, 'sessions')}.md").read_text()
 
     def test_last_session_survives_for_archive(self, tmp_path):
         """archive_thread greps this line; a render must never drop it."""

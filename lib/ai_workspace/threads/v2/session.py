@@ -16,52 +16,52 @@ def session_path(thread_dir: Path, session_id: str) -> Path:
     return thread_dir / "sessions" / f"{session_id}.md"
 
 
-def ensure_stub(thread_dir: Path, slug: str, today: date | None = None) -> str:
-    """Create the session file and its index entry if absent. Returns the id.
+def next_id(thread_dir: Path, slug: str, today: date) -> str:
+    """The id this session's file takes. Names it; writes nothing.
 
-    The index title is the slug as the id spells it, not as it was passed. The
-    two are the same for the kebab-case the tool asks for, and a session's
-    title then agrees with its id the way a decision's and an artifact's do.
-    Passed through raw, a slug carrying `]` wrote a line the index could not
-    read back.
+    The same id on a second save for the same day and slug, because that is the
+    same session, so an existing file is reused rather than uniquified into a
+    second one beside it.
     """
-    today = today or date.today()
     base_id = ids_mod.make_id(today, slug)
-    title = ids_mod.slugify(slug)
-    # Idempotent: called repeatedly through one session, this is the same
-    # session, so an existing file for the same day and slug is reused rather
-    # than uniquified into a second stub. The index entry is checked either
-    # way, since a file can exist without one when it was written directly.
-    taken = idx.taken_ids(thread_dir, "sessions")
     if session_path(thread_dir, base_id).exists():
-        session_id = base_id
-    else:
-        session_id = ids_mod.unique_id(base_id, taken)
-        path = session_path(thread_dir, session_id)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(
-            "---\n"
-            f"date: {today.isoformat()}\n"
-            "---\n\n"
-            f"# Session: {title} - {today.isoformat()}\n"
-        )
-    if session_id not in taken:
+        return base_id
+    return ids_mod.unique_id(base_id, idx.taken_ids(thread_dir, "sessions"))
+
+
+def ensure_indexed(thread_dir: Path, session_id: str, title: str) -> None:
+    """Give this session an index line, or correct the title on the one it has.
+
+    The title is the slug as the id spells it, not as it was passed, so a
+    session's title agrees with its id the way a decision's and an artifact's
+    do. Passed through raw, a slug carrying `]` wrote a line the index could
+    not read back. Beyond the id's length cap the two agree on the shortened
+    spelling rather than the full slug, which is the same bargain.
+    """
+    entries = idx.read(thread_dir, "sessions")
+    entry = idx.find(entries, session_id)
+    if entry is None:
         idx.add(
             thread_dir, "sessions",
             idx.Entry(session_id, None, title, f"./sessions/{session_id}.md"),
         )
-    return session_id
+    elif title and entry.title != title:
+        entry.title = title
+        idx.write(thread_dir, "sessions", entries)
 
 
 def save(thread_dir: Path, slug: str, summary: str, keywords: str, body: str,
          today: date | None = None) -> tuple[str, str]:
     """Write the session log. Returns (session_id, note).
 
-    The body replaces whatever the file holds.
+    The body replaces whatever the file holds. Written before the index points
+    at it, so there is no moment where an entry names a file that is not there,
+    which is what the migration audit reports as dangling.
     """
     today = today or date.today()
-    session_id = ensure_stub(thread_dir, slug, today=today)
+    session_id = next_id(thread_dir, slug, today)
     path = session_path(thread_dir, session_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
     front = (
         "---\n"
         f"date: {today.isoformat()}\n"
@@ -70,11 +70,5 @@ def save(thread_dir: Path, slug: str, summary: str, keywords: str, body: str,
         "---\n\n"
     )
     path.write_text(front + body.rstrip() + "\n")
-
-    entries = idx.read(thread_dir, "sessions")
-    entry = idx.find(entries, session_id)
-    title = ids_mod.slugify(slug)
-    if entry is not None and slug and entry.title != title:
-        entry.title = title
-        idx.write(thread_dir, "sessions", entries)
+    ensure_indexed(thread_dir, session_id, ids_mod.slugify(slug))
     return session_id, "saved"
