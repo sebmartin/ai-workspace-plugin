@@ -353,6 +353,8 @@ def set_state(thread, kind: str, entry_id: str, state: str) -> str:
         return json.dumps({"error": "NO_SUCH_ENTRY", "detail": entry_id})
     entry.state = state
     idx.write(thread.dir, kind, entries, fm)
+    if state == "parked":
+        _drop_from_windows(thread.dir, kind, entry_id)
     render.render(thread.dir)
     return json.dumps({"id": entry_id})
 

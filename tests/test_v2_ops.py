@@ -120,6 +120,20 @@ class TestTodos:
         entries, _ = idx.read(d, "todos")
         assert entries[0].state == "active"
 
+    def test_parking_removes_it_from_the_window(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        add_todo(ws, "t", "Call the surveyor", "./s.md")
+        todo_id = _only_id(d, "todos")
+        set_window(ws, "t", [todo_id])
+        set_todo_state(ws, "t", todo_id, "parked")
+        _, fm = idx.read(d, "todos")
+        assert fm.get("windows", {}).get("next_steps") == []
+        assert "Call the surveyor" not in (d / "README.md").read_text()
+        set_todo_state(ws, "t", todo_id, "active")
+        _, fm = idx.read(d, "todos")
+        assert fm.get("windows", {}).get("next_steps") == []
+
     def test_bad_state_is_rejected(self, tmp_path):
         _thread(tmp_path)
         assert _reply(add_todo(str(tmp_path), "t", "A", "./s.md", "banana"))["error"] == "STATE_UNKNOWN"

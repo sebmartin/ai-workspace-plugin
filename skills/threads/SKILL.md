@@ -128,7 +128,7 @@ can be written to at all. Fetch
 
 **A decision is a choice that was made.** Its summary loads on every resume, so log one only when you can name the alternative that was rejected.
 
-**Leave the Next steps window alone.** Change it only when the user asks. Retiring a todo drops it from the window and nothing refills it; an empty window is fine.
+**Leave the Next steps window alone.** Change it only when the user asks. Retiring or parking a todo drops it from the window and nothing refills it; an empty window is fine.
 
 ### Memory
 
