@@ -8,6 +8,7 @@ from ai_workspace.plugin import get_template_path
 from ai_workspace.text import split_frontmatter
 from ai_workspace.threads import marker
 from ai_workspace.threads.v2 import index as idx
+from ai_workspace.threads.v2 import todos as todos_mod
 
 SESSION_WINDOW = 10
 ATTACHMENT_WINDOW = 12
@@ -105,38 +106,36 @@ def compose(thread_dir: Path, thread_name: str) -> str:
     if about:
         out.append("\n## About\n\n" + about)
 
-    todos, fm = idx.read(thread_dir, "todos")
-    window = (fm.get("windows") or {}).get("next_steps") or []
-    by_id = {e.id: e for e in todos}
-    shown = [by_id[i] for i in window if i in by_id]
-    out.append(f"\n## Next steps ({len(shown)} of {len(todos)} todos)\n")
-    out.extend(e.render() for e in shown)
-    if not shown:
+    todos = idx.read(thread_dir, "todos")
+    next_up, parked = todos_mod.next_up(todos), todos_mod.parked(todos)
+    # Both counts, because an empty list is ambiguous on its own: nothing to do
+    # and everything deliberately parked read the same, and only one of them
+    # means the thread is finished with.
+    out.append(f"\n## Next steps ({len(next_up)} active, {len(parked)} parked)\n")
+    out.extend(e.render() for e in next_up)
+    if not next_up:
         out.append("- None")
+    if waiting := todos_mod.crowded(todos):
+        out.append(f"\n{waiting} active todos; ask the user which to park.")
 
-    parked = [e for e in todos if e.state == "parked"]
-    backlog = [e for e in todos if e.id not in window and e.state != "parked"]
-    # "beyond the window" earns its place: the count excludes what Next steps
-    # already showed, so a thread whose todos are all windowed reads as
-    # "0 active" directly under five active todos. A reader took that for a
-    # corrupt index rather than a heading that did not say what it counted.
-    out.append(
-        f"\n## Todo backlog, beyond the window "
-        f"({len(backlog)} active, {len(parked)} parked)\n"
-    )
-    out.extend(e.render() for e in backlog + parked)
+    # Its own section rather than a tail on the list above, because the skill
+    # has the agent print Next steps and parked todos are the ones the user
+    # already said are not next.
+    if parked:
+        out.append("\n## Parked\n")
+        out.extend(e.render() for e in parked)
 
-    decisions, _ = idx.read(thread_dir, "decisions")
+    decisions = idx.read(thread_dir, "decisions")
     out.append(f"\n## Decisions in force ({len(decisions)})\n")
     for entry in decisions:
         summary = _decision_summary(thread_dir, entry)
         out.append(entry.render() + (f"\n  {summary}" if summary else ""))
 
-    artifacts, _ = idx.read(thread_dir, "artifacts")
+    artifacts = idx.read(thread_dir, "artifacts")
     out.append(f"\n## Artifacts ({len(artifacts)})\n")
     out.extend(e.render() for e in artifacts)
 
-    sessions, _ = idx.read(thread_dir, "sessions")
+    sessions = idx.read(thread_dir, "sessions")
     tail = sessions[-SESSION_WINDOW:]
     out.append(f"\n## Recent sessions ({len(tail)} of {len(sessions)})\n")
     out.extend(e.render() for e in tail)

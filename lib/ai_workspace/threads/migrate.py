@@ -106,7 +106,7 @@ def _indexed_targets(thread_dir: Path, kind: str) -> set[str]:
     """
     names: set[str] = set()
     for retired in (False, True):
-        entries, _ = idx.read(thread_dir, kind, retired)
+        entries = idx.read(thread_dir, kind, retired)
         names.update(Path(e.link).name for e in entries)
     return names
 
@@ -115,7 +115,7 @@ def audit(original: Path, converted: Path) -> str:
     """Compare the original tree against the converted copy.
 
     Deterministic on purpose: files present in one and not the other, entries
-    pointing at nothing, and entries out of date order are set and sort
+    pointing at nothing, and date-ordered indexes out of order are set and sort
     operations. Only whether the Quick Resume prose survived as todos and Status
     needs judgment, and that is left to a reader.
     """
@@ -148,10 +148,16 @@ def audit(original: Path, converted: Path) -> str:
             problems.setdefault("unindexed", {})[kind] = unindexed
 
     for kind in idx.TYPES:
-        entries, _ = idx.read(converted, kind)
+        entries = idx.read(converted, kind)
         for entry in entries:
             if not (converted / entry.link.lstrip("./")).exists():
                 problems.setdefault("dangling", {}).setdefault(kind, []).append(entry.link)
+        if kind in idx.ORDERED:
+            # Its order is the priority the user put it in, so date order says
+            # nothing about it. Checked here it would fire on a migration that
+            # carried Next steps across correctly, which is how a gate stops
+            # being read.
+            continue
         ordering = [e.id.split("-")[0] for e in entries]
         if ordering != sorted(ordering):
             problems.setdefault("out_of_date_order", []).append(kind)
@@ -168,7 +174,7 @@ def audit(original: Path, converted: Path) -> str:
 
     unknown = sum(
         1 for kind in idx.TYPES
-        for e in idx.read(converted, kind)[0]
+        for e in idx.read(converted, kind)
         if e.id.startswith(ids.UNKNOWN)
     )
 

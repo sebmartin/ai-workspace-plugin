@@ -26,14 +26,17 @@ only kind that carries one.
 import re
 from pathlib import Path
 
-from ai_workspace.text import split_frontmatter
-
 TYPES = ("sessions", "decisions", "artifacts", "todos")
 RETIRED_TYPES = ("decisions", "artifacts", "todos")
 
+# Kinds whose line order is meaningful rather than chronological. A todo list is
+# a priority order, so a new line goes where the caller puts it; everything else
+# is a record of something that happened, and goes where its date puts it.
+ORDERED = ("todos",)
+
 IN_FORCE = {
     "decisions": ("proposed", "partially-locked", "locked"),
-    "todos": ("active", "parked"),
+    "todos": ("active", "started", "parked"),
     "artifacts": ("current",),
     "sessions": (),
 }
@@ -91,52 +94,41 @@ def index_path(thread_dir: Path, kind: str, retired: bool = False) -> Path:
     return thread_dir / f"{kind}-{suffix}.md"
 
 
-def read(thread_dir: Path, kind: str, retired: bool = False) -> tuple[list[Entry], dict]:
-    """Return (entries, frontmatter). A missing index is an empty index.
+def read(thread_dir: Path, kind: str, retired: bool = False) -> list[Entry]:
+    """The entries, in file order. A missing index is an empty index.
 
     Nothing pre-creates index files, so absence is normal rather than an error:
     they appear the first time something is written to them. That is only safe
     because the shape marker is its own file — were absence of an index the
     sentinel, tolerating a missing one would be indistinguishable from schema 1.
+
+    Lines are matched rather than parsed around, so anything that is not an
+    entry is skipped. Real indexes open with a frontmatter block this schema
+    no longer writes, sometimes indented with a tab that no YAML parser
+    accepts, and reading one must not depend on it. The next write drops it.
     """
     path = index_path(thread_dir, kind, retired)
     if not path.exists():
-        return [], {}
-    fields, body = split_frontmatter(path.read_text(), path)
-    windows = fields.get("windows")
-    fm: dict = {"windows": windows} if isinstance(windows, dict) else {}
+        return []
     entries = []
-    for line in body.splitlines():
+    for line in path.read_text().splitlines():
         hit = _LINE_RE.match(line)
         if hit:
             entries.append(Entry(hit["id"], hit["state"], hit["title"], hit["link"],
                                  hit["description"] or ""))
-    return entries, fm
+    return entries
 
 
-def _render(entries: list[Entry], fm: dict) -> str:
-    out = []
-    windows = fm.get("windows") or {}
-    if windows:
-        out.append("---")
-        out.append("windows:")
-        for name, ids in windows.items():
-            out.append(f"  {name}: [{', '.join(ids)}]")
-        out.append("---")
-        out.append("")
-    out.extend(e.render() for e in entries)
-    return "\n".join(out) + ("\n" if out else "")
-
-
-def write(thread_dir: Path, kind: str, entries: list[Entry], fm: dict,
+def write(thread_dir: Path, kind: str, entries: list[Entry],
           retired: bool = False) -> Path:
     path = index_path(thread_dir, kind, retired)
-    path.write_text(_render(entries, fm))
+    lines = [e.render() for e in entries]
+    path.write_text("\n".join(lines) + ("\n" if lines else ""))
     return path
 
 
 def add(thread_dir: Path, kind: str, entry: Entry, retired: bool = False) -> Path:
-    """Insert an entry in id order.
+    """Append to an ORDERED kind, otherwise insert in id order.
 
     Ids are YYYYMMDD-slug, so id order is chronological and a string comparison
     places the entry without parsing a date. Usually the new entry is the newest
@@ -145,13 +137,17 @@ def add(thread_dir: Path, kind: str, entry: Entry, retired: bool = False) -> Pat
 
     Scanning back from the end leaves an index that is already out of order in
     the order it was, rather than silently reordering lines nobody asked about.
+
+    An ORDERED kind is exempt: sorting a todo list by date would undo whatever
+    order the user put it in, every time anything was added.
     """
-    entries, fm = read(thread_dir, kind, retired)
+    entries = read(thread_dir, kind, retired)
     at = len(entries)
-    while at and entries[at - 1].id > entry.id:
-        at -= 1
+    if kind not in ORDERED:
+        while at and entries[at - 1].id > entry.id:
+            at -= 1
     entries.insert(at, entry)
-    return write(thread_dir, kind, entries, fm, retired)
+    return write(thread_dir, kind, entries, retired)
 
 
 def find(entries: list[Entry], entry_id: str) -> Entry | None:
@@ -159,8 +155,8 @@ def find(entries: list[Entry], entry_id: str) -> Entry | None:
 
 
 def taken_ids(thread_dir: Path, kind: str) -> set[str]:
-    live, _ = read(thread_dir, kind)
-    gone, _ = read(thread_dir, kind, retired=True)
+    live = read(thread_dir, kind)
+    gone = read(thread_dir, kind, retired=True)
     return {e.id for e in live} | {e.id for e in gone}
 
 
@@ -171,24 +167,12 @@ def retire(thread_dir: Path, kind: str, entry_id: str, state: str) -> str | None
     if state not in RETIRED[kind]:
         allowed = ", ".join(RETIRED[kind])
         return f"Error: '{state}' is not a retired state for {kind}. Use one of: {allowed}."
-    entries, fm = read(thread_dir, kind)
+    entries = read(thread_dir, kind)
     entry = find(entries, entry_id)
     if entry is None:
         return f"Error: No {kind} entry with id '{entry_id}'."
     entries.remove(entry)
     entry.state = state
-    write(thread_dir, kind, entries, fm)
+    write(thread_dir, kind, entries)
     add(thread_dir, kind, entry, retired=True)
-    return None
-
-
-def set_window(thread_dir: Path, kind: str, section: str, ids: list[str]) -> str | None:
-    entries, fm = read(thread_dir, kind)
-    known = {e.id for e in entries}
-    missing = [i for i in ids if i not in known]
-    if missing:
-        return f"Error: no {kind} entry for: {', '.join(missing)}."
-    windows = dict(fm.get("windows") or {})
-    windows[section] = ids
-    write(thread_dir, kind, entries, {"windows": windows})
     return None

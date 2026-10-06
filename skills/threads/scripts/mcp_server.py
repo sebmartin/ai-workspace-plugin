@@ -48,10 +48,11 @@ def resume_thread(workspace_dir: str, thread_name: str) -> str:
 
     On a schema 2 thread the reply is composed rather than read from a file:
     `memory.md` in full if there is one, then Status, About, the header, the
-    Next steps window, the todo backlog, every in-force decision with the
+    Next steps, any parked todos, every in-force decision with the
     `summary:` read from its file, the artifacts index, and the last ten
-    sessions. A `## Thread size` heading appears only when the thread has grown
-    expensive to open.
+    sessions. Next steps is every active todo in priority order, and says so
+    when more than five are active. A `## Thread size` heading appears only
+    when the thread has grown expensive to open.
 
     A thread this plugin cannot read returns `{"error": CODE, "thread": ...,
     "schema": <n>, "reads": [<low>, <high>]}`: `SCHEMA_TOO_NEW` (upgrade the
@@ -172,8 +173,8 @@ def list_archived_threads(workspace_dir: str) -> str:
 
 @mcp.tool()
 def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
-             state: str = "active") -> str:
-    """Add a todo to the thread's backlog.
+             state: str = "active", before: str = "", after: str = "") -> str:
+    """Add a todo to the thread's list of next steps.
 
     Every todo is read on every resume and commits the user to something, so
     add one only when the user asked for it or agreed to your suggestion. If
@@ -183,26 +184,37 @@ def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
     state of its own, an external URL when there is an issue or PR, and
     otherwise the session it came out of.
 
-    Returns `{"id": ...}`, the minted todo id. `set_window` and the retire
-    tools take it.
+    The list is in priority order and the new todo goes at the end unless you
+    place it. Say where you put it, so the user can move it.
 
-    A refusal returns `{"error": CODE, ...}` and writes nothing: `STATE_UNKNOWN`
-    or `STATUS_UNKNOWN` with the `allowed` values, `NO_SUCH_ENTRY`,
-    `LINK_REQUIRED`.
+    Returns `{"id": ...}`, the minted todo id, which `order_todos` and the
+    retire tools take. `active` is present only when more than five todos are
+    active, carrying that count: tell the user and ask which to park.
+
+    A refusal returns `{"error": CODE, ...}` and writes nothing:
+    `STATE_UNKNOWN` with the `allowed` values, `LINK_REQUIRED`,
+    `PLACEMENT_AMBIGUOUS` when both `before` and `after` were given, and
+    `NO_SUCH_ENTRY` naming an anchor that is not in the list.
 
     Args:
         workspace_dir: The tracked workspace path from session context.
         thread_name: Name of the thread (kebab-case).
         title: Short label for the todo.
         link: Path or URL. Never omit; use the originating session if nothing else.
-        state: `active` or `parked`. Parked means deliberately not now.
+        state: `active`, `started` for what is being worked on now, which
+            puts it at the top, or `parked` for deliberately not now.
+        before: Put it above this todo id. Use the first id for something to do
+            next, such as a piece of the task in hand.
+        after: Put it below this todo id, for something that has to follow that
+            one. At most one of `before` and `after`; neither means the end.
     """
-    return _threads.add_todo(workspace_dir, thread_name, title, link, state)
+    return _threads.add_todo(workspace_dir, thread_name, title, link, state,
+                             before or None, after or None)
 
 
 @mcp.tool()
 def retire_todo(workspace_dir: str, thread_name: str, todo_id: str, state: str) -> str:
-    """Retire a todo as done or dropped, removing it from any window.
+    """Retire a todo as done or dropped.
 
     Returns `{"id": ...}`.
 
@@ -217,33 +229,51 @@ def retire_todo(workspace_dir: str, thread_name: str, todo_id: str, state: str) 
 
 @mcp.tool()
 def set_todo_state(workspace_dir: str, thread_name: str, todo_id: str, state: str) -> str:
-    """Park or unpark a todo without retiring it.
+    """Start, park or unpark a todo without retiring it.
 
-    Returns `{"id": ...}`.
+    Two of the states move the todo as well as labelling it. `started` sends it
+    to the top of the list, so call it when the user says to work on something.
+    Unparking sends it to the end, because parked meant for later.
+
+    Returns `{"id": ...}`, or `{"error": "STATE_UNKNOWN", "allowed": [...]}` or
+    `{"error": "NO_SUCH_ENTRY"}`.
 
     Args:
         workspace_dir: The tracked workspace path from session context.
         thread_name: Name of the thread (kebab-case).
         todo_id: The id from the index line.
-        state: `active` or `parked`.
+        state: `started` for what is being worked on now, `parked` for
+            deliberately not now, `active` for anything else.
     """
     return _threads.set_todo_state(workspace_dir, thread_name, todo_id, state)
 
 
 @mcp.tool()
-def set_window(workspace_dir: str, thread_name: str, entry_ids: list[str]) -> str:
-    """Choose which todos the README's Next steps shows, and in what order.
+def order_todos(workspace_dir: str, thread_name: str, todo_ids: list[str],
+                before: str = "", after: str = "") -> str:
+    """Move the named todos together, in the order given.
 
-    Aim for about five ids.
+    Everything else keeps its relative order, so naming the two that matter
+    leaves the rest alone. The order is the user's, so propose one and call
+    this once they agree.
 
-    Returns `{"window": ..., "size": ...}`.
+    Returns `{"ordered": <how many were named>}`. A refusal returns
+    `{"error": CODE, "detail": ...}` and writes nothing: `NO_SUCH_ENTRY`
+    naming the ids that are not in the list, including the anchor;
+    `DUPLICATE_ID` naming one given twice; `PLACEMENT_AMBIGUOUS` when both
+    `before` and `after` were given; `ANCHOR_IS_MOVING` when the anchor is one
+    of the todos being moved, so its place is the thing in question.
 
     Args:
         workspace_dir: The tracked workspace path from session context.
         thread_name: Name of the thread (kebab-case).
-        entry_ids: Todo ids in the order they should appear.
+        todo_ids: Todo ids, in the order they should come.
+        before: Put them above this todo id.
+        after: Put them below this todo id. At most one of `before` and
+            `after`; neither puts them at the top.
     """
-    return _threads.set_window(workspace_dir, thread_name, entry_ids)
+    return _threads.order_todos(workspace_dir, thread_name, todo_ids,
+                                before or None, after or None)
 
 
 @mcp.tool()
@@ -361,7 +391,7 @@ def index_file(workspace_dir: str, thread_name: str, link: str,
     Returns JSON: `{"id": "20260316-summary-auth-flow"}`, with `"undated": true`
     when nothing said what date the file is from, so it took 19700101, and
     `"was"` carrying the previous id when a date changed it. Use the new one
-    from then on: ids are what set_window and the retire tools take.
+    from then on: ids are what order_todos and the retire tools take.
 
     A refusal returns `{"error": CODE, "detail": ...}` and writes nothing. Same
     codes as index_directory, plus `MISSING` when the link resolves to nothing,
@@ -462,7 +492,8 @@ def audit_migration(workspace_dir: str, original_thread: str,
     - `unindexed` — {kind: [filenames]} present in the original and in no index.
     - `missing_from_copy` — {kind: [filenames]} in the original, absent from the copy.
     - `dangling` — {kind: [links]} indexed but pointing at nothing.
-    - `out_of_date_order` — [kind] whose index is not sorted by id.
+    - `out_of_date_order` — [kind] whose index is not sorted by id. Todos are
+      exempt: that list is in the user's priority order, not date order.
     - `v1_readme_sections` — schema 1 headings still in the converted README.
 
     - `undated_entries` — how many took the 19700101 date. Not a problem by

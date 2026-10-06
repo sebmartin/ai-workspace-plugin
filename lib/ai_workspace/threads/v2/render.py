@@ -14,6 +14,7 @@ import re
 from pathlib import Path
 
 from ai_workspace.threads.v2 import index as idx
+from ai_workspace.threads.v2 import todos as todos_mod
 
 NEXT_STEPS = "Next steps"
 
@@ -35,11 +36,9 @@ def _links_line(thread_dir: Path) -> str:
 
 
 def next_steps_body(thread_dir: Path) -> str:
-    """The window, in window order, or a placeholder."""
-    entries, fm = idx.read(thread_dir, "todos")
-    ids = (fm.get("windows") or {}).get("next_steps") or []
-    by_id = {e.id: e for e in entries}
-    lines = [by_id[i].render() for i in ids if i in by_id]
+    """Every active todo, in index order, or a placeholder."""
+    entries = idx.read(thread_dir, "todos")
+    lines = [e.render() for e in todos_mod.next_up(entries)]
     if not lines:
         return "- None\n"
     return "\n".join(lines) + "\n"

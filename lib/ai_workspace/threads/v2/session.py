@@ -87,9 +87,9 @@ def save(thread_dir: Path, slug: str, summary: str, keywords: str, body: str,
     )
     path.write_text(front + body.rstrip() + "\n")
 
-    entries, fm = idx.read(thread_dir, "sessions")
+    entries = idx.read(thread_dir, "sessions")
     entry = idx.find(entries, session_id)
     if entry is not None and slug and entry.title != slug:
         entry.title = slug
-        idx.write(thread_dir, "sessions", entries, fm)
+        idx.write(thread_dir, "sessions", entries)
     return session_id, "saved"

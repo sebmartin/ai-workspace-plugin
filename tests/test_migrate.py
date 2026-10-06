@@ -178,8 +178,19 @@ class TestAudit:
         idx.write(conv, "artifacts", [
             idx.Entry("20260301-b", "current", "B", "./artifacts/"),
             idx.Entry("20260101-a", "current", "A", "./artifacts/"),
-        ], {})
+        ])
         assert "out_of_date_order" in json.loads(migrate.audit(v1, conv))
+
+    def test_a_todo_list_is_not_expected_in_date_order(self, tmp_path):
+        """Its order is the priority the user put it in, so a migration that
+        got it right would otherwise be reported as broken."""
+        v1 = _v1(tmp_path)
+        conv = _converted_from(v1, tmp_path)
+        idx.write(conv, "todos", [
+            idx.Entry("20260301-b", "active", "B", "./todos/b.md"),
+            idx.Entry("20260101-a", "active", "A", "./todos/a.md"),
+        ])
+        assert "out_of_date_order" not in json.loads(migrate.audit(v1, conv))
 
     def test_unknown_dates_are_counted(self, tmp_path):
         v1 = _v1(tmp_path)

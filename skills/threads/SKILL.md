@@ -98,7 +98,7 @@ A schema 1 thread keeps all of that inline in its README, so one read covers it.
 
 `resume_thread` returns the whole thread in one call; its docstring lists what.
 
-**Print only Status and Next steps**, with the todo count from its heading. Everything else is context you hold, not output. A list of thirty-five decisions is for you, not for the screen. Counts are not stored anywhere, so say them from what you read.
+**Print only Status and Next steps**, with the counts from its heading. Everything else is context you hold, not output. A list of thirty-five decisions is for you, not for the screen. Counts are not stored anywhere, so say them from what you read.
 
 **Decision bodies are never opened on resume.** Open one when a constraint is challenged, or when you are about to extend or reverse it.
 
@@ -128,7 +128,9 @@ can be written to at all. Fetch
 
 **A decision is a choice that was made.** Its summary loads on every resume, so log one only when you can name the alternative that was rejected.
 
-**Leave the Next steps window alone.** Change it only when the user asks. Retiring or parking a todo drops it from the window and nothing refills it; an empty window is fine.
+**Next steps is every active todo, in priority order.** Place a new one as you add it: `before` the first todo for a piece of the task in hand, `after` the todo it has to follow, and neither for the end. Say where you put it, so the user can move it. When the user says to work on a todo, set its state to `started`, which moves it to the top. Parking takes a todo off the list, and unparking puts it back at the end.
+
+**The order is the user's.** Propose one and apply it with `order_todos`, which moves the todos you name above or below another, or to the top, once they agree.
 
 ### Memory
 

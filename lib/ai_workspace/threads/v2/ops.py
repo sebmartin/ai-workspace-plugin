@@ -18,6 +18,7 @@ from ai_workspace.text import split_frontmatter, yaml_value
 from ai_workspace.threads.v2 import ids as ids_mod
 from ai_workspace.threads.v2 import index as idx
 from ai_workspace.threads.v2 import render, session
+from ai_workspace.threads.v2 import todos as todos_mod
 
 
 def _new_id(thread_dir: Path, kind: str, title: str) -> str:
@@ -101,24 +102,24 @@ def _already_indexed(thread_dir: Path, kind: str, link: str):
 
     Both indexes, because a retired artifact is still indexed and minting a
     second id for it would leave two entries for one file in two files.
-    Returns what a rewrite needs: `(entry, entries, frontmatter, retired)`.
+    Returns what a rewrite needs: `(entry, entries, retired)`.
     """
     for retired in (False, True):
-        entries, fm = idx.read(thread_dir, kind, retired)
+        entries = idx.read(thread_dir, kind, retired)
         for entry in entries:
             if entry.link == link:
-                return entry, entries, fm, retired
+                return entry, entries, retired
     return None
 
 
-def _redate(thread_dir: Path, kind: str, entry, entries: list, fm: dict,
+def _redate(thread_dir: Path, kind: str, entry, entries: list,
             retired: bool, when: date) -> tuple[str, str | None]:
     """Give an indexed file a new date, and with it a new id.
 
     The only repair for an entry that landed on the epoch, since a filename is
     never renamed and an index line is never hand-edited. The id changes, so
-    the reply has to say so: ids are what set_window and the retire tools take,
-    and the caller is holding the old one.
+    the reply has to say so: ids are what order_todos and the retire tools
+    take, and the caller is holding the old one.
 
     Removed and re-added rather than edited in place, so it lands where its new
     date puts it instead of where its old one did.
@@ -128,7 +129,7 @@ def _redate(thread_dir: Path, kind: str, entry, entries: list, fm: dict,
         return entry.id, None
     was = entry.id
     entries.remove(entry)
-    idx.write(thread_dir, kind, entries, fm, retired)
+    idx.write(thread_dir, kind, entries, retired)
     entry.id = ids_mod.unique_id(base, idx.taken_ids(thread_dir, kind))
     if entry.title == was:
         entry.title = entry.id
@@ -176,17 +177,17 @@ def _index_one(thread, link: str, description: str = "",
 
     normalised = f"./{relative}"
     if (found := _already_indexed(thread.dir, kind, normalised)) is not None:
-        entry, entries, fm, retired = found
+        entry, entries, retired = found
         # An empty description means "not given" rather than "set it to
         # nothing", the same conversion every other optional field makes at this
         # boundary. Without it, re-indexing to correct a link would silently
         # erase the sentence.
         if description and takes_description and entry.description != description:
             entry.description = description
-            idx.write(thread.dir, kind, entries, fm, retired)
+            idx.write(thread.dir, kind, entries, retired)
         if when is None:
             return Indexed(entry.id), None
-        return Indexed(*_redate(thread.dir, kind, entry, entries, fm, retired, when)), None
+        return Indexed(*_redate(thread.dir, kind, entry, entries, retired, when)), None
     if default_state is _STATE_FROM_FILE:
         state, refusal = _decision_state(path)
         if refusal is not None:
@@ -274,7 +275,7 @@ def index_directory(thread, link: str, session_id: str | None = None) -> str:
     already = {
         PurePosixPath(e.link).name
         for retired in (False, True)
-        for e in idx.read(thread.dir, kind, retired)[0]
+        for e in idx.read(thread.dir, kind, retired)
     }
     pending = sorted(
         p for p in directory.iterdir()
@@ -314,19 +315,44 @@ def _record(thread_dir: Path, session_id: str | None, line: str) -> None:
 
 
 def add_todo(thread, title: str, link: str, state: str = "active",
+             before: str | None = None, after: str | None = None,
              session_id: str | None = None) -> str:
+    """Add a todo at a chosen place in the list.
+
+    The caller places it because only the caller knows what the todo is for:
+    a piece of the current task goes above it, something that has to follow
+    another goes below that one, and anything else goes at the end. One thing
+    places itself: `started` means this is what is being worked on, so it goes
+    to the top unless a place was named.
+    """
     if state not in idx.IN_FORCE["todos"]:
         allowed = list(idx.IN_FORCE["todos"])
         return json.dumps({"error": "STATE_UNKNOWN", "detail": state, "allowed": allowed})
     if not link:
         return json.dumps({"error": "LINK_REQUIRED"})
+    if before and after:
+        return json.dumps({"error": "PLACEMENT_AMBIGUOUS"})
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
+
+    entries = idx.read(thread.dir, "todos")
+    # A place that was asked for wins over one the state only implies.
+    at = 0 if state == "started" else len(entries)
+    if anchor := (before or after):
+        found = todos_mod.index_of(entries, anchor)
+        if found is None:
+            return json.dumps({"error": "NO_SUCH_ENTRY", "detail": anchor})
+        at = found if before else found + 1
+
     todo_id = _new_id(thread.dir, "todos", title)
-    idx.add(thread.dir, "todos", idx.Entry(todo_id, state, title, link))
+    entries.insert(at, idx.Entry(todo_id, state, title, link))
+    idx.write(thread.dir, "todos", entries)
     render.render(thread.dir)
     _record(thread.dir, session_id, f"todo {todo_id}")
-    return json.dumps({"id": todo_id})
+    reply: dict = {"id": todo_id}
+    if waiting := todos_mod.crowded(entries):
+        reply["active"] = waiting
+    return json.dumps(reply)
 
 
 def retire_todo(thread, todo_id: str, state: str) -> str:
@@ -335,50 +361,68 @@ def retire_todo(thread, todo_id: str, state: str) -> str:
     error = idx.retire(thread.dir, "todos", todo_id, state)
     if error:
         return error
-    _drop_from_windows(thread.dir, "todos", todo_id)
     render.render(thread.dir)
     return json.dumps({"id": todo_id})
 
 
 def set_state(thread, kind: str, entry_id: str, state: str) -> str:
-    """Move an entry between in-force states, e.g. parking or unparking a todo."""
+    """Move an entry between in-force states, e.g. parking or starting a todo.
+
+    Two of the todo states carry a position as well as a name, and both are
+    applied here rather than left to a second call: `started` means this is
+    what is being worked on, and `active` after `parked` means it is wanted
+    again but behind whatever became current while it was away.
+    """
     if state not in idx.IN_FORCE[kind]:
         return json.dumps({"error": "STATE_UNKNOWN", "detail": state,
                            "allowed": list(idx.IN_FORCE[kind])})
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
-    entries, fm = idx.read(thread.dir, kind)
+    entries = idx.read(thread.dir, kind)
     entry = idx.find(entries, entry_id)
     if entry is None:
         return json.dumps({"error": "NO_SUCH_ENTRY", "detail": entry_id})
-    entry.state = state
-    idx.write(thread.dir, kind, entries, fm)
-    if state == "parked":
-        _drop_from_windows(thread.dir, kind, entry_id)
+    was, entry.state = entry.state, state
+    if kind == "todos":
+        if state == "started":
+            todos_mod.to_top(entries, entry_id)
+        elif state == "active" and was == todos_mod.PARKED:
+            todos_mod.to_end(entries, entry_id)
+    idx.write(thread.dir, kind, entries)
     render.render(thread.dir)
     return json.dumps({"id": entry_id})
 
 
-def set_window(thread, kind: str, section: str, entry_ids: list[str]) -> str:
+def order_todos(thread, todo_ids: list[str], before: str | None = None,
+                after: str | None = None) -> str:
+    """Move the named todos together, in the order given.
+
+    Everything else keeps its relative order, so moving the two items that
+    matter does not disturb the rest of the list. Without an anchor they go to
+    the top, which is the common case: what to do next.
+    """
+    if before and after:
+        return json.dumps({"error": "PLACEMENT_AMBIGUOUS"})
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
-    error = idx.set_window(thread.dir, kind, section, entry_ids)
-    if error:
-        return error
+    entries = idx.read(thread.dir, "todos")
+    known = {e.id for e in entries}
+    anchor = before or after
+    if missing := [i for i in [*todo_ids, *([anchor] if anchor else [])]
+                   if i not in known]:
+        return json.dumps({"error": "NO_SUCH_ENTRY", "detail": ", ".join(missing)})
+    # Refused rather than de-duplicated: collapsing a repeat would produce an
+    # order nobody asked for, and say nothing about having done so.
+    if repeated := [i for i in set(todo_ids) if todo_ids.count(i) > 1]:
+        return json.dumps({"error": "DUPLICATE_ID", "detail": ", ".join(sorted(repeated))})
+    # The anchor fixes where the move lands, so it cannot be one of the todos
+    # whose place is being decided.
+    if anchor and anchor in todo_ids:
+        return json.dumps({"error": "ANCHOR_IS_MOVING", "detail": anchor})
+    idx.write(thread.dir, "todos",
+              todos_mod.reordered(entries, todo_ids, before, after))
     render.render(thread.dir)
-    return json.dumps({"window": section, "size": len(entry_ids)})
-
-
-def _drop_from_windows(thread_dir: Path, kind: str, entry_id: str) -> None:
-    entries, fm = idx.read(thread_dir, kind)
-    windows = fm.get("windows") or {}
-    changed = False
-    for name, members in windows.items():
-        if entry_id in members:
-            windows[name] = [m for m in members if m != entry_id]
-            changed = True
-    if changed:
-        idx.write(thread_dir, kind, entries, {"windows": windows})
+    return json.dumps({"ordered": len(todo_ids)})
 
 
 def log_decision(thread, title: str, summary: str, body: str,
@@ -429,7 +473,7 @@ def log_decision(thread, title: str, summary: str, body: str,
 def retire_decision(thread, decision_id: str, state: str) -> str:
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
-    entries, _ = idx.read(thread.dir, "decisions")
+    entries = idx.read(thread.dir, "decisions")
     entry = idx.find(entries, decision_id)
     error = idx.retire(thread.dir, "decisions", decision_id, state)
     if error:
