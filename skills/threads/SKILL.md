@@ -100,6 +100,8 @@ A schema 1 thread keeps all of that inline in its README, so one read covers it.
 
 **Print only Status and Next steps**, with the counts from its heading. Everything else is context you hold, not output. A list of thirty-five decisions is for you, not for the screen. Counts are not stored anywhere, so say them from what you read.
 
+**Print each todo as a markdown link**, so the user can open what it points at and read the context behind it rather than asking you for it. The link on an index line is relative to the thread, and the user's editor resolves a relative link against their own project instead, so put the thread directory from the `Thread:` header in front of it. An external URL goes as it is. Drop the id, which is for your calls rather than the screen, and name a state only when it is not `active`.
+
 **Decision bodies are never opened on resume.** Open one when a constraint is challenged, or when you are about to extend or reverse it.
 
 ### Writing
