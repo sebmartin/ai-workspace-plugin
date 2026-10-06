@@ -360,6 +360,16 @@ class TestCompose:
         assert "beyond the window (0 active, 0 parked)" in out
         assert out.index("## Next steps") < out.index("## Todo backlog")
 
+    def test_next_steps_says_how_many_todos_exist(self, tmp_path):
+        """An empty window must not read as an empty thread."""
+        d = _v2_thread(tmp_path)
+        for n in ("a", "b", "c"):
+            idx.add(d, "todos", idx.Entry(f"20260101-{n}", "active", n.upper(), f"./todos/{n}.md"))
+        idx.set_window(d, "todos", "next_steps", ["20260101-a"])
+        assert "## Next steps (1 of 3 todos)" in v2.compose(d, "t")
+        idx.set_window(d, "todos", "next_steps", [])
+        assert "## Next steps (0 of 3 todos)\n\n- None" in v2.compose(d, "t")
+
     def test_a_few_attachments_are_listed(self, tmp_path):
         """Cheap enough to be worth saving the caller a directory listing."""
         d = _v2_thread(tmp_path)
