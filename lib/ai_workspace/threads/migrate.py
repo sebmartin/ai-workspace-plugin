@@ -153,7 +153,7 @@ def audit(original: Path, converted: Path) -> str:
             if not (converted / entry.link.lstrip("./")).exists():
                 problems.setdefault("dangling", {}).setdefault(kind, []).append(entry.link)
         if kind in idx.ORDERED:
-            # Its order is the priority the user put it in, so date order says
+            # Its order is the priority the user set, so date order says
             # nothing about it. Checked here it would fire on a migration that
             # carried Next steps across correctly, which is how a gate stops
             # being read.
