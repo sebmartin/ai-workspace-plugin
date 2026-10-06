@@ -134,39 +134,88 @@ class TestTodos:
         add_todo(ws, "t", "Second", "./s.md")
         assert [e.title for e in idx.read(d, "todos")] == ["First", "Second"]
 
-    def test_before_puts_it_above_the_anchor(self, tmp_path):
+    def test_place_top_names_no_todo(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        add_todo(ws, "t", "A", "./s.md")
+        add_todo(ws, "t", "B", "./s.md", place="top")
+        assert [e.title for e in idx.read(d, "todos")] == ["B", "A"]
+
+    def test_place_top_is_read_at_write_time(self, tmp_path):
+        """So a caller holding a list from hours ago, or holding none, still
+        lands above everything."""
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        ids = _four_todos(ws, d)
+        order_todos(ws, "t", [ids["D"]])
+        add_todo(ws, "t", "E", "./s.md", place="top")
+        assert [e.title for e in idx.read(d, "todos")] == ["E", "D", "A", "B", "C"]
+
+    def test_place_end_is_the_default_said_out_loud(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        add_todo(ws, "t", "A", "./s.md")
+        add_todo(ws, "t", "B", "./s.md", place="end")
+        assert [e.title for e in idx.read(d, "todos")] == ["A", "B"]
+
+    def test_place_before_an_anchor(self, tmp_path):
         """Breaking up the current task: the new piece comes first."""
         d = _thread(tmp_path)
         ws = str(tmp_path)
         add_todo(ws, "t", "Ship the release", "./s.md")
         anchor = _only_id(d, "todos")
-        add_todo(ws, "t", "Write the notes", "./s.md", before=anchor)
+        add_todo(ws, "t", "Write the notes", "./s.md", place=f"before:{anchor}")
         assert [e.title for e in idx.read(d, "todos")] == ["Write the notes", "Ship the release"]
 
-    def test_after_puts_it_below_the_anchor(self, tmp_path):
+    def test_place_after_an_anchor(self, tmp_path):
         d = _thread(tmp_path)
         ws = str(tmp_path)
         add_todo(ws, "t", "Ship the release", "./s.md")
         anchor = _only_id(d, "todos")
         add_todo(ws, "t", "Tag it", "./s.md")
-        add_todo(ws, "t", "Announce it", "./s.md", after=anchor)
+        add_todo(ws, "t", "Announce it", "./s.md", place=f"after:{anchor}")
         assert [e.title for e in idx.read(d, "todos")] == [
             "Ship the release", "Announce it", "Tag it"]
 
-    def test_before_and_after_together_are_refused(self, tmp_path):
+    def test_spaces_around_the_colon_do_not_change_the_place(self, tmp_path):
+        """A space after a colon is what anyone writes, and reading the anchor
+        with it attached refuses as a missing todo rather than a spacing slip."""
         d = _thread(tmp_path)
         ws = str(tmp_path)
         add_todo(ws, "t", "A", "./s.md")
-        anchor = _only_id(d, "todos")
-        out = _reply(add_todo(ws, "t", "B", "./s.md", before=anchor, after=anchor))
-        assert out["error"] == "PLACEMENT_AMBIGUOUS"
-        assert len(idx.read(d, "todos")) == 1
+        a = _only_id(d, "todos")
+        add_todo(ws, "t", "B", "./s.md", place=f"before : {a}")
+        assert [e.title for e in idx.read(d, "todos")] == ["B", "A"]
 
-    def test_an_unknown_anchor_is_refused_and_writes_nothing(self, tmp_path):
+    def test_a_padded_position_is_still_that_position(self, tmp_path):
         d = _thread(tmp_path)
         ws = str(tmp_path)
-        out = _reply(add_todo(ws, "t", "B", "./s.md", after="20260101-nope"))
+        add_todo(ws, "t", "A", "./s.md")
+        add_todo(ws, "t", "B", "./s.md", place="  top  ")
+        assert [e.title for e in idx.read(d, "todos")] == ["B", "A"]
+
+    def test_a_position_takes_no_anchor(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        out = _reply(add_todo(ws, "t", "A", "./s.md", place="top:20260101-a"))
+        assert out["error"] == "PLACE_UNKNOWN"
+        assert idx.read(d, "todos") == []
+
+    def test_a_place_that_is_not_one_of_the_four_forms_is_refused(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        out = _reply(add_todo(ws, "t", "B", "./s.md", place="above:20260101-a"))
+        assert out["error"] == "PLACE_UNKNOWN" and out["detail"] == "above:20260101-a"
+        assert out["allowed"] == ["top", "end", "before:<id>", "after:<id>"]
+        assert idx.read(d, "todos") == []
+
+    def test_an_anchor_that_is_not_in_the_list_is_refused(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        out = _reply(add_todo(ws, "t", "B", "./s.md", place="after:20260101-nope"))
         assert out["error"] == "NO_SUCH_ENTRY" and out["detail"] == "20260101-nope"
+        # The form was fine, so listing the forms would point at the wrong fix.
+        assert "allowed" not in out
         assert idx.read(d, "todos") == []
 
     def test_a_todo_added_as_started_goes_to_the_top(self, tmp_path):
@@ -177,13 +226,12 @@ class TestTodos:
         add_todo(ws, "t", "B", "./s.md", state="started")
         assert [e.title for e in idx.read(d, "todos")] == ["B", "A"]
 
-    def test_an_explicit_place_beats_the_state(self, tmp_path):
-        """Both were given, and only one of them was asked for here."""
+    def test_a_place_that_was_asked_for_beats_the_one_the_state_implies(self, tmp_path):
         d = _thread(tmp_path)
         ws = str(tmp_path)
         add_todo(ws, "t", "A", "./s.md")
         a = _only_id(d, "todos")
-        add_todo(ws, "t", "B", "./s.md", state="started", after=a)
+        add_todo(ws, "t", "B", "./s.md", state="started", place=f"after:{a}")
         assert [e.title for e in idx.read(d, "todos")] == ["A", "B"]
 
     def test_starting_a_todo_moves_it_to_the_top(self, tmp_path):
@@ -222,15 +270,15 @@ class TestTodos:
         assert [(e.title, e.state) for e in entries] == [("B", "started"), ("A", "active")]
         assert "B" in (d / "README.md").read_text()
 
-    def test_a_blank_anchor_means_no_anchor(self, tmp_path):
+    def test_a_blank_place_means_the_default(self, tmp_path):
         """What the tool passes when the model leaves the argument out."""
         d = _thread(tmp_path)
         ws = str(tmp_path)
         add_todo(ws, "t", "A", "./s.md")
-        add_todo(ws, "t", "B", "./s.md", before="", after="")
+        add_todo(ws, "t", "B", "./s.md", place="")
         assert [e.title for e in idx.read(d, "todos")] == ["A", "B"]
 
-    def test_order_todos_moves_the_named_ones_to_the_top_in_order(self, tmp_path):
+    def test_order_todos_promotes_to_the_top_by_default(self, tmp_path):
         d = _thread(tmp_path)
         ws = str(tmp_path)
         ids = []
@@ -240,18 +288,26 @@ class TestTodos:
         assert _reply(order_todos(ws, "t", [ids[2], ids[0]]))["ordered"] == 2
         assert [e.title for e in idx.read(d, "todos")] == ["C", "A", "B", "D"]
 
+    def test_order_todos_can_send_them_to_the_end(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        ids = _four_todos(ws, d)
+        order_todos(ws, "t", [ids["A"]], place="end")
+        assert [e.title for e in idx.read(d, "todos")] == ["B", "C", "D", "A"]
+
     def test_order_todos_before_an_anchor(self, tmp_path):
         d = _thread(tmp_path)
         ws = str(tmp_path)
         ids = _four_todos(ws, d)
-        assert _reply(order_todos(ws, "t", [ids["D"]], before=ids["B"]))["ordered"] == 1
+        out = _reply(order_todos(ws, "t", [ids["D"]], place=f"before:{ids['B']}"))
+        assert out["ordered"] == 1
         assert [e.title for e in idx.read(d, "todos")] == ["A", "D", "B", "C"]
 
     def test_order_todos_after_an_anchor(self, tmp_path):
         d = _thread(tmp_path)
         ws = str(tmp_path)
         ids = _four_todos(ws, d)
-        order_todos(ws, "t", [ids["D"]], after=ids["A"])
+        order_todos(ws, "t", [ids["D"]], place=f"after:{ids['A']}")
         assert [e.title for e in idx.read(d, "todos")] == ["A", "D", "B", "C"]
 
     def test_the_anchor_does_not_shift_under_what_moves_past_it(self, tmp_path):
@@ -260,29 +316,29 @@ class TestTodos:
         d = _thread(tmp_path)
         ws = str(tmp_path)
         ids = _four_todos(ws, d)
-        order_todos(ws, "t", [ids["A"]], after=ids["C"])
+        order_todos(ws, "t", [ids["A"]], place=f"after:{ids['C']}")
         assert [e.title for e in idx.read(d, "todos")] == ["B", "C", "A", "D"]
 
     def test_several_todos_move_together_in_the_order_given(self, tmp_path):
         d = _thread(tmp_path)
         ws = str(tmp_path)
         ids = _four_todos(ws, d)
-        order_todos(ws, "t", [ids["D"], ids["B"]], after=ids["A"])
+        order_todos(ws, "t", [ids["D"], ids["B"]], place=f"after:{ids['A']}")
         assert [e.title for e in idx.read(d, "todos")] == ["A", "D", "B", "C"]
 
-    def test_order_todos_refuses_both_before_and_after(self, tmp_path):
+    def test_order_todos_refuses_a_place_it_cannot_read(self, tmp_path):
         d = _thread(tmp_path)
         ws = str(tmp_path)
         ids = _four_todos(ws, d)
-        out = _reply(order_todos(ws, "t", [ids["D"]], before=ids["A"], after=ids["B"]))
-        assert out["error"] == "PLACEMENT_AMBIGUOUS"
+        out = _reply(order_todos(ws, "t", [ids["D"]], place="beneath:" + ids["A"]))
+        assert out["error"] == "PLACE_UNKNOWN"
         assert [e.title for e in idx.read(d, "todos")] == ["A", "B", "C", "D"]
 
     def test_order_todos_refuses_an_unknown_anchor(self, tmp_path):
         d = _thread(tmp_path)
         ws = str(tmp_path)
         ids = _four_todos(ws, d)
-        out = _reply(order_todos(ws, "t", [ids["D"]], after="20260101-nope"))
+        out = _reply(order_todos(ws, "t", [ids["D"]], place="after:20260101-nope"))
         assert out["error"] == "NO_SUCH_ENTRY" and out["detail"] == "20260101-nope"
         assert [e.title for e in idx.read(d, "todos")] == ["A", "B", "C", "D"]
 
@@ -291,7 +347,7 @@ class TestTodos:
         d = _thread(tmp_path)
         ws = str(tmp_path)
         ids = _four_todos(ws, d)
-        out = _reply(order_todos(ws, "t", [ids["D"], ids["B"]], before=ids["B"]))
+        out = _reply(order_todos(ws, "t", [ids["D"], ids["B"]], place=f"before:{ids['B']}"))
         assert out["error"] == "ANCHOR_IS_MOVING" and out["detail"] == ids["B"]
         assert [e.title for e in idx.read(d, "todos")] == ["A", "B", "C", "D"]
 

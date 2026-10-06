@@ -173,7 +173,7 @@ def list_archived_threads(workspace_dir: str) -> str:
 
 @mcp.tool()
 def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
-             state: str = "active", before: str = "", after: str = "") -> str:
+             state: str = "active", place: str = "") -> str:
     """Add a todo to the thread's list of next steps.
 
     Every todo is read on every resume and commits the user to something, so
@@ -192,9 +192,9 @@ def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
     active, carrying that count: tell the user and ask which to park.
 
     A refusal returns `{"error": CODE, ...}` and writes nothing:
-    `STATE_UNKNOWN` with the `allowed` values, `LINK_REQUIRED`,
-    `PLACEMENT_AMBIGUOUS` when both `before` and `after` were given, and
-    `NO_SUCH_ENTRY` naming an anchor that is not in the list.
+    `STATE_UNKNOWN` or `PLACE_UNKNOWN` with the `allowed` values,
+    `LINK_REQUIRED`, and `NO_SUCH_ENTRY` naming an anchor that is not in the
+    list.
 
     Args:
         workspace_dir: The tracked workspace path from session context.
@@ -203,13 +203,13 @@ def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
         link: Path or URL. Never omit; use the originating session if nothing else.
         state: `active`, `started` for what is being worked on now, which
             puts it at the top, or `parked` for deliberately not now.
-        before: Put it above this todo id. Use the first id for something to do
-            next, such as a piece of the task in hand.
-        after: Put it below this todo id, for something that has to follow that
-            one. At most one of `before` and `after`; neither means the end.
+        place: Where it goes. `top` for something to do next, such as a piece
+            of the task in hand. `before:<todo id>` or `after:<todo id>` for
+            something that belongs beside a particular todo. `end`, or leave
+            it out, for the backlog. `top` and `end` are read off the list as
+            it is now, so they are right even if you have not looked at it.
     """
-    return _threads.add_todo(workspace_dir, thread_name, title, link, state,
-                             before or None, after or None)
+    return _threads.add_todo(workspace_dir, thread_name, title, link, state, place)
 
 
 @mcp.tool()
@@ -250,7 +250,7 @@ def set_todo_state(workspace_dir: str, thread_name: str, todo_id: str, state: st
 
 @mcp.tool()
 def order_todos(workspace_dir: str, thread_name: str, todo_ids: list[str],
-                before: str = "", after: str = "") -> str:
+                place: str = "") -> str:
     """Move the named todos together, in the order given.
 
     Everything else keeps its relative order, so naming the two that matter
@@ -260,20 +260,19 @@ def order_todos(workspace_dir: str, thread_name: str, todo_ids: list[str],
     Returns `{"ordered": <how many were named>}`. A refusal returns
     `{"error": CODE, "detail": ...}` and writes nothing: `NO_SUCH_ENTRY`
     naming the ids that are not in the list, including the anchor;
-    `DUPLICATE_ID` naming one given twice; `PLACEMENT_AMBIGUOUS` when both
-    `before` and `after` were given; `ANCHOR_IS_MOVING` when the anchor is one
-    of the todos being moved, so its place is the thing in question.
+    `PLACE_UNKNOWN` with the `allowed` forms; `DUPLICATE_ID` naming one given
+    twice; `ANCHOR_IS_MOVING` when the anchor is one of the todos being moved,
+    so its place is the thing in question.
 
     Args:
         workspace_dir: The tracked workspace path from session context.
         thread_name: Name of the thread (kebab-case).
         todo_ids: Todo ids, in the order they should come.
-        before: Put them above this todo id.
-        after: Put them below this todo id. At most one of `before` and
-            `after`; neither puts them at the top.
+        place: Where they go, the same forms `add_todo` takes: `top`, `end`,
+            `before:<todo id>` or `after:<todo id>`. Leaving it out means
+            `top`, which is what reordering is usually for.
     """
-    return _threads.order_todos(workspace_dir, thread_name, todo_ids,
-                                before or None, after or None)
+    return _threads.order_todos(workspace_dir, thread_name, todo_ids, place)
 
 
 @mcp.tool()

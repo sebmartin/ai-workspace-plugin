@@ -9,6 +9,8 @@ later", so an unparked todo goes back at the end rather than to wherever it
 used to sit.
 """
 
+from typing import NamedTuple
+
 PARKED = "parked"
 
 # Where the list stops being something a person can hold in their head. The
@@ -40,6 +42,47 @@ def index_of(entries: list, entry_id: str) -> int | None:
     return next(found, None)
 
 
+# The four forms of `place`. One argument rather than a flag per position, so
+# there is no combination of arguments to disagree with itself.
+PLACES = ("top", "end", "before:<id>", "after:<id>")
+
+
+class Spot(NamedTuple):
+    """Where a `place` points in a particular list, or why it does not.
+
+    `top` and `end` are read off the list at the moment of the write, so a
+    caller that has not looked at the list for hours still lands where it
+    meant. Only the anchored forms depend on the caller knowing an id.
+    """
+
+    at: int | None = None
+    error: str = ""
+    detail: str = ""
+
+
+def spot(entries: list, place: str) -> Spot:
+    """Resolve `place` against this list. A malformed form and an anchor that
+    is not in the list are different faults, so they get different codes.
+
+    Both halves are stripped, because a space after the colon reads as part of
+    the anchor and would refuse as a todo that is not there, sending the reader
+    after the id rather than the space. An id carries no spaces, so there is
+    nothing to lose by taking them off.
+    """
+    sense, _, anchor = place.partition(":")
+    sense, anchor = sense.strip(), anchor.strip()
+    if sense == "top" and not anchor:
+        return Spot(0)
+    if sense == "end" and not anchor:
+        return Spot(len(entries))
+    if sense not in ("before", "after") or not anchor:
+        return Spot(error="PLACE_UNKNOWN", detail=place)
+    found = index_of(entries, anchor)
+    if found is None:
+        return Spot(error="NO_SUCH_ENTRY", detail=anchor)
+    return Spot(found if sense == "before" else found + 1)
+
+
 def to_top(entries: list, entry_id: str) -> None:
     """Move one todo to the front of the list."""
     _move(entries, entry_id, top=True)
@@ -58,26 +101,21 @@ def _move(entries: list, entry_id: str, top: bool) -> None:
     entries.insert(0 if top else len(entries), entry)
 
 
-def reordered(entries: list, ids: list[str], before: str | None = None,
-              after: str | None = None) -> list:
-    """The named todos moved together, in the order given; the rest keep theirs.
+def staying(entries: list, ids: list[str]) -> list:
+    """The list without the todos being moved, which is what `place` resolves
+    against. Resolving against the list they are still in puts the whole move
+    one place out whenever something above the anchor is one of the movers."""
+    named = set(ids)
+    return [e for e in entries if e.id not in named]
 
-    The anchor is located in what is left once the named todos are taken out,
-    not in the list they came from. The two differ whenever something above the
-    anchor is one of the things moving.
 
-    The caller has already checked that every id is known and distinct, that at
-    most one anchor was named, and that the anchor is not itself moving, so this
-    cannot drop a todo, list one twice, or fail to find the anchor.
+def reordered(entries: list, ids: list[str], at: int) -> list:
+    """The named todos inserted together at `at`, in the order given.
+
+    `at` indexes `staying(entries, ids)`, and the caller has already resolved
+    it there and checked that every id is known and distinct, so this cannot
+    drop a todo or list one twice.
     """
     by_id = {e.id: e for e in entries}
-    named = set(ids)
-    moving = [by_id[i] for i in ids]
-    rest = [e for e in entries if e.id not in named]
-    at = 0
-    if anchor := (before or after):
-        found = index_of(rest, anchor)
-        if found is None:
-            raise ValueError(f"anchor {anchor!r} is not in the list")
-        at = found if before else found + 1
-    return rest[:at] + moving + rest[at:]
+    rest = staying(entries, ids)
+    return rest[:at] + [by_id[i] for i in ids] + rest[at:]

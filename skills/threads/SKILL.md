@@ -128,9 +128,9 @@ can be written to at all. Fetch
 
 **A decision is a choice that was made.** Its summary loads on every resume, so log one only when you can name the alternative that was rejected.
 
-**Next steps is every active todo, in priority order.** Place a new one as you add it: `before` the first todo for a piece of the task in hand, `after` the todo it has to follow, and neither for the end. Say where you put it, so the user can move it. When the user says to work on a todo, set its state to `started`, which moves it to the top. Parking takes a todo off the list, and unparking puts it back at the end.
+**Next steps is every active todo, in priority order.** `add_todo` and `order_todos` both take a `place`: `top`, `end`, `before:<id>` or `after:<id>`. Use `top` for something to do next and never an id you believe is first, since `top` is read off the list as it is and your picture of it may be hours old. Say where you put a todo, so the user can move it. When the user says to work on one, set its state to `started`, which moves it to the top. Parking takes a todo off the list, and unparking puts it back at the end.
 
-**The order is the user's.** Propose one and apply it with `order_todos`, which moves the todos you name above or below another, or to the top, once they agree.
+**The order is the user's.** Propose one and apply it with `order_todos` once they agree.
 
 ### Memory
 

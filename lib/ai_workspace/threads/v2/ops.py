@@ -314,9 +314,21 @@ def _record(thread_dir: Path, session_id: str | None, line: str) -> None:
         session.note_created(thread_dir, session_id, line)
 
 
+def _unplaceable(where) -> str:
+    """A refusal for a `place` that resolved to nothing.
+
+    The forms are listed only when the form is what was wrong. An anchor that
+    is simply not in the list was spelled correctly, and offering the grammar
+    there points at the wrong fix.
+    """
+    reply = {"error": where.error, "detail": where.detail}
+    if where.error == "PLACE_UNKNOWN":
+        reply["allowed"] = list(todos_mod.PLACES)
+    return json.dumps(reply)
+
+
 def add_todo(thread, title: str, link: str, state: str = "active",
-             before: str | None = None, after: str | None = None,
-             session_id: str | None = None) -> str:
+             place: str = "", session_id: str | None = None) -> str:
     """Add a todo at a chosen place in the list.
 
     The caller places it because only the caller knows what the todo is for:
@@ -330,19 +342,17 @@ def add_todo(thread, title: str, link: str, state: str = "active",
         return json.dumps({"error": "STATE_UNKNOWN", "detail": state, "allowed": allowed})
     if not link:
         return json.dumps({"error": "LINK_REQUIRED"})
-    if before and after:
-        return json.dumps({"error": "PLACEMENT_AMBIGUOUS"})
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
 
     entries = idx.read(thread.dir, "todos")
-    # A place that was asked for wins over one the state only implies.
+    # A place that was asked for wins over the one the state implies.
     at = 0 if state == "started" else len(entries)
-    if anchor := (before or after):
-        found = todos_mod.index_of(entries, anchor)
-        if found is None:
-            return json.dumps({"error": "NO_SUCH_ENTRY", "detail": anchor})
-        at = found if before else found + 1
+    if place:
+        where = todos_mod.spot(entries, place)
+        if where.at is None:
+            return _unplaceable(where)
+        at = where.at
 
     todo_id = _new_id(thread.dir, "todos", title)
     entries.insert(at, idx.Entry(todo_id, state, title, link))
@@ -393,34 +403,34 @@ def set_state(thread, kind: str, entry_id: str, state: str) -> str:
     return json.dumps({"id": entry_id})
 
 
-def order_todos(thread, todo_ids: list[str], before: str | None = None,
-                after: str | None = None) -> str:
+def order_todos(thread, todo_ids: list[str], place: str = "") -> str:
     """Move the named todos together, in the order given.
 
     Everything else keeps its relative order, so moving the two items that
-    matter does not disturb the rest of the list. Without an anchor they go to
-    the top, which is the common case: what to do next.
+    matter does not disturb the rest of the list. The default place is the
+    top, which is what reordering is usually for.
     """
-    if before and after:
-        return json.dumps({"error": "PLACEMENT_AMBIGUOUS"})
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
     entries = idx.read(thread.dir, "todos")
     known = {e.id for e in entries}
-    anchor = before or after
-    if missing := [i for i in [*todo_ids, *([anchor] if anchor else [])]
-                   if i not in known]:
+    if missing := [i for i in todo_ids if i not in known]:
         return json.dumps({"error": "NO_SUCH_ENTRY", "detail": ", ".join(missing)})
     # Refused rather than de-duplicated: collapsing a repeat would produce an
     # order nobody asked for, and say nothing about having done so.
     if repeated := [i for i in set(todo_ids) if todo_ids.count(i) > 1]:
         return json.dumps({"error": "DUPLICATE_ID", "detail": ", ".join(sorted(repeated))})
-    # The anchor fixes where the move lands, so it cannot be one of the todos
-    # whose place is being decided.
-    if anchor and anchor in todo_ids:
-        return json.dumps({"error": "ANCHOR_IS_MOVING", "detail": anchor})
+
+    # Resolved against the list the movers have been taken out of, which is
+    # also what makes an anchor that is itself moving impossible to resolve.
+    staying = todos_mod.staying(entries, todo_ids)
+    where = todos_mod.spot(staying, place) if place else todos_mod.Spot(0)
+    if where.at is None:
+        if where.error == "NO_SUCH_ENTRY" and where.detail in todo_ids:
+            return json.dumps({"error": "ANCHOR_IS_MOVING", "detail": where.detail})
+        return _unplaceable(where)
     idx.write(thread.dir, "todos",
-              todos_mod.reordered(entries, todo_ids, before, after))
+              todos_mod.reordered(entries, todo_ids, where.at))
     render.render(thread.dir)
     return json.dumps({"ordered": len(todo_ids)})
 

@@ -172,13 +172,13 @@ def create(workspace_dir: str, thread_name: str) -> str:
 
 
 def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
-             state: str = "active", before: str | None = None,
-             after: str | None = None, session_id: str | None = None) -> str:
+             state: str = "active", place: str = "",
+             session_id: str | None = None) -> str:
     """Add a todo at a chosen place in the thread's list."""
     call = _for(workspace_dir, thread_name, "add_todo")
     if isinstance(call, str):
         return call
-    return call.fn(call.thread, title, link, state, before, after, session_id)
+    return call.fn(call.thread, title, link, state, place, session_id)
 
 
 def retire_todo(workspace_dir: str, thread_name: str, todo_id: str, state: str) -> str:
@@ -198,12 +198,12 @@ def set_todo_state(workspace_dir: str, thread_name: str, todo_id: str, state: st
 
 
 def order_todos(workspace_dir: str, thread_name: str, todo_ids: list[str],
-                before: str | None = None, after: str | None = None) -> str:
+                place: str = "") -> str:
     """Move the named todos to a chosen place in the list, in the order given."""
     call = _for(workspace_dir, thread_name, "order_todos")
     if isinstance(call, str):
         return call
-    return call.fn(call.thread, todo_ids, before, after)
+    return call.fn(call.thread, todo_ids, place)
 
 
 def log_decision(workspace_dir: str, thread_name: str, title: str, summary: str,
