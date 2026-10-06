@@ -1,9 +1,7 @@
-"""Session files and the stub created on a session's first write.
+"""Session files, and the id and index entry a session gets when it is saved.
 
-The stub exists so that a todo or decision written mid-session can link to the
-session it came out of before that session has been saved. It also means a
-session that dies without being saved still leaves a record of what it touched,
-where previously nothing at all was written.
+What a session produced is recoverable without reading it: every todo,
+decision and artifact carries its own dated id and sits in an index.
 """
 
 from datetime import date
@@ -13,17 +11,23 @@ from ai_workspace.text import yaml_value
 from ai_workspace.threads.v2 import ids as ids_mod
 from ai_workspace.threads.v2 import index as idx
 
-STUB_MARKER = "status: unsaved"
-
 
 def session_path(thread_dir: Path, session_id: str) -> Path:
     return thread_dir / "sessions" / f"{session_id}.md"
 
 
 def ensure_stub(thread_dir: Path, slug: str, today: date | None = None) -> str:
-    """Create the session file and its index entry if absent. Returns the id."""
+    """Create the session file and its index entry if absent. Returns the id.
+
+    The index title is the slug as the id spells it, not as it was passed. The
+    two are the same for the kebab-case the tool asks for, and a session's
+    title then agrees with its id the way a decision's and an artifact's do.
+    Passed through raw, a slug carrying `]` wrote a line the index could not
+    read back.
+    """
     today = today or date.today()
     base_id = ids_mod.make_id(today, slug)
+    title = ids_mod.slugify(slug)
     # Idempotent: called repeatedly through one session, this is the same
     # session, so an existing file for the same day and slug is reused rather
     # than uniquified into a second stub. The index entry is checked either
@@ -38,42 +42,22 @@ def ensure_stub(thread_dir: Path, slug: str, today: date | None = None) -> str:
         path.write_text(
             "---\n"
             f"date: {today.isoformat()}\n"
-            f"{STUB_MARKER}\n"
             "---\n\n"
-            f"# Session: {slug} - {today.isoformat()}\n\n"
-            "## Created during this session\n\n"
+            f"# Session: {title} - {today.isoformat()}\n"
         )
     if session_id not in taken:
         idx.add(
             thread_dir, "sessions",
-            idx.Entry(session_id, None, slug, f"./sessions/{session_id}.md"),
+            idx.Entry(session_id, None, title, f"./sessions/{session_id}.md"),
         )
     return session_id
-
-
-def note_created(thread_dir: Path, session_id: str, line: str) -> None:
-    """Record something the session produced, so an unsaved session still says so."""
-    path = session_path(thread_dir, session_id)
-    if not path.exists():
-        return
-    text = path.read_text()
-    if STUB_MARKER not in text:
-        return
-    marker = "## Created during this session\n\n"
-    if marker in text:
-        head, _, tail = text.partition(marker)
-        text = head + marker + tail.rstrip("\n") + ("\n" if tail.strip() else "") + f"- {line}\n"
-    else:
-        text = text.rstrip() + f"\n\n{marker}- {line}\n"
-    path.write_text(text)
 
 
 def save(thread_dir: Path, slug: str, summary: str, keywords: str, body: str,
          today: date | None = None) -> tuple[str, str]:
     """Write the session log. Returns (session_id, note).
 
-    The body replaces whatever the file holds, including the stub's list of
-    what the session created, which the body is expected to cover.
+    The body replaces whatever the file holds.
     """
     today = today or date.today()
     session_id = ensure_stub(thread_dir, slug, today=today)
@@ -89,7 +73,8 @@ def save(thread_dir: Path, slug: str, summary: str, keywords: str, body: str,
 
     entries = idx.read(thread_dir, "sessions")
     entry = idx.find(entries, session_id)
-    if entry is not None and slug and entry.title != slug:
-        entry.title = slug
+    title = ids_mod.slugify(slug)
+    if entry is not None and slug and entry.title != title:
+        entry.title = title
         idx.write(thread_dir, "sessions", entries)
     return session_id, "saved"

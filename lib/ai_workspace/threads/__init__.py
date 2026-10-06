@@ -172,13 +172,12 @@ def create(workspace_dir: str, thread_name: str) -> str:
 
 
 def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
-             state: str = "active", place: str = "",
-             session_id: str | None = None) -> str:
+             state: str = "active", place: str = "") -> str:
     """Add a todo at a chosen place in the thread's list."""
     call = _for(workspace_dir, thread_name, "add_todo")
     if isinstance(call, str):
         return call
-    return call.fn(call.thread, title, link, state, place, session_id)
+    return call.fn(call.thread, title, link, state, place)
 
 
 def retire_todo(workspace_dir: str, thread_name: str, todo_id: str, state: str) -> str:
@@ -208,13 +207,12 @@ def order_todos(workspace_dir: str, thread_name: str, todo_ids: list[str],
 
 def log_decision(workspace_dir: str, thread_name: str, title: str, summary: str,
                  body: str, status: str = "proposed",
-                 supersedes: list[str] | None = None,
-                 session_id: str | None = None) -> str:
+                 supersedes: list[str] | None = None) -> str:
     """Write a decision file and index it."""
     call = _for(workspace_dir, thread_name, "log_decision")
     if isinstance(call, str):
         return call
-    return call.fn(call.thread, title, summary, body, status, supersedes, session_id)
+    return call.fn(call.thread, title, summary, body, status, supersedes)
 
 
 def retire_decision(workspace_dir: str, thread_name: str, decision_id: str,
@@ -226,23 +224,21 @@ def retire_decision(workspace_dir: str, thread_name: str, decision_id: str,
     return call.fn(call.thread, decision_id, state)
 
 
-def index_directory(workspace_dir: str, thread_name: str, link: str,
-                    session_id: str | None = None) -> str:
+def index_directory(workspace_dir: str, thread_name: str, link: str) -> str:
     """Index everything in one directory that is not indexed yet."""
     call = _for(workspace_dir, thread_name, "index_directory")
     if isinstance(call, str):
         return call
-    return call.fn(call.thread, link, session_id)
+    return call.fn(call.thread, link)
 
 
 def index_file(workspace_dir: str, thread_name: str, link: str,
-               description: str = "", date: str | None = None,
-               session_id: str | None = None) -> str:
+               description: str = "", date: str | None = None) -> str:
     """Index a file that is already in the thread."""
     call = _for(workspace_dir, thread_name, "index_file")
     if isinstance(call, str):
         return call
-    return call.fn(call.thread, link, description, date, session_id)
+    return call.fn(call.thread, link, description, date)
 
 
 def retire_artifact(workspace_dir: str, thread_name: str, artifact_id: str,
