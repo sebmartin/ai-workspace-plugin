@@ -30,7 +30,7 @@ from mcp_server import (
 )
 
 
-def _four_todos(ws, thread_dir):
+def _four_todos(ws):
     """A, B, C, D in the list, by title."""
     ids = {}
     for title in ("A", "B", "C", "D"):
@@ -98,6 +98,63 @@ class TestTodos:
         add_todo(str(tmp_path), "t", "Prep the coding round", "./sessions/20260101-s.md")
         assert "Prep the coding round" in (d / "README.md").read_text()
 
+    def test_the_window_refills_itself(self, tmp_path):
+        """Nothing promotes the next todo, because nothing has to: the sixth is
+        sixth in the list and becomes fifth when something above it goes."""
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        ids = [json.loads(add_todo(ws, "t", f"T{n}", "./s.md"))["id"] for n in range(6)]
+        assert "T5" not in (d / "README.md").read_text()
+        retire_todo(ws, "t", ids[0], "done")
+        assert "T5" in (d / "README.md").read_text()
+
+    def test_a_title_that_cannot_be_read_back_is_refused(self, tmp_path):
+        """A `]` ends the title field, so the line written is one the index
+        cannot parse: it reported success and vanished on the next write."""
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        out = _reply(add_todo(ws, "t", "Fix [bug] in parser", "./sessions/s.md"))
+        assert out["error"] == "UNREPRESENTABLE" and "]" in out["detail"]
+        assert idx.read(d, "todos") == []
+
+    def test_a_link_that_cannot_be_read_back_is_refused(self, tmp_path):
+        """An ordinary Wikipedia URL ends the link field."""
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        out = _reply(add_todo(ws, "t", "Read the spec", "https://en.wikipedia.org/wiki/Merge_(SQL)"))
+        assert out["error"] == "UNREPRESENTABLE" and ")" in out["detail"]
+        assert idx.read(d, "todos") == []
+
+    def test_a_newline_in_a_title_is_refused(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        out = _reply(add_todo(ws, "t", "Two\nlines", "./s.md"))
+        assert out["error"] == "UNREPRESENTABLE"
+        assert idx.read(d, "todos") == []
+
+    def test_no_line_the_index_cannot_parse_is_ever_written(self, tmp_path):
+        """The invariant the refusal exists to keep: a refused write leaves no
+        line behind, so what is in the file is what reads back."""
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        add_todo(ws, "t", "Fix [the] parser", "./sessions/s.md")
+        add_todo(ws, "t", "Fix (bug) in the parser", "./sessions/s.md")
+        written = [ln for ln in idx.index_path(d, "todos").read_text().splitlines() if ln]
+        assert len(written) == len(idx.read(d, "todos")) == 1
+        assert idx.read(d, "todos")[0].title == "Fix (bug) in the parser"
+
+    def test_only_one_todo_is_started_at_a_time(self, tmp_path):
+        """Every description of the state is singular, and a list where
+        everything ever touched is marked started says nothing."""
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        ids = {t: json.loads(add_todo(ws, "t", t, "./s.md"))["id"] for t in "ABCD"}
+        set_todo_state(ws, "t", ids["B"], "started")
+        set_todo_state(ws, "t", ids["C"], "started")
+        entries = idx.read(d, "todos")
+        assert [(e.title, e.state) for e in entries] == [
+            ("C", "started"), ("B", "active"), ("A", "active"), ("D", "active")]
+
     def test_retiring_takes_it_out_of_next_steps(self, tmp_path):
         d = _thread(tmp_path)
         ws = str(tmp_path)
@@ -146,7 +203,7 @@ class TestTodos:
         lands above everything."""
         d = _thread(tmp_path)
         ws = str(tmp_path)
-        ids = _four_todos(ws, d)
+        ids = _four_todos(ws)
         order_todos(ws, "t", [ids["D"]])
         add_todo(ws, "t", "E", "./s.md", place="top")
         assert [e.title for e in idx.read(d, "todos")] == ["E", "D", "A", "B", "C"]
@@ -291,14 +348,14 @@ class TestTodos:
     def test_order_todos_can_send_them_to_the_end(self, tmp_path):
         d = _thread(tmp_path)
         ws = str(tmp_path)
-        ids = _four_todos(ws, d)
+        ids = _four_todos(ws)
         order_todos(ws, "t", [ids["A"]], place="end")
         assert [e.title for e in idx.read(d, "todos")] == ["B", "C", "D", "A"]
 
     def test_order_todos_before_an_anchor(self, tmp_path):
         d = _thread(tmp_path)
         ws = str(tmp_path)
-        ids = _four_todos(ws, d)
+        ids = _four_todos(ws)
         out = _reply(order_todos(ws, "t", [ids["D"]], place=f"before:{ids['B']}"))
         assert out["ordered"] == 1
         assert [e.title for e in idx.read(d, "todos")] == ["A", "D", "B", "C"]
@@ -306,7 +363,7 @@ class TestTodos:
     def test_order_todos_after_an_anchor(self, tmp_path):
         d = _thread(tmp_path)
         ws = str(tmp_path)
-        ids = _four_todos(ws, d)
+        ids = _four_todos(ws)
         order_todos(ws, "t", [ids["D"]], place=f"after:{ids['A']}")
         assert [e.title for e in idx.read(d, "todos")] == ["A", "D", "B", "C"]
 
@@ -315,21 +372,21 @@ class TestTodos:
         something above the anchor is one of the things moving."""
         d = _thread(tmp_path)
         ws = str(tmp_path)
-        ids = _four_todos(ws, d)
+        ids = _four_todos(ws)
         order_todos(ws, "t", [ids["A"]], place=f"after:{ids['C']}")
         assert [e.title for e in idx.read(d, "todos")] == ["B", "C", "A", "D"]
 
     def test_several_todos_move_together_in_the_order_given(self, tmp_path):
         d = _thread(tmp_path)
         ws = str(tmp_path)
-        ids = _four_todos(ws, d)
+        ids = _four_todos(ws)
         order_todos(ws, "t", [ids["D"], ids["B"]], place=f"after:{ids['A']}")
         assert [e.title for e in idx.read(d, "todos")] == ["A", "D", "B", "C"]
 
     def test_order_todos_refuses_a_place_it_cannot_read(self, tmp_path):
         d = _thread(tmp_path)
         ws = str(tmp_path)
-        ids = _four_todos(ws, d)
+        ids = _four_todos(ws)
         out = _reply(order_todos(ws, "t", [ids["D"]], place="beneath:" + ids["A"]))
         assert out["error"] == "PLACE_UNKNOWN"
         assert [e.title for e in idx.read(d, "todos")] == ["A", "B", "C", "D"]
@@ -337,7 +394,7 @@ class TestTodos:
     def test_order_todos_refuses_an_unknown_anchor(self, tmp_path):
         d = _thread(tmp_path)
         ws = str(tmp_path)
-        ids = _four_todos(ws, d)
+        ids = _four_todos(ws)
         out = _reply(order_todos(ws, "t", [ids["D"]], place="after:20260101-nope"))
         assert out["error"] == "NO_SUCH_ENTRY" and out["detail"] == "20260101-nope"
         assert [e.title for e in idx.read(d, "todos")] == ["A", "B", "C", "D"]
@@ -346,7 +403,7 @@ class TestTodos:
         """Its position is what is being decided, so it cannot also fix one."""
         d = _thread(tmp_path)
         ws = str(tmp_path)
-        ids = _four_todos(ws, d)
+        ids = _four_todos(ws)
         out = _reply(order_todos(ws, "t", [ids["D"], ids["B"]], place=f"before:{ids['B']}"))
         assert out["error"] == "ANCHOR_IS_MOVING" and out["detail"] == ids["B"]
         assert [e.title for e in idx.read(d, "todos")] == ["A", "B", "C", "D"]
@@ -383,6 +440,56 @@ class TestTodos:
         for n in range(6):
             add_todo(ws, "t", f"T{n}", "./s.md", state="parked")
         assert "active" not in _reply(add_todo(ws, "t", "T6", "./s.md"))
+
+    def test_place_is_not_case_sensitive(self, tmp_path):
+        """A model produces a capital as readily as the space the parser
+        already forgives."""
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        add_todo(ws, "t", "A", "./s.md")
+        add_todo(ws, "t", "B", "./s.md", place="TOP")
+        assert [e.title for e in idx.read(d, "todos")] == ["B", "A"]
+
+    def test_a_place_of_only_spaces_is_the_default(self, tmp_path):
+        """`""` and `" "` both mean the argument was left out."""
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        add_todo(ws, "t", "A", "./s.md")
+        add_todo(ws, "t", "B", "./s.md", place="   ")
+        assert [e.title for e in idx.read(d, "todos")] == ["A", "B"]
+
+    def test_unparking_past_the_window_says_so(self, tmp_path):
+        """The other way the list crosses the line, and the only one that was
+        silent about it."""
+        _thread(tmp_path)
+        ws = str(tmp_path)
+        ids = [json.loads(add_todo(ws, "t", f"T{n}", "./s.md"))["id"] for n in range(6)]
+        set_todo_state(ws, "t", ids[0], "parked")
+        assert _reply(set_todo_state(ws, "t", ids[0], "active"))["active"] == 6
+
+    def test_a_comfortable_list_says_nothing_on_a_state_change(self, tmp_path):
+        _thread(tmp_path)
+        ws = str(tmp_path)
+        a = json.loads(add_todo(ws, "t", "A", "./s.md"))["id"]
+        assert "active" not in _reply(set_todo_state(ws, "t", a, "parked"))
+
+    def test_retiring_refuses_with_a_code_like_every_other_todo_tool(self, tmp_path):
+        """A caller parsing the documented contract throws on a bare sentence."""
+        _thread(tmp_path)
+        ws = str(tmp_path)
+        a = json.loads(add_todo(ws, "t", "A", "./s.md"))["id"]
+        bad_state = _reply(retire_todo(ws, "t", a, "started"))
+        assert bad_state["error"] == "STATE_UNKNOWN"
+        assert bad_state["allowed"] == ["done", "dropped"]
+        assert _reply(retire_todo(ws, "t", "20260101-nope", "done"))["error"] == "NO_SUCH_ENTRY"
+
+    def test_ordering_nothing_is_refused(self, tmp_path):
+        """An empty list is a caller that built one by mistake, and reporting
+        success touches both files for no change."""
+        _thread(tmp_path)
+        ws = str(tmp_path)
+        add_todo(ws, "t", "A", "./s.md")
+        assert _reply(order_todos(ws, "t", []))["error"] == "IDS_REQUIRED"
 
     def test_bad_state_is_rejected(self, tmp_path):
         _thread(tmp_path)

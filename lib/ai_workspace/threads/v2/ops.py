@@ -167,6 +167,9 @@ def _index_one(thread, link: str, description: str = "",
     if len(description) > MAX_DESCRIPTION:
         return Indexed(""), Refusal("DESCRIPTION_TOO_LONG", str(MAX_DESCRIPTION))
 
+    if (unreadable := idx.unrepresentable("", f"./{relative}")) is not None:
+        return Indexed(""), Refusal("UNREPRESENTABLE", unreadable)
+
     path = thread.dir / relative
     if not path.exists():
         return Indexed(""), Refusal("MISSING")
@@ -342,13 +345,15 @@ def add_todo(thread, title: str, link: str, state: str = "active",
         return json.dumps({"error": "STATE_UNKNOWN", "detail": state, "allowed": allowed})
     if not link:
         return json.dumps({"error": "LINK_REQUIRED"})
+    if (unreadable := idx.unrepresentable(title, link)) is not None:
+        return json.dumps({"error": "UNREPRESENTABLE", "detail": unreadable})
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
 
     entries = idx.read(thread.dir, "todos")
     # A place that was asked for wins over the one the state implies.
-    at = 0 if state == "started" else len(entries)
-    if place:
+    at = 0 if state == todos_mod.STARTED else len(entries)
+    if place := place.strip():
         where = todos_mod.spot(entries, place)
         if where.at is None:
             return _unplaceable(where)
@@ -368,9 +373,8 @@ def add_todo(thread, title: str, link: str, state: str = "active",
 def retire_todo(thread, todo_id: str, state: str) -> str:
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
-    error = idx.retire(thread.dir, "todos", todo_id, state)
-    if error:
-        return error
+    if error := idx.retire(thread.dir, "todos", todo_id, state):
+        return json.dumps(error)
     render.render(thread.dir)
     return json.dumps({"id": todo_id})
 
@@ -394,13 +398,16 @@ def set_state(thread, kind: str, entry_id: str, state: str) -> str:
         return json.dumps({"error": "NO_SUCH_ENTRY", "detail": entry_id})
     was, entry.state = entry.state, state
     if kind == "todos":
-        if state == "started":
-            todos_mod.to_top(entries, entry_id)
-        elif state == "active" and was == todos_mod.PARKED:
+        if state == todos_mod.STARTED:
+            todos_mod.start(entries, entry_id)
+        elif state == todos_mod.ACTIVE and was == todos_mod.PARKED:
             todos_mod.to_end(entries, entry_id)
     idx.write(thread.dir, kind, entries)
     render.render(thread.dir)
-    return json.dumps({"id": entry_id})
+    reply: dict = {"id": entry_id}
+    if kind == "todos" and (waiting := todos_mod.crowded(entries)):
+        reply["active"] = waiting
+    return json.dumps(reply)
 
 
 def order_todos(thread, todo_ids: list[str], place: str = "") -> str:
@@ -410,6 +417,8 @@ def order_todos(thread, todo_ids: list[str], place: str = "") -> str:
     matter does not disturb the rest of the list. The default place is the
     top, which is what reordering is usually for.
     """
+    if not todo_ids:
+        return json.dumps({"error": "IDS_REQUIRED"})
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
     entries = idx.read(thread.dir, "todos")
@@ -424,7 +433,7 @@ def order_todos(thread, todo_ids: list[str], place: str = "") -> str:
     # Resolved against the list the movers have been taken out of, which is
     # also what makes an anchor that is itself moving impossible to resolve.
     staying = todos_mod.staying(entries, todo_ids)
-    where = todos_mod.spot(staying, place) if place else todos_mod.Spot(0)
+    where = todos_mod.spot(staying, place) if place.strip() else todos_mod.Spot(0)
     if where.at is None:
         if where.error == "NO_SUCH_ENTRY" and where.detail in todo_ids:
             return json.dumps({"error": "ANCHOR_IS_MOVING", "detail": where.detail})
@@ -441,6 +450,8 @@ def log_decision(thread, title: str, summary: str, body: str,
     if status not in idx.IN_FORCE["decisions"]:
         return json.dumps({"error": "STATUS_UNKNOWN", "detail": status,
                            "allowed": list(idx.IN_FORCE["decisions"])})
+    if (unreadable := idx.unrepresentable(title, "")) is not None:
+        return json.dumps({"error": "UNREPRESENTABLE", "detail": unreadable})
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
     supersedes = supersedes or []
@@ -485,9 +496,8 @@ def retire_decision(thread, decision_id: str, state: str) -> str:
         return unwritable
     entries = idx.read(thread.dir, "decisions")
     entry = idx.find(entries, decision_id)
-    error = idx.retire(thread.dir, "decisions", decision_id, state)
-    if error:
-        return error
+    if error := idx.retire(thread.dir, "decisions", decision_id, state):
+        return json.dumps(error)
     # Keep the file's own status in step, so a decision found by grep or in a
     # file browser says what it is without depending on which index led there.
     if entry:
@@ -505,9 +515,8 @@ def retire_decision(thread, decision_id: str, state: str) -> str:
 def retire_artifact(thread, artifact_id: str, state: str) -> str:
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
-    error = idx.retire(thread.dir, "artifacts", artifact_id, state)
-    if error:
-        return error
+    if error := idx.retire(thread.dir, "artifacts", artifact_id, state):
+        return json.dumps(error)
     render.render(thread.dir)
     return json.dumps({"id": artifact_id})
 

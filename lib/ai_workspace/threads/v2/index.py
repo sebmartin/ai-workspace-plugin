@@ -29,9 +29,11 @@ from pathlib import Path
 TYPES = ("sessions", "decisions", "artifacts", "todos")
 RETIRED_TYPES = ("decisions", "artifacts", "todos")
 
-# Kinds whose line order is meaningful rather than chronological. A todo list is
-# a priority order, so a new line goes where the caller puts it; everything else
-# is a record of something that happened, and goes where its date puts it.
+# Kinds whose line order is a priority the user set rather than a chronology.
+# Nothing may re-sort one, and the migration audit must not expect dates in it.
+# `add` is not involved: the tool that knows the order writes the whole list,
+# and the only index `add` touches for an ORDERED kind is the retired one,
+# which is a record of what happened and so is dated like any other.
 ORDERED = ("todos",)
 
 IN_FORCE = {
@@ -74,6 +76,30 @@ class Entry:
         return f"Entry({self.id!r}, {self.state!r}, {self.title!r})"
 
 
+# A title carrying "]" ends its own field, and a link carrying ")" ends its
+# own, so the line written is one `_LINE_RE` cannot match. The entry reports
+# success, reads back as absent, and disappears the next time anything rewrites
+# the file. `Merge_(SQL)` is an ordinary Wikipedia URL, so this is reachable
+# without trying.
+#
+# Refused rather than escaped, for the reason an over-long description is: the
+# caller wrote the text and is still holding it, so it is the only party that
+# can fix it, and an escape scheme is a second parser to keep in agreement with
+# the first.
+_FORBIDDEN = (("title", "]"), ("link", ")"))
+
+
+def unrepresentable(title: str, link: str) -> str | None:
+    """Why these cannot survive a round trip through an index line, or None."""
+    for field, value in (("title", title), ("link", link)):
+        if "\n" in value or "\r" in value:
+            return f"{field} contains a line break"
+    for field, char in _FORBIDDEN:
+        if char in (title if field == "title" else link):
+            return f"{field} contains {char!r}"
+    return None
+
+
 def is_content(path: Path) -> bool:
     """Whether a directory entry is thread content rather than filesystem noise.
 
@@ -94,6 +120,31 @@ def index_path(thread_dir: Path, kind: str, retired: bool = False) -> Path:
     return thread_dir / f"{kind}-{suffix}.md"
 
 
+# The ids a `windows:` frontmatter block names. Indexes written before a todo
+# list carried its own order open with one, naming the todos Next steps showed.
+# Matched with a pattern rather than read with a YAML parser because one real
+# block is indented with a tab, which no parser accepts, and because the block
+# is the only thing in it anything still wants.
+_LEGACY_WINDOW = re.compile(r"(?m)^\s*next_steps:\s*\[([^\]]*)\]")
+
+
+def _window_first(text: str, entries: list[Entry]) -> list[Entry]:
+    """Entries with the todos that block named first, in the order it gave.
+
+    That order is a priority the user set, so it becomes line order, which is
+    where this schema keeps priority. The next write makes it permanent and
+    the block goes. An id the block names that is no longer in the index was
+    retired in between, and is skipped.
+    """
+    found = _LEGACY_WINDOW.search(text)
+    if not found:
+        return entries
+    named = [i.strip() for i in found.group(1).split(",") if i.strip()]
+    by_id = {e.id: e for e in entries}
+    first = [by_id[i] for i in named if i in by_id]
+    return first + [e for e in entries if e.id not in set(named)]
+
+
 def read(thread_dir: Path, kind: str, retired: bool = False) -> list[Entry]:
     """The entries, in file order. A missing index is an empty index.
 
@@ -103,20 +154,20 @@ def read(thread_dir: Path, kind: str, retired: bool = False) -> list[Entry]:
     sentinel, tolerating a missing one would be indistinguishable from schema 1.
 
     Lines are matched rather than parsed around, so anything that is not an
-    entry is skipped. Real indexes open with a frontmatter block this schema
-    no longer writes, sometimes indented with a tab that no YAML parser
-    accepts, and reading one must not depend on it. The next write drops it.
+    entry is skipped. The one thing read out of what is left is a `windows:`
+    block, whose order this schema keeps as line order instead.
     """
     path = index_path(thread_dir, kind, retired)
     if not path.exists():
         return []
+    text = path.read_text()
     entries = []
-    for line in path.read_text().splitlines():
+    for line in text.splitlines():
         hit = _LINE_RE.match(line)
         if hit:
             entries.append(Entry(hit["id"], hit["state"], hit["title"], hit["link"],
                                  hit["description"] or ""))
-    return entries
+    return _window_first(text, entries)
 
 
 def write(thread_dir: Path, kind: str, entries: list[Entry],
@@ -128,7 +179,7 @@ def write(thread_dir: Path, kind: str, entries: list[Entry],
 
 
 def add(thread_dir: Path, kind: str, entry: Entry, retired: bool = False) -> Path:
-    """Append to an ORDERED kind, otherwise insert in id order.
+    """Insert an entry in id order.
 
     Ids are YYYYMMDD-slug, so id order is chronological and a string comparison
     places the entry without parsing a date. Usually the new entry is the newest
@@ -137,15 +188,11 @@ def add(thread_dir: Path, kind: str, entry: Entry, retired: bool = False) -> Pat
 
     Scanning back from the end leaves an index that is already out of order in
     the order it was, rather than silently reordering lines nobody asked about.
-
-    An ORDERED kind is exempt: sorting a todo list by date would undo whatever
-    order the user put it in, every time anything was added.
     """
     entries = read(thread_dir, kind, retired)
     at = len(entries)
-    if kind not in ORDERED:
-        while at and entries[at - 1].id > entry.id:
-            at -= 1
+    while at and entries[at - 1].id > entry.id:
+        at -= 1
     entries.insert(at, entry)
     return write(thread_dir, kind, entries, retired)
 
@@ -160,17 +207,23 @@ def taken_ids(thread_dir: Path, kind: str) -> set[str]:
     return {e.id for e in live} | {e.id for e in gone}
 
 
-def retire(thread_dir: Path, kind: str, entry_id: str, state: str) -> str | None:
-    """Move one line from the index to the retired index. Returns an error or None."""
+def retire(thread_dir: Path, kind: str, entry_id: str, state: str) -> dict | None:
+    """Move one line from the index to the retired index.
+
+    A refusal payload, or None. A payload rather than a sentence, because every
+    other write on this schema answers a machine with a code, and a caller
+    parsing that contract breaks on a bare string. The dict is JSON-ready;
+    serialising it is the tool layer's job.
+    """
     if kind not in RETIRED_TYPES:
-        return f"Error: {kind} entries do not retire."
+        return {"error": "NOT_RETIRABLE", "detail": kind}
     if state not in RETIRED[kind]:
-        allowed = ", ".join(RETIRED[kind])
-        return f"Error: '{state}' is not a retired state for {kind}. Use one of: {allowed}."
+        return {"error": "STATE_UNKNOWN", "detail": state,
+                "allowed": list(RETIRED[kind])}
     entries = read(thread_dir, kind)
     entry = find(entries, entry_id)
     if entry is None:
-        return f"Error: No {kind} entry with id '{entry_id}'."
+        return {"error": "NO_SUCH_ENTRY", "detail": entry_id}
     entries.remove(entry)
     entry.state = state
     write(thread_dir, kind, entries)
