@@ -128,7 +128,7 @@ at the thread on the other end, read what it already says, and decide whether it
 can be written to at all. Fetch
 `skills/threads/v2/link-thread.md` when the user asks for a link.
 
-**A decision is a choice that was made.** Its summary loads on every resume, so log one only when you can name the alternative that was rejected.
+**A decision is a choice that was made.** Logging one is the user's call, like any index entry. Do not even propose one whose rejected alternative you cannot name, or that dies with this task; that is a session log entry.
 
 **Next steps is the top of the todo list, bounded to five.** The rest of the list is in `todos-index.md`, and resume counts it for you. Nothing promotes anything: retire the first todo and the sixth becomes fifth by itself.
 

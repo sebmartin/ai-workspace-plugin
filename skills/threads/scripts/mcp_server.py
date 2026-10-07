@@ -301,7 +301,8 @@ def log_decision(workspace_dir: str, thread_name: str, title: str, summary: str,
 
     Every decision is read on every resume and shapes later sessions, so log
     one only when the user asked for it or agreed to your suggestion. If you
-    think a decision should be logged, suggest it in your reply.
+    think a decision should be logged, suggest it in your reply. Do not suggest
+    one that dies with the task; the session log holds it.
 
     `summary` is read on every resume, so it carries real cost: one sentence,
     one subject, what was decided and not why. If it needs "and" twice, that is
