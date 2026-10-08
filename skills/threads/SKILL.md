@@ -9,7 +9,15 @@ Threads organize long-running discussions so they can be picked up across sessio
 
 **Don't bring up the workspace's git state.** Uncommitted thread files and a workspace with no repository are both normal. Don't point them out or suggest committing or initialising anything for them. Answer if the user asks, and relay the migration safety check when migrating.
 
-**Anything that leaves the workspace must stand alone.** Text written for someone else, such as docs, code comments, commit messages, pull requests, issues, emails and chat messages, is read by a person who cannot open the workspace. That includes text you draft in the conversation for the user to paste. Never cite a thread, decision, session or artifact in it, by path, id or name. When a reference carries an argument, such as why an approach was dropped, restate the argument. Threads also hold candid and private material, so ask before carrying across anything that looks private.
+**Thread privacy is this plugin's invariant.** Where protecting it costs capability, brevity, elegance or the ability to show your work, privacy wins. Two things are private, and protecting one is not protecting the other:
+
+- **The thread itself**: that it exists, its name, and the id or title of anything in it. `kitchen-reno`, `20260412-call-the-plumber`.
+- **What it holds**: decision text, session logs, Status and About, `memory.md`, artifact contents, attachment filenames, the people named in it.
+
+Neither reaches anyone who cannot open the workspace, which includes a doc, a code comment, a commit message, a pull request, an issue, an email, a chat message, a published artifact, a prompt you hand a subagent, and text you draft for the user to paste.
+
+Citing as evidence is still citing. In anything written for someone who cannot open the workspace, say what you verified and what it showed, never where you got it: "a real index carrying a four-id block came out in that order", not which thread. When a reference carries an argument, such as why an approach was dropped, restate the argument. In doubt, leave it out.
+
 
 ## Workspace Resolution
 
