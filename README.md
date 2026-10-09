@@ -62,7 +62,7 @@ my-workspace/
 │   └── {thread-name}/
 │       ├── README.md        # Status, next steps, written for you, not the assistant
 │       ├── schema-version   # Which on-disk schema this thread uses
-│       ├── todos/           # Backlog items with room for their own notes
+│       ├── todos/           # Todos with room for their own notes
 │       ├── sessions/        # One file per conversation
 │       ├── decisions/       # Decisions with context and rationale
 │       ├── attachments/     # Files you bring in (specs, docs, data)
@@ -143,7 +143,7 @@ You don't need to memorize these. You can tell Claude what you want in plain Eng
 | `/ai-workspace:threads summarize this for <person>` | Write a standalone summary as an artifact |
 | `/ai-workspace:threads log-decision` | Record a decision |
 | `/ai-workspace:threads park "<topic>"` | Park a topic for later |
-| `/ai-workspace:threads unpark "<topic>"` | Move a parked topic back to the active backlog |
+| `/ai-workspace:threads unpark "<topic>"` | Move a parked topic back to the active list |
 | `/ai-workspace:threads parked` | List parked topics |
 | `/ai-workspace:threads create-child <name>` | Create a child thread linked to the current thread |
 | `/ai-workspace:threads link-parent <name>` | Set a parent thread (bidirectional) |

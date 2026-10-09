@@ -14,6 +14,7 @@ import re
 from pathlib import Path
 
 from ai_workspace.threads.v2 import index as idx
+from ai_workspace.threads.v2 import todos as todos_mod
 
 NEXT_STEPS = "Next steps"
 
@@ -35,13 +36,22 @@ def _links_line(thread_dir: Path) -> str:
 
 
 def next_steps_body(thread_dir: Path) -> str:
-    """The window, in window order, or a placeholder."""
-    entries, fm = idx.read(thread_dir, "todos")
-    ids = (fm.get("windows") or {}).get("next_steps") or []
-    by_id = {e.id: e for e in entries}
-    lines = [by_id[i].render() for i in ids if i in by_id]
-    if not lines:
-        return "- None\n"
+    """The top of the todo list, bounded, or a placeholder.
+
+    Says how much it is not showing, whether that is todos below the window or
+    todos that were parked, because a section that hides the rest in silence is
+    worse for the person reading it than one that points at the index.
+    """
+    entries = idx.read(thread_dir, "todos")
+    active = todos_mod.next_up(entries)
+    shown = todos_mod.window(entries)
+    lines = [e.render() for e in shown] or ["- None"]
+    if hidden := len(active) - len(shown):
+        lines.append(f"\n{hidden} more in [todos](./todos-index.md).")
+    elif not shown and (parked := len(todos_mod.parked(entries))):
+        # Otherwise `- None` on its own reads as a thread with nothing left to
+        # do, where everything was set aside on purpose.
+        lines.append(f"\n{parked} parked in [todos](./todos-index.md).")
     return "\n".join(lines) + "\n"
 
 

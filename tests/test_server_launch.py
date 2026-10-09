@@ -140,7 +140,7 @@ def test_server_lists_its_tools(tools):
     "list_threads", "resume_thread", "create_thread", "get_skill_file",
     "set_default_workspace",
     "archive_thread", "restore_thread", "list_archived_threads",
-    "add_todo", "retire_todo", "set_todo_state", "set_window",
+    "add_todo", "retire_todo", "set_todo_state", "order_todos",
     "log_decision", "retire_decision", "index_file", "retire_artifact",
     "save_session", "migration_safety_check", "audit_migration",
 ])

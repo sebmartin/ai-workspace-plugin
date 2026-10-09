@@ -12,23 +12,30 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "skills" / "threads" / "sc
 from ai_workspace.text import split_frontmatter
 from ai_workspace.threads import marker
 from ai_workspace.threads.v2 import index as idx
-
-
-def _only_id(thread_dir, kind):
-    """Read the id back from the index rather than parsing a prose message."""
-    entries, _ = idx.read(thread_dir, kind)
-    return entries[-1].id
 from mcp_server import (
     add_todo,
     index_directory,
     index_file,
     log_decision,
+    order_todos,
     retire_artifact,
     retire_decision,
     retire_todo,
     set_todo_state,
-    set_window,
 )
+
+
+def _only_id(thread_dir, kind):
+    """Read the id back from the index rather than parsing a prose message."""
+    return idx.read(thread_dir, kind)[-1].id
+
+
+def _four_todos(ws):
+    """A, B, C, D in the list, by title."""
+    ids = {}
+    for title in ("A", "B", "C", "D"):
+        ids[title] = json.loads(add_todo(ws, "t", title, "./s.md"))["id"]
+    return ids
 
 
 def _reply(out):
@@ -62,7 +69,7 @@ class TestRefusalOnSchema1:
             add_todo(ws, "old", "t", "./x.md"),
             retire_todo(ws, "old", "i", "done"),
             set_todo_state(ws, "old", "i", "parked"),
-            set_window(ws, "old", ["i"]),
+            order_todos(ws, "old", ["i"]),
             log_decision(ws, "old", "t", "s", "b"),
             retire_decision(ws, "old", "i", "superseded"),
             index_file(ws, "old", "./artifacts/x.md"),
@@ -80,33 +87,143 @@ class TestRefusalOnSchema1:
 
 
 class TestTodos:
+    def test_add_requires_a_title(self, tmp_path):
+        """Stripped to nothing, it renders an empty link label."""
+        d = _thread(tmp_path)
+        out = _reply(add_todo(str(tmp_path), "t", "   ", "./s.md"))
+        assert out["error"] == "TITLE_REQUIRED"
+        assert idx.read(d, "todos") == []
+
+    @pytest.mark.parametrize("link", [
+        "/Volumes/workspace/threads/t/s.md",
+        "../other/s.md",
+        "./../other/s.md",
+        "//example.com/s.md",
+        "~/src/s.md",
+        "file:///Volumes/workspace/threads/t/s.md",
+        "threads/t/s.md",
+        "s.md",
+    ])
+    def test_a_link_that_resolves_on_one_machine_only_is_refused(self, tmp_path, link):
+        """Three readers resolve a stored link as `thread_dir / link`, so a link
+        has to say which of two things it is: a `./` path under the thread, or
+        an http(s) URL. Every link here either names one machine's filesystem
+        or resolves under the thread to nothing, and a bare relative path is
+        refused rather than guessed at, since `threads/t/s.md` and `s.md` look
+        the same to a parser and mean different things to whoever wrote them.
+        """
+        d = _thread(tmp_path)
+        assert _reply(add_todo(str(tmp_path), "t", "A", link))["error"] == "OUTSIDE_THREAD"
+        assert idx.read(d, "todos") == []
+
+    def test_an_external_url_is_a_valid_todo_link(self, tmp_path):
+        """A todo for an issue or a PR links to it, which is the documented use.
+
+        The scheme is matched without regard to case, because a capital is what
+        a person pastes and the accepted set is closed either way.
+        """
+        d = _thread(tmp_path)
+        urls = [
+            "https://example.com/owner/repo/issues/16",
+            "http://example.com/x",
+            "HTTPS://example.com/i/1",
+        ]
+        for url in urls:
+            assert "error" not in _reply(add_todo(str(tmp_path), "t", "T", url))
+        assert [e.link for e in idx.read(d, "todos")] == urls
+
+    def test_a_link_is_tested_as_it_will_be_stored(self, tmp_path):
+        """Surrounding space is not the difference between a link and a refusal.
+
+        The entry has always been written from `link.strip()`, so testing the
+        raw string refused a link the next line would have stored intact.
+        """
+        d = _thread(tmp_path)
+        assert "error" not in _reply(add_todo(str(tmp_path), "t", "A", "  ./todos/x.md\n"))
+        assert [e.link for e in idx.read(d, "todos")] == ["./todos/x.md"]
+
+    def test_a_link_of_only_space_is_a_missing_link(self, tmp_path):
+        d = _thread(tmp_path)
+        assert _reply(add_todo(str(tmp_path), "t", "A", "   "))["error"] == "LINK_REQUIRED"
+        assert idx.read(d, "todos") == []
+
     def test_add_requires_a_link(self, tmp_path):
         _thread(tmp_path)
         assert _reply(add_todo(str(tmp_path), "t", "Email the contractor", ""))["error"] == "LINK_REQUIRED"
 
-    def test_add_then_window_then_render(self, tmp_path):
+    def test_an_added_todo_reaches_next_steps(self, tmp_path):
+        """The window needed a second call nothing told the agent to make, so a
+        todo the user asked for never showed up."""
         d = _thread(tmp_path)
-        ws = str(tmp_path)
-        add_todo(ws, "t", "Prep the coding round", "./sessions/20260101-s.md")
-        todo_id = _only_id(d, "todos")
-        assert _reply(set_window(ws, "t", [todo_id]))["size"] == 1
+        add_todo(str(tmp_path), "t", "Prep the coding round", "./sessions/20260101-s.md")
         assert "Prep the coding round" in (d / "README.md").read_text()
 
-    def test_backlog_is_not_shown_until_promoted(self, tmp_path):
+    def test_the_window_refills_itself(self, tmp_path):
+        """Nothing promotes the next todo, because nothing has to: the sixth is
+        sixth in the list and becomes fifth when something above it goes."""
         d = _thread(tmp_path)
-        add_todo(str(tmp_path), "t", "Someday thing", "./s.md")
-        assert "Someday thing" not in (d / "README.md").read_text()
+        ws = str(tmp_path)
+        ids = [json.loads(add_todo(ws, "t", f"T{n}", "./s.md"))["id"] for n in range(6)]
+        assert "T5" not in (d / "README.md").read_text()
+        retire_todo(ws, "t", ids[0], "done")
+        assert "T5" in (d / "README.md").read_text()
 
-    def test_retiring_removes_it_from_the_window(self, tmp_path):
+    def test_a_title_that_cannot_be_read_back_is_refused(self, tmp_path):
+        """A `]` ends the title field, so the line written is one the index
+        cannot parse: it reported success and vanished on the next write."""
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        out = _reply(add_todo(ws, "t", "Fix [bug] in parser", "./sessions/s.md"))
+        assert out["error"] == "UNREPRESENTABLE"
+        assert out["detail"] == "title cannot be read back from a line"
+        assert idx.read(d, "todos") == []
+
+    def test_a_link_that_cannot_be_read_back_is_refused(self, tmp_path):
+        """An ordinary Wikipedia URL ends the link field."""
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        out = _reply(add_todo(ws, "t", "Read the spec", "https://en.wikipedia.org/wiki/Merge_(SQL)"))
+        assert out["error"] == "UNREPRESENTABLE"
+        assert out["detail"] == "link cannot be read back from a line"
+        assert idx.read(d, "todos") == []
+
+    def test_a_newline_in_a_title_is_refused(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        out = _reply(add_todo(ws, "t", "Two\nlines", "./s.md"))
+        assert out["error"] == "UNREPRESENTABLE"
+        assert idx.read(d, "todos") == []
+
+    def test_no_line_the_index_cannot_parse_is_ever_written(self, tmp_path):
+        """The invariant the refusal exists to keep: a refused write leaves no
+        line behind, so what is in the file is what reads back."""
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        add_todo(ws, "t", "Fix [the] parser", "./sessions/s.md")
+        add_todo(ws, "t", "Fix (bug) in the parser", "./sessions/s.md")
+        written = [ln for ln in idx.index_path(d, "todos").read_text().splitlines() if ln]
+        assert len(written) == len(idx.read(d, "todos")) == 1
+        assert idx.read(d, "todos")[0].title == "Fix (bug) in the parser"
+
+    def test_only_one_todo_is_started_at_a_time(self, tmp_path):
+        """Every description of the state is singular, and a list where
+        everything ever touched is marked started says nothing."""
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        ids = {t: json.loads(add_todo(ws, "t", t, "./s.md"))["id"] for t in "ABCD"}
+        set_todo_state(ws, "t", ids["B"], "started")
+        set_todo_state(ws, "t", ids["C"], "started")
+        entries = idx.read(d, "todos")
+        assert [(e.title, e.state) for e in entries] == [
+            ("C", "started"), ("B", "active"), ("A", "active"), ("D", "active")]
+
+    def test_retiring_takes_it_out_of_next_steps(self, tmp_path):
         d = _thread(tmp_path)
         ws = str(tmp_path)
         add_todo(ws, "t", "Chase the permit", "./s.md")
         todo_id = _only_id(d, "todos")
-        set_window(ws, "t", [todo_id])
         assert "Chase the permit" in (d / "README.md").read_text()
         retire_todo(ws, "t", todo_id, "done")
-        _, fm = idx.read(d, "todos")
-        assert fm.get("windows", {}).get("next_steps") == []
         assert "Chase the permit" not in (d / "README.md").read_text()
 
     def test_park_and_unpark(self, tmp_path):
@@ -114,25 +231,345 @@ class TestTodos:
         ws = str(tmp_path)
         add_todo(ws, "t", "Well driller", "./s.md"); todo_id = _only_id(d, "todos")
         set_todo_state(ws, "t", todo_id, "parked")
-        entries, _ = idx.read(d, "todos")
-        assert entries[0].state == "parked"
+        assert idx.read(d, "todos")[0].state == "parked"
         set_todo_state(ws, "t", todo_id, "active")
-        entries, _ = idx.read(d, "todos")
-        assert entries[0].state == "active"
+        assert idx.read(d, "todos")[0].state == "active"
 
-    def test_parking_removes_it_from_the_window(self, tmp_path):
+    def test_parking_takes_it_out_of_next_steps(self, tmp_path):
         d = _thread(tmp_path)
         ws = str(tmp_path)
         add_todo(ws, "t", "Call the surveyor", "./s.md")
         todo_id = _only_id(d, "todos")
-        set_window(ws, "t", [todo_id])
+        assert "Call the surveyor" in (d / "README.md").read_text()
         set_todo_state(ws, "t", todo_id, "parked")
-        _, fm = idx.read(d, "todos")
-        assert fm.get("windows", {}).get("next_steps") == []
         assert "Call the surveyor" not in (d / "README.md").read_text()
         set_todo_state(ws, "t", todo_id, "active")
-        _, fm = idx.read(d, "todos")
-        assert fm.get("windows", {}).get("next_steps") == []
+        assert "Call the surveyor" in (d / "README.md").read_text()
+
+    def test_a_todo_goes_on_the_end_by_default(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        add_todo(ws, "t", "First", "./s.md")
+        add_todo(ws, "t", "Second", "./s.md")
+        assert [e.title for e in idx.read(d, "todos")] == ["First", "Second"]
+
+    def test_place_top_names_no_todo(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        add_todo(ws, "t", "A", "./s.md")
+        add_todo(ws, "t", "B", "./s.md", place="top")
+        assert [e.title for e in idx.read(d, "todos")] == ["B", "A"]
+
+    def test_place_top_is_read_at_write_time(self, tmp_path):
+        """So a caller holding a list from hours ago, or holding none, still
+        lands above everything."""
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        ids = _four_todos(ws)
+        order_todos(ws, "t", [ids["D"]])
+        add_todo(ws, "t", "E", "./s.md", place="top")
+        assert [e.title for e in idx.read(d, "todos")] == ["E", "D", "A", "B", "C"]
+
+    def test_place_end_is_the_default_said_out_loud(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        add_todo(ws, "t", "A", "./s.md")
+        add_todo(ws, "t", "B", "./s.md", place="end")
+        assert [e.title for e in idx.read(d, "todos")] == ["A", "B"]
+
+    def test_place_before_an_anchor(self, tmp_path):
+        """Breaking up the current task: the new piece comes first."""
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        add_todo(ws, "t", "Ship the release", "./s.md")
+        anchor = _only_id(d, "todos")
+        add_todo(ws, "t", "Write the notes", "./s.md", place=f"before:{anchor}")
+        assert [e.title for e in idx.read(d, "todos")] == ["Write the notes", "Ship the release"]
+
+    def test_place_after_an_anchor(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        add_todo(ws, "t", "Ship the release", "./s.md")
+        anchor = _only_id(d, "todos")
+        add_todo(ws, "t", "Tag it", "./s.md")
+        add_todo(ws, "t", "Announce it", "./s.md", place=f"after:{anchor}")
+        assert [e.title for e in idx.read(d, "todos")] == [
+            "Ship the release", "Announce it", "Tag it"]
+
+    def test_spaces_around_the_colon_do_not_change_the_place(self, tmp_path):
+        """A space after a colon is what anyone writes, and reading the anchor
+        with it attached refuses as a missing todo rather than a spacing slip."""
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        add_todo(ws, "t", "A", "./s.md")
+        a = _only_id(d, "todos")
+        add_todo(ws, "t", "B", "./s.md", place=f"before : {a}")
+        assert [e.title for e in idx.read(d, "todos")] == ["B", "A"]
+
+    def test_a_padded_position_is_still_that_position(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        add_todo(ws, "t", "A", "./s.md")
+        add_todo(ws, "t", "B", "./s.md", place="  top  ")
+        assert [e.title for e in idx.read(d, "todos")] == ["B", "A"]
+
+    def test_a_position_takes_no_anchor(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        out = _reply(add_todo(ws, "t", "A", "./s.md", place="top:20260101-a"))
+        assert out["error"] == "PLACE_UNKNOWN"
+        assert idx.read(d, "todos") == []
+
+    def test_a_place_that_is_not_one_of_the_four_forms_is_refused(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        out = _reply(add_todo(ws, "t", "B", "./s.md", place="above:20260101-a"))
+        assert out["error"] == "PLACE_UNKNOWN" and out["detail"] == "above:20260101-a"
+        assert out["allowed"] == ["top", "end", "before:<id>", "after:<id>"]
+        assert idx.read(d, "todos") == []
+
+    def test_an_anchor_that_is_not_in_the_list_is_refused(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        out = _reply(add_todo(ws, "t", "B", "./s.md", place="after:20260101-nope"))
+        assert out["error"] == "NO_SUCH_ENTRY" and out["detail"] == "20260101-nope"
+        # The form was fine, so listing the forms would point at the wrong fix.
+        assert "allowed" not in out
+        assert idx.read(d, "todos") == []
+
+    def test_a_todo_added_as_started_goes_to_the_top(self, tmp_path):
+        """Otherwise `started` would label the last item on a long list."""
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        add_todo(ws, "t", "A", "./s.md")
+        add_todo(ws, "t", "B", "./s.md", state="started")
+        assert [e.title for e in idx.read(d, "todos")] == ["B", "A"]
+
+    def test_a_place_that_was_asked_for_beats_the_one_the_state_implies(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        add_todo(ws, "t", "A", "./s.md")
+        a = _only_id(d, "todos")
+        add_todo(ws, "t", "B", "./s.md", state="started", place=f"after:{a}")
+        assert [e.title for e in idx.read(d, "todos")] == ["A", "B"]
+
+    def test_starting_a_todo_moves_it_to_the_top(self, tmp_path):
+        """So the bump does not depend on the agent making a second call."""
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        add_todo(ws, "t", "A", "./s.md")
+        add_todo(ws, "t", "B", "./s.md")
+        b = _only_id(d, "todos")
+        set_todo_state(ws, "t", b, "started")
+        entries = idx.read(d, "todos")
+        assert [e.title for e in entries] == ["B", "A"]
+        assert entries[0].state == "started"
+
+    def test_unparking_puts_it_at_the_end(self, tmp_path):
+        """Parked means for later, so it comes back behind what is current."""
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        add_todo(ws, "t", "A", "./s.md")
+        a = _only_id(d, "todos")
+        add_todo(ws, "t", "B", "./s.md")
+        set_todo_state(ws, "t", a, "parked")
+        set_todo_state(ws, "t", a, "active")
+        assert [e.title for e in idx.read(d, "todos")] == ["B", "A"]
+
+    def test_starting_a_parked_todo_brings_it_back_to_the_top(self, tmp_path):
+        """Starting something says it is being worked on, parked or not."""
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        add_todo(ws, "t", "A", "./s.md")
+        add_todo(ws, "t", "B", "./s.md")
+        b = _only_id(d, "todos")
+        set_todo_state(ws, "t", b, "parked")
+        set_todo_state(ws, "t", b, "started")
+        entries = idx.read(d, "todos")
+        assert [(e.title, e.state) for e in entries] == [("B", "started"), ("A", "active")]
+        assert "B" in (d / "README.md").read_text()
+
+    def test_a_blank_place_means_the_default(self, tmp_path):
+        """What the tool passes when the model leaves the argument out."""
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        add_todo(ws, "t", "A", "./s.md")
+        add_todo(ws, "t", "B", "./s.md", place="")
+        assert [e.title for e in idx.read(d, "todos")] == ["A", "B"]
+
+    def test_order_todos_promotes_to_the_top_by_default(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        ids = []
+        for title in ("A", "B", "C", "D"):
+            add_todo(ws, "t", title, "./s.md")
+            ids.append(_only_id(d, "todos"))
+        assert _reply(order_todos(ws, "t", [ids[2], ids[0]]))["ordered"] == 2
+        assert [e.title for e in idx.read(d, "todos")] == ["C", "A", "B", "D"]
+
+    def test_order_todos_can_send_them_to_the_end(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        ids = _four_todos(ws)
+        order_todos(ws, "t", [ids["A"]], place="end")
+        assert [e.title for e in idx.read(d, "todos")] == ["B", "C", "D", "A"]
+
+    def test_order_todos_before_an_anchor(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        ids = _four_todos(ws)
+        out = _reply(order_todos(ws, "t", [ids["D"]], place=f"before:{ids['B']}"))
+        assert out["ordered"] == 1
+        assert [e.title for e in idx.read(d, "todos")] == ["A", "D", "B", "C"]
+
+    def test_order_todos_after_an_anchor(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        ids = _four_todos(ws)
+        order_todos(ws, "t", [ids["D"]], place=f"after:{ids['A']}")
+        assert [e.title for e in idx.read(d, "todos")] == ["A", "D", "B", "C"]
+
+    def test_the_anchor_does_not_shift_under_what_moves_past_it(self, tmp_path):
+        """Locating it in the original list puts the move one place out whenever
+        something above the anchor is one of the things moving."""
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        ids = _four_todos(ws)
+        order_todos(ws, "t", [ids["A"]], place=f"after:{ids['C']}")
+        assert [e.title for e in idx.read(d, "todos")] == ["B", "C", "A", "D"]
+
+    def test_several_todos_move_together_in_the_order_given(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        ids = _four_todos(ws)
+        order_todos(ws, "t", [ids["D"], ids["B"]], place=f"after:{ids['A']}")
+        assert [e.title for e in idx.read(d, "todos")] == ["A", "D", "B", "C"]
+
+    def test_order_todos_refuses_a_place_it_cannot_read(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        ids = _four_todos(ws)
+        out = _reply(order_todos(ws, "t", [ids["D"]], place="beneath:" + ids["A"]))
+        assert out["error"] == "PLACE_UNKNOWN"
+        assert [e.title for e in idx.read(d, "todos")] == ["A", "B", "C", "D"]
+
+    def test_order_todos_refuses_an_unknown_anchor(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        ids = _four_todos(ws)
+        out = _reply(order_todos(ws, "t", [ids["D"]], place="after:20260101-nope"))
+        assert out["error"] == "NO_SUCH_ENTRY" and out["detail"] == "20260101-nope"
+        assert [e.title for e in idx.read(d, "todos")] == ["A", "B", "C", "D"]
+
+    def test_order_todos_refuses_an_anchor_it_is_also_moving(self, tmp_path):
+        """Its position is what is being decided, so it cannot also fix one."""
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        ids = _four_todos(ws)
+        out = _reply(order_todos(ws, "t", [ids["D"], ids["B"]], place=f"before:{ids['B']}"))
+        assert out["error"] == "ANCHOR_IS_MOVING" and out["detail"] == ids["B"]
+        assert [e.title for e in idx.read(d, "todos")] == ["A", "B", "C", "D"]
+
+    def test_order_todos_refuses_an_unknown_id(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        add_todo(ws, "t", "A", "./s.md")
+        a = _only_id(d, "todos")
+        out = _reply(order_todos(ws, "t", [a, "20260101-nope"]))
+        assert out["error"] == "NO_SUCH_ENTRY" and "20260101-nope" in out["detail"]
+        assert [e.title for e in idx.read(d, "todos")] == ["A"]
+
+    def test_order_todos_refuses_a_repeated_id(self, tmp_path):
+        """Silently de-duplicating would reorder the list differently from what
+        was asked, and quietly."""
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        add_todo(ws, "t", "A", "./s.md")
+        a = _only_id(d, "todos")
+        assert _reply(order_todos(ws, "t", [a, a]))["error"] == "DUPLICATE_ID"
+
+    def test_the_add_that_crosses_the_line_says_so(self, tmp_path):
+        """Deterministic, so it does not rely on the skill being remembered."""
+        _thread(tmp_path)
+        ws = str(tmp_path)
+        for n in range(5):
+            assert "active" not in _reply(add_todo(ws, "t", f"T{n}", "./s.md"))
+        assert _reply(add_todo(ws, "t", "T5", "./s.md"))["active"] == 6
+
+    def test_the_adds_after_it_do_not_say_so_again(self, tmp_path):
+        """The bound is what keeps the README cheap, so this instructs once
+        rather than on every add from six to twenty. The resume heading is
+        what keeps reporting."""
+        _thread(tmp_path)
+        ws = str(tmp_path)
+        for n in range(6):
+            add_todo(ws, "t", f"T{n}", "./s.md")
+        assert "active" not in _reply(add_todo(ws, "t", "T6", "./s.md"))
+        assert "active" not in _reply(add_todo(ws, "t", "T7", "./s.md"))
+
+    def test_a_parked_todo_does_not_count_towards_crowding(self, tmp_path):
+        _thread(tmp_path)
+        ws = str(tmp_path)
+        for n in range(6):
+            add_todo(ws, "t", f"T{n}", "./s.md", state="parked")
+        assert "active" not in _reply(add_todo(ws, "t", "T6", "./s.md"))
+
+    def test_place_is_not_case_sensitive(self, tmp_path):
+        """A model produces a capital as readily as the space the parser
+        already forgives."""
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        add_todo(ws, "t", "A", "./s.md")
+        add_todo(ws, "t", "B", "./s.md", place="TOP")
+        assert [e.title for e in idx.read(d, "todos")] == ["B", "A"]
+
+    def test_a_place_of_only_spaces_is_the_default(self, tmp_path):
+        """`""` and `" "` both mean the argument was left out."""
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        add_todo(ws, "t", "A", "./s.md")
+        add_todo(ws, "t", "B", "./s.md", place="   ")
+        assert [e.title for e in idx.read(d, "todos")] == ["A", "B"]
+
+    def test_the_unpark_that_crosses_the_line_says_so(self, tmp_path):
+        """The other way the list crosses the line, and the only one that was
+        silent about it."""
+        _thread(tmp_path)
+        ws = str(tmp_path)
+        ids = [json.loads(add_todo(ws, "t", f"T{n}", "./s.md"))["id"] for n in range(6)]
+        set_todo_state(ws, "t", ids[0], "parked")
+        assert _reply(set_todo_state(ws, "t", ids[0], "active"))["active"] == 6
+
+    def test_an_unpark_that_does_not_cross_it_is_quiet(self, tmp_path):
+        _thread(tmp_path)
+        ws = str(tmp_path)
+        ids = [json.loads(add_todo(ws, "t", f"T{n}", "./s.md"))["id"] for n in range(8)]
+        set_todo_state(ws, "t", ids[0], "parked")
+        assert "active" not in _reply(set_todo_state(ws, "t", ids[0], "active"))
+
+    def test_a_comfortable_list_says_nothing_on_a_state_change(self, tmp_path):
+        _thread(tmp_path)
+        ws = str(tmp_path)
+        a = json.loads(add_todo(ws, "t", "A", "./s.md"))["id"]
+        assert "active" not in _reply(set_todo_state(ws, "t", a, "parked"))
+
+    def test_retiring_refuses_with_a_code_like_every_other_todo_tool(self, tmp_path):
+        """A caller parsing the documented contract throws on a bare sentence."""
+        _thread(tmp_path)
+        ws = str(tmp_path)
+        a = json.loads(add_todo(ws, "t", "A", "./s.md"))["id"]
+        bad_state = _reply(retire_todo(ws, "t", a, "started"))
+        assert bad_state["error"] == "STATE_UNKNOWN"
+        assert bad_state["allowed"] == ["done", "dropped"]
+        assert _reply(retire_todo(ws, "t", "20260101-nope", "done"))["error"] == "NO_SUCH_ENTRY"
+
+    def test_ordering_nothing_is_refused(self, tmp_path):
+        """An empty list is a caller that built one by mistake, and reporting
+        success touches both files for no change."""
+        _thread(tmp_path)
+        ws = str(tmp_path)
+        add_todo(ws, "t", "A", "./s.md")
+        assert _reply(order_todos(ws, "t", []))["error"] == "IDS_REQUIRED"
 
     def test_bad_state_is_rejected(self, tmp_path):
         _thread(tmp_path)
@@ -146,7 +583,7 @@ class TestDecisions:
                            "Chose Iceberg for table format.", "# Body\n", "locked")
         did = _only_id(d, "decisions")
         assert (d / "decisions" / f"{did}.md").exists()
-        entries, _ = idx.read(d, "decisions")
+        entries = idx.read(d, "decisions")
         assert entries[0].id == did and entries[0].state == "locked"
 
     def test_summary_lives_only_in_the_file(self, tmp_path):
@@ -160,8 +597,8 @@ class TestDecisions:
         ws = str(tmp_path)
         log_decision(ws, "t", "Use Parquet", "Chose Parquet.", "b", "locked"); old = _only_id(d, "decisions")
         log_decision(ws, "t", "Use Iceberg", "Chose Iceberg.", "b", "locked", [old])
-        live, _ = idx.read(d, "decisions")
-        gone, _ = idx.read(d, "decisions", retired=True)
+        live = idx.read(d, "decisions")
+        gone = idx.read(d, "decisions", retired=True)
         assert [e.id for e in live] == [e.id for e in live if e.id != old]
         assert gone[0].id == old and gone[0].state == "superseded"
 
@@ -209,11 +646,11 @@ class TestArtifacts:
         d = _thread(tmp_path)
         ws = str(tmp_path)
         index_file(ws, "t", self._artifact(d)); aid = _only_id(d, "artifacts")
-        entries, _ = idx.read(d, "artifacts")
+        entries = idx.read(d, "artifacts")
         assert entries[0].state == "current"
         retire_artifact(ws, "t", aid, "stale")
-        live, _ = idx.read(d, "artifacts")
-        gone, _ = idx.read(d, "artifacts", retired=True)
+        live = idx.read(d, "artifacts")
+        gone = idx.read(d, "artifacts", retired=True)
         assert live == [] and gone[0].state == "stale"
 
     def test_the_id_is_the_filename(self, tmp_path):
@@ -227,7 +664,7 @@ class TestArtifacts:
         ws = str(tmp_path)
         index_file(ws, "t", self._artifact(d), "What the auth flow does")
         index_file(ws, "t", self._artifact(d, "20260102-other.md"))
-        entries, _ = idx.read(d, "artifacts")
+        entries = idx.read(d, "artifacts")
         assert [e.description for e in entries] == ["What the auth flow does", ""]
 
     def test_a_directory_is_one_artifact(self, tmp_path):
@@ -238,7 +675,7 @@ class TestArtifacts:
         (shots / "a.png").write_bytes(b"x")
         out = index_file(str(tmp_path), "t", "./artifacts/20260401-site-photos", "from the visit")
         assert "20260401-site-photos" in out
-        entry = idx.read(d, "artifacts")[0][0]
+        entry = idx.read(d, "artifacts")[0]
         assert entry.id == "20260401-site-photos"
         assert entry.description == "from the visit"
 
@@ -262,7 +699,7 @@ class TestArtifacts:
         first = _reply(index_file(ws, "t", link, "The first description."))
         second = _reply(index_file(ws, "t", link, "Shorter."))
         assert first["id"] == second["id"] == "20260101-notes"
-        entries, _ = idx.read(d, "artifacts")
+        entries = idx.read(d, "artifacts")
         assert len(entries) == 1
         assert entries[0].description == "Shorter."
 
@@ -274,7 +711,7 @@ class TestArtifacts:
         link = self._artifact(d)
         index_file(ws, "t", link, "What the auth flow does")
         index_file(ws, "t", link)
-        assert idx.read(d, "artifacts")[0][0].description == "What the auth flow does"
+        assert idx.read(d, "artifacts")[0].description == "What the auth flow does"
 
     def test_a_retired_artifact_is_not_indexed_a_second_time(self, tmp_path):
         """Retired is still indexed. Minting again would put one file in two
@@ -285,8 +722,8 @@ class TestArtifacts:
         index_file(ws, "t", link)
         retire_artifact(ws, "t", "20260101-notes", "stale")
         assert _reply(index_file(ws, "t", link))["id"] == "20260101-notes"
-        assert idx.read(d, "artifacts")[0] == []
-        assert len(idx.read(d, "artifacts", retired=True)[0]) == 1
+        assert idx.read(d, "artifacts") == []
+        assert len(idx.read(d, "artifacts", retired=True)) == 1
 
     def test_a_description_past_the_cap_is_refused(self, tmp_path):
         """Refused rather than cut. A sentence truncated at 200 characters reads
@@ -295,7 +732,7 @@ class TestArtifacts:
         out = _reply(index_file(str(tmp_path), "t", self._artifact(d), "x" * 201))
         assert out["error"] == "DESCRIPTION_TOO_LONG"
         assert out["detail"] == "200"
-        assert idx.read(d, "artifacts")[0] == []
+        assert idx.read(d, "artifacts") == []
 
     def test_the_refusal_leaves_the_previous_description_intact(self, tmp_path):
         """The guard runs before anything mutates, so a rejected amendment is
@@ -305,7 +742,7 @@ class TestArtifacts:
         link = self._artifact(d)
         index_file(ws, "t", link, "A short one.")
         index_file(ws, "t", link, "y" * 400)
-        assert idx.read(d, "artifacts")[0][0].description == "A short one."
+        assert idx.read(d, "artifacts")[0].description == "A short one."
 
 
 class TestIndexDirectory:
@@ -322,7 +759,7 @@ class TestIndexDirectory:
                               [f"202601{i:02d}-s{i}.md" for i in range(1, 13)])
         # nothing to report when every file went in
         assert _reply(index_directory(str(tmp_path), "t", "./sessions")) == {}
-        assert len(idx.read(d, "sessions")[0]) == 12
+        assert len(idx.read(d, "sessions")) == 12
 
     def test_the_readme_is_rendered_once_not_per_file(self, tmp_path):
         d = self._thread_with(tmp_path, "sessions", ["20260101-a.md", "20260102-b.md"])
@@ -338,7 +775,7 @@ class TestIndexDirectory:
                                for i in range(100)])
         out = index_directory(str(tmp_path), "t", "./sessions")
         assert out == "{}"
-        assert len(idx.read(d, "sessions")[0]) == 100
+        assert len(idx.read(d, "sessions")) == 100
 
     def test_only_the_failures_come_back(self, tmp_path):
         d = self._thread_with(tmp_path, "decisions",
@@ -350,13 +787,13 @@ class TestIndexDirectory:
         assert set(_reply(out)) == {"refused"}
         assert len(_reply(out)["refused"]["STATUS_UNKNOWN"]) == 5
         assert len(out) < 200, len(out)
-        assert len(idx.read(d, "decisions")[0]) == 95
+        assert len(idx.read(d, "decisions")) == 95
 
     def test_running_it_twice_adds_nothing(self, tmp_path):
         d = self._thread_with(tmp_path, "sessions", ["20260101-a.md"])
         index_directory(str(tmp_path), "t", "./sessions")
         assert _reply(index_directory(str(tmp_path), "t", "./sessions")) == {}
-        assert len(idx.read(d, "sessions")[0]) == 1
+        assert len(idx.read(d, "sessions")) == 1
 
     def test_a_refusal_reports_and_does_not_stop_the_rest(self, tmp_path):
         """A migrated thread full of v1 statuses is the reason this matters."""
@@ -364,11 +801,11 @@ class TestIndexDirectory:
         (d / "decisions" / "20260102-old.md").write_text("---\nstatus: decided\n---\nx\n")
         r = _reply(index_directory(str(tmp_path), "t", "./decisions"))
         assert r == {"refused": {"STATUS_UNKNOWN": ["20260102-old.md"]}}
-        assert [e.id for e in idx.read(d, "decisions")[0]] == ["20260101-good"]
+        assert [e.id for e in idx.read(d, "decisions")] == ["20260101-good"]
 
         (d / "decisions" / "20260102-old.md").write_text("---\nstatus: locked\n---\nx\n")
         index_directory(str(tmp_path), "t", "./decisions")
-        assert len(idx.read(d, "decisions")[0]) == 2
+        assert len(idx.read(d, "decisions")) == 2
 
     def test_refusals_are_grouped_by_cause(self, tmp_path):
         """Per-file detail made a report of twenty-four broken decisions
@@ -419,7 +856,7 @@ class TestIndexDirectory:
         for n in ("20260125-real.md", ".DS_Store", "._20260125-real.md", "._.DS_Store"):
             (d / "sessions" / n).write_text("x\n")
         assert _reply(index_directory(str(tmp_path), "t", "./sessions")) == {}
-        entries = idx.read(d, "sessions")[0]
+        entries = idx.read(d, "sessions")
         assert [(e.id, e.link) for e in entries] == [
             ("20260125-real", "./sessions/20260125-real.md")]
 
@@ -454,6 +891,61 @@ class TestIndexDirectory:
         assert _reply(index_directory(str(tmp_path), "t", "./todos"))["error"] == "NOT_INDEXABLE"
 
 
+class TestRoundTrip:
+    """Nothing is written that the index cannot read back."""
+
+    def test_a_description_with_a_line_break_is_refused(self, tmp_path):
+        """The third field on the line, and the one that is free prose. It
+        truncated at the break and orphaned the rest."""
+        d = _thread(tmp_path)
+        (d / "artifacts" / "20260101-a-note.md").write_text("x")
+        out = _reply(index_file(str(tmp_path), "t", "./artifacts/20260101-a-note.md",
+                                "one\ntwo"))
+        assert out["error"] == "UNREPRESENTABLE" and "description" in out["detail"]
+        assert idx.read(d, "artifacts") == []
+
+    def test_a_description_is_stored_without_its_padding(self, tmp_path):
+        """Trailing space does not survive a line, and stripping it is right
+        where refusing it would only be pedantic."""
+        d = _thread(tmp_path)
+        (d / "artifacts" / "20260101-a-note.md").write_text("x")
+        index_file(str(tmp_path), "t", "./artifacts/20260101-a-note.md", "  one  ")
+        assert idx.read(d, "artifacts")[0].description == "one"
+
+    def test_a_decision_title_may_hold_a_bracket(self, tmp_path):
+        """Its index line carries the id, not the title, so there is nothing
+        for a bracket in the title to break."""
+        d = _thread(tmp_path)
+        out = _reply(log_decision(str(tmp_path), "t", "Use [brackets] here",
+                                  "Chose brackets.", "body"))
+        assert "error" not in out
+        assert len(idx.read(d, "decisions")) == 1
+
+    def test_a_session_slug_cannot_corrupt_its_line(self, tmp_path):
+        """The slug reached the title raw, so one bracket lost the entry."""
+        d = _thread(tmp_path)
+        from mcp_server import save_session
+        save_session(str(tmp_path), "t", "my [topic]", "s", "k", body="# x\n")
+        assert len(idx.read(d, "sessions")) == 1
+
+    def test_the_check_follows_the_line_format(self, tmp_path):
+        """Not a second list of characters to keep in step with the pattern:
+        the entry is rendered and read back through the pattern itself."""
+        entry = idx.Entry("20260101-a", "active", "Fine title", "./todos/a.md", "fine")
+        assert idx.unrepresentable(entry) is None
+        entry.description = "one -- two"
+        assert idx.unrepresentable(entry) is None
+        entry.title = "broken ] title"
+        assert idx.unrepresentable(entry) == "title cannot be read back from a line"
+
+    def test_a_field_that_comes_back_changed_counts_as_lost(self, tmp_path):
+        """The line still matches, so matching is not the test: the fields are
+        compared. Trailing space on the last field is eaten by the pattern's
+        own `\\s*$`, which is why the tools strip before they build an entry."""
+        entry = idx.Entry("20260101-a", "active", "T", "./todos/a.md", "padded  ")
+        assert idx.unrepresentable(entry) == "description cannot be read back from a line"
+
+
 class TestReadmeShape:
     def test_a_v1_readme_is_refused_rather_than_appended_to(self, tmp_path):
         """The Frankenstein case: a real migration hit this and was told it worked.
@@ -484,20 +976,19 @@ class TestReadmeShape:
         d = _thread(tmp_path)
         (d / "README.md").write_text("# Thread: t\n\n## Quick Resume\n\nv1\n")
         add_todo(str(tmp_path), "t", "New", "./todos/a.md")
-        assert idx.read(d, "todos")[0] == []
+        assert idx.read(d, "todos") == []
 
         (d / "README.md").write_text("# t\n\n## Next steps\n\n- None\n\n## About\n\nx\n")
         add_todo(str(tmp_path), "t", "New", "./todos/a.md")
-        assert [e.title for e in idx.read(d, "todos")[0]] == ["New"]
+        assert [e.title for e in idx.read(d, "todos")] == ["New"]
 
 
 class TestInvariant:
     def test_readme_always_equals_the_projection(self, tmp_path):
         d = _thread(tmp_path)
         ws = str(tmp_path)
-        add_todo(ws, "t", "A", "./s.md"); a = _only_id(d, "todos")
-        add_todo(ws, "t", "B", "./s.md"); b = _only_id(d, "todos")
-        set_window(ws, "t", [b, a])
+        add_todo(ws, "t", "A", "./s.md")
+        add_todo(ws, "t", "B", "./s.md")
         from ai_workspace.threads.v2 import render
         expected = render.next_steps_body(d)
         section = (d / "README.md").read_text().split("## Next steps\n\n")[1].split("\n\n")[0]
@@ -523,18 +1014,14 @@ class TestSaveSession:
         assert "Round 3 booked for Friday." in readme
         assert "**Last Session**:" in readme
 
-    def test_the_body_replaces_the_stub(self, tmp_path):
-        """The stub lists what the session created; the body is expected to
-        cover it, so a save is one write rather than an append."""
+    def test_the_body_replaces_whatever_the_file_held(self, tmp_path):
+        """A save is one write rather than an append, so the body is the log."""
         d = _thread(tmp_path)
         from ai_workspace.threads.v2 import session
         from mcp_server import save_session
-        sid = session.ensure_stub(d, "topic")
-        p = session.session_path(d, sid)
-        session.note_created(d, sid, "todo 20260101-x")
         save_session(str(tmp_path), "t", "topic", "s", "k", "# Session\n\nWhat happened.\n")
+        p = session.session_path(d, _only_id(d, "sessions"))
         text = p.read_text()
-        assert "Created during this session" not in text
         assert "What happened." in text
         assert split_frontmatter(text)[0]["summary"] == "s"
 
@@ -551,7 +1038,7 @@ class TestSaveSession:
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text("# Session: topic\n\nWritten directly.\n")
         save_session(str(tmp_path), "t", "topic", "s", "k", "# Session\n")
-        assert [e.id for e in idx.read(d, "sessions")[0]] == [sid]
+        assert [e.id for e in idx.read(d, "sessions")] == [sid]
 
     def test_a_blank_body_is_refused_and_the_file_kept(self, tmp_path):
         """A blank body would replace the file with frontmatter alone, so it is
@@ -574,16 +1061,15 @@ class TestSaveSession:
         from mcp_server import save_session
         save_session(str(tmp_path), "t", "topic", "s", "k", "# Session\n")
         save_session(str(tmp_path), "t", "topic", "s", "k", "# Session\n")
-        assert len(idx.read(d, "sessions")[0]) == 1
+        assert len(idx.read(d, "sessions")) == 1
 
-    def test_saving_clears_the_unsaved_marker(self, tmp_path):
+    def test_saving_twice_writes_one_session(self, tmp_path):
         d = _thread(tmp_path)
-        from ai_workspace.threads.v2 import session
         from mcp_server import save_session
-        session.ensure_stub(d, "topic")
         save_session(str(tmp_path), "t", "topic", "s", "k", "# Session\n")
-        sid = _only_id(d, "sessions")
-        assert session.STUB_MARKER not in (d / "sessions" / f"{sid}.md").read_text()
+        save_session(str(tmp_path), "t", "topic", "s2", "k", "# Again\n")
+        assert len(idx.read(d, "sessions")) == 1
+        assert "Again" in (d / "sessions" / f"{_only_id(d, 'sessions')}.md").read_text()
 
     def test_last_session_survives_for_archive(self, tmp_path):
         """archive_thread greps this line; a render must never drop it."""
@@ -641,7 +1127,7 @@ class TestDating:
         reply = _reply(index_file(
             str(tmp_path), "t", "./artifacts/orphan.md", date="2026-07-27"))
         assert reply == {"id": "20260727-orphan", "was": "19700101-orphan"}
-        assert [e.id for e in idx.read(d, "artifacts")[0]] == ["20260727-orphan"]
+        assert [e.id for e in idx.read(d, "artifacts")] == ["20260727-orphan"]
 
     def test_a_repaired_entry_moves_to_where_its_date_puts_it(self, tmp_path):
         d = self._artifact(tmp_path, "orphan.md")
@@ -649,14 +1135,14 @@ class TestDating:
         (d / "artifacts" / "20260901-late.md").write_text("x\n")
         index_directory(str(tmp_path), "t", "./artifacts")
         index_file(str(tmp_path), "t", "./artifacts/orphan.md", date="2026-06-01")
-        assert [e.id for e in idx.read(d, "artifacts")[0]] == [
+        assert [e.id for e in idx.read(d, "artifacts")] == [
             "20260301-early", "20260601-orphan", "20260901-late"]
 
     def test_a_repair_keeps_the_description(self, tmp_path):
         d = self._artifact(tmp_path, "orphan.md")
         index_file(str(tmp_path), "t", "./artifacts/orphan.md", "what it holds")
         index_file(str(tmp_path), "t", "./artifacts/orphan.md", date="2026-07-27")
-        assert idx.read(d, "artifacts")[0][0].description == "what it holds"
+        assert idx.read(d, "artifacts")[0].description == "what it holds"
 
     def test_an_unparseable_date_is_refused_and_writes_nothing(self, tmp_path):
         d = self._artifact(tmp_path, "orphan.md")

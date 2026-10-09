@@ -15,11 +15,20 @@ from ai_workspace.threads import marker, schema
 from ai_workspace.threads.v2 import ids, render, session
 from ai_workspace.threads.v2 import index as idx
 from ai_workspace.threads.v2 import thread as v2
+from ai_workspace.threads.v2 import todos as todos_mod
 
 
 @pytest.fixture(autouse=True)
 def _isolated_config_dir(tmp_path, monkeypatch):
     monkeypatch.setenv("AI_WORKSPACE_CONFIG_DIR", str(tmp_path / "_config"))
+
+
+def _todos(thread_dir, *pairs):
+    """Write the todos index in the order given, which is what order means."""
+    idx.write(thread_dir, "todos", [
+        idx.Entry(f"20260101-{slug}", state, slug.upper(), f"./todos/{slug}.md")
+        for slug, state in pairs
+    ])
 
 
 def _v2_thread(tmp_path, name="t"):
@@ -103,8 +112,7 @@ class TestSchemaDetection:
 class TestIndex:
     def test_missing_index_is_empty_not_an_error(self, tmp_path):
         d = _v2_thread(tmp_path)
-        entries, fm = idx.read(d, "decisions")
-        assert entries == [] and fm == {}
+        assert idx.read(d, "decisions") == []
 
     def test_index_is_created_on_first_write(self, tmp_path):
         d = _v2_thread(tmp_path)
@@ -120,18 +128,18 @@ class TestIndex:
             "./artifacts/20260316-notes.md", "What the auth flow does"))
         line = idx.index_path(d, "artifacts").read_text().strip()
         assert line.endswith(" -- What the auth flow does")
-        assert idx.read(d, "artifacts")[0][0].description == "What the auth flow does"
+        assert idx.read(d, "artifacts")[0].description == "What the auth flow does"
 
     def test_a_line_without_one_reads_as_no_description(self, tmp_path):
         d = _v2_thread(tmp_path)
         idx.add(d, "decisions", idx.Entry("20260101-a", "locked", "A", "./decisions/a.md"))
-        assert idx.read(d, "decisions")[0][0].description == ""
+        assert idx.read(d, "decisions")[0].description == ""
 
     def test_round_trip(self, tmp_path):
         d = _v2_thread(tmp_path)
         idx.add(d, "decisions", idx.Entry("20260101-a", "locked", "A", "./decisions/a.md"))
         idx.add(d, "decisions", idx.Entry("20260102-b", "proposed", "B", "./decisions/b.md"))
-        entries, _ = idx.read(d, "decisions")
+        entries = idx.read(d, "decisions")
         assert [(e.id, e.state, e.title) for e in entries] == [
             ("20260101-a", "locked", "A"), ("20260102-b", "proposed", "B")]
 
@@ -146,15 +154,25 @@ class TestIndex:
         d = _v2_thread(tmp_path)
         idx.add(d, "sessions", idx.Entry("20260101-s", None, "S", "./sessions/s.md"))
         assert ":" not in idx.index_path(d, "sessions").read_text().split("[")[0]
-        entries, _ = idx.read(d, "sessions")
+        entries = idx.read(d, "sessions")
         assert entries[0].state is None
 
     def test_a_newer_entry_goes_on_the_end(self, tmp_path):
         d = _v2_thread(tmp_path)
-        idx.add(d, "todos", idx.Entry("20260101-a", "active", "A", "./todos/a.md"))
-        first = idx.index_path(d, "todos").read_text()
-        idx.add(d, "todos", idx.Entry("20260102-b", "active", "B", "./todos/b.md"))
-        assert idx.index_path(d, "todos").read_text().startswith(first)
+        idx.add(d, "decisions", idx.Entry("20260101-a", "locked", "A", "./decisions/a.md"))
+        first = idx.index_path(d, "decisions").read_text()
+        idx.add(d, "decisions", idx.Entry("20260102-b", "locked", "B", "./decisions/b.md"))
+        assert idx.index_path(d, "decisions").read_text().startswith(first)
+
+    def test_a_retired_todo_goes_where_its_date_puts_it(self, tmp_path):
+        """The live list is written whole, by the tool that knows the order.
+        `add` only ever appends to the retired index, which is a chronology."""
+        d = _v2_thread(tmp_path)
+        for slug in ("20260301-z", "20260101-a"):
+            idx.add(d, "todos", idx.Entry(slug, "done", slug, f"./todos/{slug}.md"),
+                    retired=True)
+        assert [e.id for e in idx.read(d, "todos", retired=True)] == [
+            "20260101-a", "20260301-z"]
 
     def test_an_older_entry_goes_where_its_date_puts_it(self, tmp_path):
         """A session recovered from a transcript after later ones were saved."""
@@ -162,27 +180,83 @@ class TestIndex:
         for day in ("03", "05"):
             idx.add(d, "sessions", idx.Entry(f"202601{day}-s", None, day, f"./sessions/{day}.md"))
         idx.add(d, "sessions", idx.Entry("20260104-late", None, "late", "./sessions/late.md"))
-        entries, _ = idx.read(d, "sessions")
+        entries = idx.read(d, "sessions")
         assert [e.id for e in entries] == [
             "20260103-s", "20260104-late", "20260105-s"]
 
-    def test_frontmatter_that_does_not_parse_names_the_file(self, tmp_path):
-        """Loud, because the windows are what the README's Next steps is built
-        from and a silent empty dict would just drop them."""
+    def test_a_legacy_window_becomes_the_order_it_stood_for(self, tmp_path):
+        """Indexes written before the list carried its own order open with a
+        `windows:` block naming the todos Next steps showed. That is a priority
+        the user set, so it survives as line order rather than being dropped."""
         d = _v2_thread(tmp_path)
-        idx.add(d, "todos", idx.Entry("20260101-a", "active", "A", "./todos/a.md"))
+        _todos(d, ("a", "active"), ("b", "active"), ("c", "active"))
         path = idx.index_path(d, "todos")
-        path.write_text("---\nwindows:\n\tnext_steps: [20260101-a]\n---\n" + path.read_text())
-        with pytest.raises(ValueError) as e:
-            idx.read(d, "todos")
-        assert "todos-index.md" in str(e.value)
+        path.write_text(
+            "---\nwindows:\n  next_steps: [20260101-c, 20260101-a]\n---\n"
+            + path.read_text())
+        assert [e.id for e in idx.read(d, "todos")] == [
+            "20260101-c", "20260101-a", "20260101-b"]
+
+    def test_a_legacy_window_survives_a_tab_no_parser_accepts(self, tmp_path):
+        """One real thread's block is indented with a tab, which is why this is
+        read with a pattern rather than a YAML parser."""
+        d = _v2_thread(tmp_path)
+        _todos(d, ("a", "active"), ("b", "active"))
+        path = idx.index_path(d, "todos")
+        path.write_text("---\nwindows:\n\tnext_steps: [20260101-b]\n---\n"
+                        + path.read_text())
+        assert [e.id for e in idx.read(d, "todos")] == ["20260101-b", "20260101-a"]
+
+    def test_the_next_write_leaves_the_block_behind(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        _todos(d, ("a", "active"))
+        path = idx.index_path(d, "todos")
+        path.write_text("---\nwindows:\n  next_steps: [20260101-a]\n---\n"
+                        + path.read_text())
+        idx.write(d, "todos", idx.read(d, "todos"))
+        assert "windows" not in path.read_text()
+
+    def test_only_a_live_todo_index_is_reordered_by_a_block(self, tmp_path):
+        """Nothing ever wrote one anywhere else, and a retired index is a
+        chronology, so reordering it would be wrong wherever it came from."""
+        d = _v2_thread(tmp_path)
+        idx.write(d, "todos", [
+            idx.Entry("20260101-a", "done", "A", "./todos/a.md"),
+            idx.Entry("20260102-b", "done", "B", "./todos/b.md"),
+        ], retired=True)
+        path = idx.index_path(d, "todos", retired=True)
+        path.write_text("---\nwindows:\n  next_steps: [20260102-b]\n---\n"
+                        + path.read_text())
+        assert [e.id for e in idx.read(d, "todos", retired=True)] == [
+            "20260101-a", "20260102-b"]
+
+    def test_only_an_ordered_kind_is_reordered_by_a_block(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        idx.write(d, "decisions", [
+            idx.Entry("20260101-a", "locked", "A", "./decisions/a.md"),
+            idx.Entry("20260102-b", "locked", "B", "./decisions/b.md"),
+        ])
+        path = idx.index_path(d, "decisions")
+        path.write_text("---\nwindows:\n  next_steps: [20260102-b]\n---\n"
+                        + path.read_text())
+        assert [e.id for e in idx.read(d, "decisions")] == [
+            "20260101-a", "20260102-b"]
+
+    def test_a_window_naming_a_todo_that_is_gone_is_skipped(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        _todos(d, ("a", "active"))
+        path = idx.index_path(d, "todos")
+        path.write_text(
+            "---\nwindows:\n  next_steps: [20260101-retired, 20260101-a]\n---\n"
+            + path.read_text())
+        assert [e.id for e in idx.read(d, "todos")] == ["20260101-a"]
 
     def test_retire_moves_the_line_and_sets_state(self, tmp_path):
         d = _v2_thread(tmp_path)
         idx.add(d, "todos", idx.Entry("20260101-a", "active", "A", "./todos/a.md"))
         assert idx.retire(d, "todos", "20260101-a", "done") is None
-        live, _ = idx.read(d, "todos")
-        gone, _ = idx.read(d, "todos", retired=True)
+        live = idx.read(d, "todos")
+        gone = idx.read(d, "todos", retired=True)
         assert live == []
         assert (gone[0].id, gone[0].state) == ("20260101-a", "done")
 
@@ -190,40 +264,20 @@ class TestIndex:
         d = _v2_thread(tmp_path)
         idx.add(d, "todos", idx.Entry("20260101-a", "active", "A", "./todos/a.md"))
         err = idx.retire(d, "todos", "20260101-a", "superseded")
-        assert err and "not a retired state" in err
+        assert err == {"error": "STATE_UNKNOWN", "detail": "superseded",
+                       "allowed": ["done", "dropped"]}
 
     def test_sessions_do_not_retire(self, tmp_path):
         d = _v2_thread(tmp_path)
         idx.add(d, "sessions", idx.Entry("20260101-s", None, "S", "./sessions/s.md"))
         err = idx.retire(d, "sessions", "20260101-s", "done")
-        assert err and "do not retire" in err
-
-    def test_window_round_trip(self, tmp_path):
-        d = _v2_thread(tmp_path)
-        for i in "ab":
-            idx.add(d, "todos", idx.Entry(f"20260101-{i}", "active", i.upper(), f"./todos/{i}.md"))
-        assert idx.set_window(d, "todos", "next_steps", ["20260101-b", "20260101-a"]) is None
-        _, fm = idx.read(d, "todos")
-        assert fm["windows"]["next_steps"] == ["20260101-b", "20260101-a"]
-
-    def test_window_rejects_unknown_ids(self, tmp_path):
-        d = _v2_thread(tmp_path)
-        err = idx.set_window(d, "todos", "next_steps", ["nope"])
-        assert err and "nope" in err
-
-    def test_setting_a_window_preserves_entries(self, tmp_path):
-        d = _v2_thread(tmp_path)
-        idx.add(d, "todos", idx.Entry("20260101-a", "active", "A", "./todos/a.md"))
-        idx.set_window(d, "todos", "next_steps", ["20260101-a"])
-        entries, _ = idx.read(d, "todos")
-        assert len(entries) == 1
+        assert err == {"error": "NOT_RETIRABLE", "detail": "sessions"}
 
 
 class TestRender:
     def test_only_next_steps_is_replaced(self, tmp_path):
         d = _v2_thread(tmp_path)
         idx.add(d, "todos", idx.Entry("20260101-a", "active", "Do a thing", "./todos/a.md"))
-        idx.set_window(d, "todos", "next_steps", ["20260101-a"])
         render.render(d)
         text = (d / "README.md").read_text()
         assert "Do a thing" in text
@@ -237,29 +291,80 @@ class TestRender:
         p = d / "README.md"
         p.write_text(p.read_text().replace("Where things stand.", "HAND EDITED"))
         idx.add(d, "todos", idx.Entry("20260101-a", "active", "A", "./todos/a.md"))
-        idx.set_window(d, "todos", "next_steps", ["20260101-a"])
         render.render(d)
         assert "HAND EDITED" in p.read_text()
 
     def test_render_is_idempotent(self, tmp_path):
         d = _v2_thread(tmp_path)
         idx.add(d, "todos", idx.Entry("20260101-a", "active", "A", "./todos/a.md"))
-        idx.set_window(d, "todos", "next_steps", ["20260101-a"])
         render.render(d)
         once = (d / "README.md").read_text()
         render.render(d)
         assert (d / "README.md").read_text() == once
 
-    def test_window_order_is_preserved_not_index_order(self, tmp_path):
+    def test_next_steps_lists_the_active_todos(self, tmp_path):
+        """Nothing to be promoted into: being near the top of the list is what
+        puts a todo in Next steps."""
         d = _v2_thread(tmp_path)
-        for i in "ab":
-            idx.add(d, "todos", idx.Entry(f"20260101-{i}", "active", i.upper(), f"./todos/{i}.md"))
-        idx.set_window(d, "todos", "next_steps", ["20260101-b", "20260101-a"])
+        _todos(d, ("a", "active"), ("b", "active"))
+        render.render(d)
+        text = (d / "README.md").read_text()
+        assert "20260101-a" in text and "20260101-b" in text
+
+    def test_next_steps_shows_at_most_a_window(self, tmp_path):
+        """The README is a landing page, so this section cannot grow with the
+        thread the way an index does."""
+        d = _v2_thread(tmp_path)
+        _todos(d, *((f"t{n}", "active") for n in range(8)))
         render.render(d)
         body = (d / "README.md").read_text()
-        assert body.index("20260101-b") < body.index("20260101-a")
+        shown = [n for n in range(8) if f"20260101-t{n}" in body]
+        assert shown == list(range(todos_mod.COMFORTABLE))
 
-    def test_empty_window_renders_a_placeholder(self, tmp_path):
+    def test_the_readme_says_how_many_it_is_not_showing(self, tmp_path):
+        """A bounded section that hides the rest silently is worse for a reader
+        than one that says there is more."""
+        d = _v2_thread(tmp_path)
+        _todos(d, *((f"t{n}", "active") for n in range(8)))
+        render.render(d)
+        assert "3 more" in (d / "README.md").read_text()
+
+    def test_the_readme_says_so_when_everything_is_parked(self, tmp_path):
+        """`- None` on its own reads as a thread with nothing left to do."""
+        d = _v2_thread(tmp_path)
+        _todos(d, *((f"t{n}", "parked") for n in range(7)))
+        render.render(d)
+        body = (d / "README.md").read_text()
+        assert "- None" in body
+        assert "7 parked in [todos](./todos-index.md)." in body
+
+    def test_nothing_is_said_when_everything_is_shown(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        _todos(d, ("a", "active"))
+        render.render(d)
+        assert "more" not in (d / "README.md").read_text().split("## About")[0]
+
+    def test_a_parked_todo_is_not_a_next_step(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        idx.add(d, "todos", idx.Entry("20260101-a", "active", "A", "./todos/a.md"))
+        idx.add(d, "todos", idx.Entry("20260101-b", "parked", "B", "./todos/b.md"))
+        render.render(d)
+        text = (d / "README.md").read_text()
+        assert "20260101-a" in text
+        assert "20260101-b" not in text
+
+    def test_line_order_is_what_is_shown_not_date_order(self, tmp_path):
+        """A todo added today can belong above one from last year."""
+        d = _v2_thread(tmp_path)
+        idx.write(d, "todos", [
+            idx.Entry("20260301-later", "active", "L", "./todos/l.md"),
+            idx.Entry("20260101-older", "active", "O", "./todos/o.md"),
+        ])
+        render.render(d)
+        body = (d / "README.md").read_text()
+        assert body.index("20260301-later") < body.index("20260101-older")
+
+    def test_no_active_todos_renders_a_placeholder(self, tmp_path):
         d = _v2_thread(tmp_path)
         render.render(d)
         assert "## Next steps\n\n- None" in (d / "README.md").read_text()
@@ -271,27 +376,60 @@ class TestRender:
         assert (d / "README.md").read_text().count("**Indexes**:") == 1
 
 
-class TestSessionStub:
-    def test_stub_created_with_index_entry(self, tmp_path):
+class TestSessionFile:
+    def test_a_session_is_named_before_it_is_written(self, tmp_path):
         d = _v2_thread(tmp_path)
-        sid = session.ensure_stub(d, "my-topic", today=date(2026, 5, 4))
-        assert sid == "20260504-my-topic"
-        assert session.session_path(d, sid).exists()
-        entries, _ = idx.read(d, "sessions")
-        assert entries[0].id == sid
+        assert session.next_id(d, "my-topic", date(2026, 5, 4)) == "20260504-my-topic"
+        assert not (d / "sessions" / "20260504-my-topic.md").exists()
+        assert idx.read(d, "sessions") == []
 
-    def test_stub_is_created_once(self, tmp_path):
+    def test_the_file_exists_before_the_index_points_at_it(self, tmp_path):
+        """An index entry for a file that was never written is what the audit
+        reports as dangling."""
         d = _v2_thread(tmp_path)
-        session.ensure_stub(d, "topic", today=date(2026, 5, 4))
-        session.ensure_stub(d, "topic", today=date(2026, 5, 4))
-        entries, _ = idx.read(d, "sessions")
-        assert len(entries) == 1
+        session.save(d, "topic", "s", "k", "# body\n", today=date(2026, 5, 4))
+        entry = idx.read(d, "sessions")[0]
+        assert (d / entry.link.lstrip("./")).is_file()
 
-    def test_dead_session_still_records_what_it_touched(self, tmp_path):
+    def test_a_failed_write_leaves_no_entry_pointing_at_nothing(self, tmp_path,
+                                                                monkeypatch):
+        """Which is the whole reason the file is written first. Only a failing
+        write shows the ordering; the end state is the same either way."""
         d = _v2_thread(tmp_path)
-        sid = session.ensure_stub(d, "topic", today=date(2026, 5, 4))
-        session.note_created(d, sid, "todo 20260504-a")
-        assert "todo 20260504-a" in session.session_path(d, sid).read_text()
+        real = Path.write_text
+
+        def refuse(self, *args, **kwargs):
+            if self.parent.name == "sessions":
+                raise OSError("no space left on device")
+            return real(self, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "write_text", refuse)
+        with pytest.raises(OSError):
+            session.save(d, "topic", "s", "k", "# body\n", today=date(2026, 5, 4))
+        assert idx.read(d, "sessions") == []
+
+    def test_the_same_day_and_slug_is_the_same_session(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        for _ in range(2):
+            session.save(d, "topic", "s", "k", "# body\n", today=date(2026, 5, 4))
+        assert len(idx.read(d, "sessions")) == 1
+
+    def test_the_index_title_is_the_slug_as_the_id_spells_it(self, tmp_path):
+        """Passed through raw, a slug carrying `]` wrote a line the index could
+        not read back, losing the entry."""
+        d = _v2_thread(tmp_path)
+        sid, _ = session.save(d, "my [topic]", "s", "k", "# b\n", today=date(2026, 5, 4))
+        assert [(e.id, e.title) for e in idx.read(d, "sessions")] == [(sid, "my-topic")]
+
+    def test_a_slug_past_the_id_cap_takes_the_capped_spelling(self, tmp_path):
+        """`slugify` caps the id, so title and id still agree, which is the
+        point, but the title is then the shortened form."""
+        d = _v2_thread(tmp_path)
+        long = "a-very-long-session-slug-that-runs-past-the-identifier-length-cap"
+        sid, _ = session.save(d, long, "s", "k", "# b\n", today=date(2026, 5, 4))
+        title = idx.read(d, "sessions")[0].title
+        assert title == sid[len("20260504-"):]
+        assert len(title) <= ids.MAX_SLUG
 
 
 class TestIds:
@@ -343,32 +481,49 @@ class TestCompose:
             "---\ntitle: X\nstatus: locked\nsummary: Chose X because it is simplest.\n---\n")
         idx.add(d, "decisions", idx.Entry("20260101-x", "locked", "X", "./decisions/20260101-x.md"))
         idx.add(d, "todos", idx.Entry("20260101-a", "active", "A", "./todos/a.md"))
-        idx.set_window(d, "todos", "next_steps", ["20260101-a"])
         out = v2.compose(d, "t")
-        for section in ("## Status", "## Next steps", "## Decisions in force",
-                        "## Artifacts", "## Recent sessions", "## Todo backlog"):
+        for section in ("## Status", "## About", "## Next steps",
+                        "## Decisions in force", "## Artifacts", "## Recent sessions"):
             assert section in out
 
-    def test_the_backlog_count_cannot_read_as_contradicting_the_window(self, tmp_path):
-        """Every todo windowed means the backlog is genuinely zero, and the
-        heading has to say so, or it reads as a lost index."""
+    def test_the_heading_says_what_is_shown_and_what_exists(self, tmp_path):
+        """A bounded section conceals nothing if the heading does the counting."""
         d = _v2_thread(tmp_path)
-        for n in ("a", "b"):
-            idx.add(d, "todos", idx.Entry(f"20260101-{n}", "active", n.upper(), f"./todos/{n}.md"))
-        idx.set_window(d, "todos", "next_steps", ["20260101-a", "20260101-b"])
-        out = v2.compose(d, "t")
-        assert "beyond the window (0 active, 0 parked)" in out
-        assert out.index("## Next steps") < out.index("## Todo backlog")
+        _todos(d, *([(f"t{n}", "active") for n in range(7)] + [("p", "parked")]))
+        assert "## Next steps (5 of 7 active, 1 parked)" in v2.compose(d, "t")
 
-    def test_next_steps_says_how_many_todos_exist(self, tmp_path):
-        """An empty window must not read as an empty thread."""
+    def test_the_heading_counts_a_short_list_too(self, tmp_path):
         d = _v2_thread(tmp_path)
-        for n in ("a", "b", "c"):
-            idx.add(d, "todos", idx.Entry(f"20260101-{n}", "active", n.upper(), f"./todos/{n}.md"))
-        idx.set_window(d, "todos", "next_steps", ["20260101-a"])
-        assert "## Next steps (1 of 3 todos)" in v2.compose(d, "t")
-        idx.set_window(d, "todos", "next_steps", [])
-        assert "## Next steps (0 of 3 todos)\n\n- None" in v2.compose(d, "t")
+        _todos(d, ("a", "active"), ("b", "active"), ("c", "parked"))
+        assert "## Next steps (2 of 2 active, 1 parked)" in v2.compose(d, "t")
+
+    def test_an_empty_list_does_not_read_as_an_empty_thread(self, tmp_path):
+        """Nothing active while three sit parked is a choice, not a lost index."""
+        d = _v2_thread(tmp_path)
+        _todos(d, ("a", "parked"), ("b", "parked"), ("c", "parked"))
+        assert "## Next steps (0 of 0 active, 3 parked)\n\n- None" in v2.compose(d, "t")
+
+    def test_parked_todos_are_listed_after_the_active_ones(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        _todos(d, ("a", "active"), ("b", "parked"))
+        out = v2.compose(d, "t")
+        assert out.index("## Next steps") < out.index("## Parked")
+        assert out.index("20260101-a") < out.index("20260101-b")
+
+    def test_the_heading_is_the_only_thing_that_counts(self, tmp_path):
+        """The line telling the agent to ask about parking belongs where the
+        heading is not: in a tool reply. Under a heading that already says
+        `5 of 6 active` it is the same sentence twice."""
+        d = _v2_thread(tmp_path)
+        _todos(d, *((f"t{n}", "active") for n in range(6)))
+        out = v2.compose(d, "t")
+        assert "## Next steps (5 of 6 active, 0 parked)" in out
+        assert "ask the user which to park" not in out
+
+    def test_nothing_parked_means_no_parked_section(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        idx.add(d, "todos", idx.Entry("20260101-a", "active", "A", "./todos/a.md"))
+        assert "## Parked" not in v2.compose(d, "t")
 
     def test_a_few_attachments_are_listed(self, tmp_path):
         """Cheap enough to be worth saving the caller a directory listing."""

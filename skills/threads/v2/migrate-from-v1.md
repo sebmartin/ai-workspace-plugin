@@ -152,12 +152,14 @@ supersession, to tell which superseded which — the live one declares
 ### 5. The rest
 
 **Extract todos** from Next steps, Parked and Open Questions. Each needs a link:
-the session it came from when it has nothing of its own. Parked entries that are
-already resolved should be retired rather than carried over. Then `set_window`
-with about five, in priority order.
+the session it came from when it has nothing of its own. A todo goes on the end
+of the list and Next steps shows the top five, so add the Next steps items
+first, in the order the README listed them, and the rest after. Only carry
+something over as parked if the v1 README had it parked, and retire a parked
+entry that is already resolved rather than carrying it.
 
-**Collapse Quick Resume into Status** — a few sentences for a person, taken from
-Current focus.
+**Collapse Quick Resume into Status**: one or two sentences on what changed,
+taken from Current focus.
 
 **A section the template does not define is the part most likely to be lost.**
 Schema 1 said the README is the thread and to read it in full, so anyone could
@@ -172,10 +174,11 @@ loaded before you can act?
 | | you have to be holding it | you only have to know it exists |
 |---|---|---|
 | **for you** | `memory.md` | a decision or an artifact: its index line loads, its body does not |
-| **for the user** | Status, and the Next steps window | About, a session log, an artifact |
+| **for the user** | Status, and Next steps | About, a session log, an artifact |
 
-Anything still to do is a todo whichever row it came from. The window decides
-whether the user meets it on resume.
+Anything still to do is a todo whichever row it came from. Where it sits in the
+list decides whether the user meets it on resume, since Next steps shows the
+top five.
 
 `memory.md` is the cell schema 1 had no file for, and that is why these sections
 became custom headings in the first place. Schema 1 said the README was the
@@ -214,8 +217,8 @@ description gets authored.
 
 **Leave the backup as a todo, not as a sentence.** A migration ends with exactly
 one outstanding commitment, deciding what happens to `{name}-v1`, and saying it
-in conversation loses it the moment the session ends. Write a `todos/` file for
-it and put it in the window:
+in conversation loses it the moment the session ends. Write a `todos/` file for it and
+order it where it belongs:
 
 ```
 Title: Remove or archive threads/{name}-v1

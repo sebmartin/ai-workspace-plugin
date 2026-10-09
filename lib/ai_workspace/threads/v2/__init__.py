@@ -7,12 +7,12 @@ from ai_workspace.threads.v2.ops import (
     index_directory,
     index_file,
     log_decision,
+    order_todos,
     retire_artifact,
     retire_decision,
     retire_todo,
     save_session,
     set_state,
-    set_window,
 )
 from ai_workspace.threads.v2.thread import create, resume
 
@@ -22,11 +22,11 @@ __all__ = [
     "index_directory",
     "index_file",
     "log_decision",
+    "order_todos",
     "resume",
     "retire_artifact",
     "retire_decision",
     "retire_todo",
     "save_session",
     "set_state",
-    "set_window",
 ]
