@@ -188,7 +188,7 @@ def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
     The list is in priority order and the new todo goes at the end unless you
     place it. Say where you put it, so the user can move it. Next steps shows
     the top five, so a todo added at the end is in the list without being on
-    the README; that is what the backlog of a long list looks like here.
+    the README.
 
     Returns `{"id": ...}`, the minted todo id, which `order_todos` and the
     retire tools take. `active` is present only on the add that takes the list

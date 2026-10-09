@@ -134,9 +134,7 @@ can be written to at all. Fetch
 
 **Next steps is the top of the todo list, bounded to five.** The rest of the list is in `todos-index.md`, and resume counts it for you. Nothing promotes anything: retire the first todo and the sixth becomes fifth by itself.
 
-**`add_todo` and `order_todos` both take a `place`**: `top`, `end`, `before:<id>` or `after:<id>`. Use `top` for something to do next, never an id you believe is first, since `top` is read off the list as it is and your picture of it may be hours old. Say where you put a todo, so the user can move it. When the user says to work on one, set its state to `started`, which moves it to the top and clears the label from whatever held it before.
-
-**The order is the user's**, and changing it is what changes what Next steps shows. Propose an order and apply it with `order_todos` once they agree. Parking takes a todo off the list, and unparking puts it back at the end.
+**The order is the user's.** Propose one and apply it once they agree, and say where you put a new todo so they can move it. When the user says to work on something, set its state to `started`.
 
 ### Memory
 
