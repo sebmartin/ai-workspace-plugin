@@ -343,6 +343,9 @@ def add_todo(thread, title: str, link: str, state: str = "active",
         return json.dumps({"error": "STATE_UNKNOWN", "detail": state, "allowed": allowed})
     if not title.strip():
         return json.dumps({"error": "TITLE_REQUIRED"})
+    # Stripped before it is tested, not only before it is stored, so that
+    # surrounding space is not the difference between a link and a refusal.
+    link = link.strip()
     if not link:
         return json.dumps({"error": "LINK_REQUIRED"})
     # Three readers resolve a stored link as `thread.dir / link`, so the only
@@ -350,7 +353,7 @@ def add_todo(thread, title: str, link: str, state: str = "active",
     # A bare relative path, `~` and `file://` all name one machine's
     # filesystem and resolve to nothing on the next, so the link has to say
     # which of the two it is: `./` under the thread, or an http(s) URL.
-    if not link.startswith(("http://", "https://")) and (
+    if not link.lower().startswith(("http://", "https://")) and (
             not link.startswith("./") or _inside(link) is None):
         return json.dumps({"error": "OUTSIDE_THREAD", "detail": link})
     if (unwritable := render.blocked(thread.dir)) is not None:
@@ -366,7 +369,7 @@ def add_todo(thread, title: str, link: str, state: str = "active",
         at = where.at
 
     todo_id = _new_id(thread.dir, "todos", title)
-    entry = idx.Entry(todo_id, state, title.strip(), link.strip())
+    entry = idx.Entry(todo_id, state, title.strip(), link)
     if (unreadable := idx.unrepresentable(entry)) is not None:
         return json.dumps({"error": "UNREPRESENTABLE", "detail": unreadable})
     was = list(entries)

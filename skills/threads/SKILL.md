@@ -121,8 +121,8 @@ id's date comes from the filename, so a name without one is indexed as undated
 unless you pass `date`.
 
 **A todo with state of its own gets a file.** Name it `todos/YYYYMMDD-slug.md`,
-start it from `get_skill_file("templates/v2/todo-template.md")`, and pass its path
-as `add_todo`'s link.
+start it from `get_skill_file("templates/v2/todo-template.md")`, and pass
+`./todos/YYYYMMDD-slug.md` as `add_todo`'s link.
 
 **Linking two threads has no tool.** The three link fields in the header are
 hand-edited, and the work is judgement rather than mechanism: you have to look

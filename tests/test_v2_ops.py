@@ -117,12 +117,35 @@ class TestTodos:
         assert idx.read(d, "todos") == []
 
     def test_an_external_url_is_a_valid_todo_link(self, tmp_path):
-        """A todo for an issue or a PR links to it, which is the documented use."""
+        """A todo for an issue or a PR links to it, which is the documented use.
+
+        The scheme is matched without regard to case, because a capital is what
+        a person pastes and the accepted set is closed either way.
+        """
         d = _thread(tmp_path)
-        urls = ["https://example.com/owner/repo/issues/16", "http://example.com/x"]
+        urls = [
+            "https://example.com/owner/repo/issues/16",
+            "http://example.com/x",
+            "HTTPS://example.com/i/1",
+        ]
         for url in urls:
             assert "error" not in _reply(add_todo(str(tmp_path), "t", "T", url))
         assert [e.link for e in idx.read(d, "todos")] == urls
+
+    def test_a_link_is_tested_as_it_will_be_stored(self, tmp_path):
+        """Surrounding space is not the difference between a link and a refusal.
+
+        The entry has always been written from `link.strip()`, so testing the
+        raw string refused a link the next line would have stored intact.
+        """
+        d = _thread(tmp_path)
+        assert "error" not in _reply(add_todo(str(tmp_path), "t", "A", "  ./todos/x.md\n"))
+        assert [e.link for e in idx.read(d, "todos")] == ["./todos/x.md"]
+
+    def test_a_link_of_only_space_is_a_missing_link(self, tmp_path):
+        d = _thread(tmp_path)
+        assert _reply(add_todo(str(tmp_path), "t", "A", "   "))["error"] == "LINK_REQUIRED"
+        assert idx.read(d, "todos") == []
 
     def test_add_requires_a_link(self, tmp_path):
         _thread(tmp_path)
