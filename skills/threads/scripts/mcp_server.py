@@ -198,8 +198,8 @@ def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
     A refusal returns `{"error": CODE, ...}` and writes nothing:
     `STATE_UNKNOWN` or `PLACE_UNKNOWN` with the `allowed` values,
     `TITLE_REQUIRED`, `LINK_REQUIRED`, `OUTSIDE_THREAD` for a link that is
-    neither relative to the thread nor an external URL, `NO_SUCH_ENTRY` naming
-    an anchor that is not in the list,
+    neither a `./` path under the thread nor an `http(s)` URL,
+    `NO_SUCH_ENTRY` naming an anchor that is not in the list,
     and `UNREPRESENTABLE` when a field would not survive an index line, whose
     `detail` names the field. Reword that field; a title cannot contain `]`, a
     link cannot contain `)`, and nothing may contain a line break.
@@ -208,10 +208,12 @@ def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
         workspace_dir: The tracked workspace path from session context.
         thread_name: Name of the thread (kebab-case).
         title: Short label for the todo.
-        link: Path relative to the thread, such as ./todos/<id>.md, or an
-            external URL. Never omit; use the originating session if nothing
-            else. An absolute path is refused, since the workspace is not
-            always mounted at the same place.
+        link: A path under the thread starting with `./`, such as
+            ./todos/<id>.md, or an `http(s)` URL. Never omit; use the
+            originating session if nothing else. Anything else is refused,
+            because the workspace is not mounted at the same place on every
+            machine that resumes the thread, so an absolute path, a `~` and a
+            bare relative path all resolve to nothing on the next one.
         state: `active`, `started` for what is being worked on now, which
             puts it at the top, or `parked` for deliberately not now.
         place: Where it goes. `top` for something to do next, such as a piece

@@ -12,11 +12,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "skills" / "threads" / "sc
 from ai_workspace.text import split_frontmatter
 from ai_workspace.threads import marker
 from ai_workspace.threads.v2 import index as idx
-
-
-def _only_id(thread_dir, kind):
-    """Read the id back from the index rather than parsing a prose message."""
-    return idx.read(thread_dir, kind)[-1].id
 from mcp_server import (
     add_todo,
     index_directory,
@@ -28,6 +23,11 @@ from mcp_server import (
     retire_todo,
     set_todo_state,
 )
+
+
+def _only_id(thread_dir, kind):
+    """Read the id back from the index rather than parsing a prose message."""
+    return idx.read(thread_dir, kind)[-1].id
 
 
 def _four_todos(ws):
@@ -94,29 +94,30 @@ class TestTodos:
         assert out["error"] == "TITLE_REQUIRED"
         assert idx.read(d, "todos") == []
 
-    def test_an_absolute_link_is_refused(self, tmp_path):
-        """The workspace is not always mounted at the same path, so an absolute
-        link is wrong on the next machine, and three readers resolve a stored
-        link by stripping leading slashes, which mangles one."""
+    @pytest.mark.parametrize("link", [
+        "/Volumes/workspace/threads/t/s.md",
+        "../other/s.md",
+        "./../other/s.md",
+        "//example.com/s.md",
+        "~/src/s.md",
+        "file:///Volumes/workspace/threads/t/s.md",
+        "threads/t/s.md",
+        "s.md",
+    ])
+    def test_a_link_that_resolves_on_one_machine_only_is_refused(self, tmp_path, link):
+        """Three readers resolve a stored link as `thread_dir / link`, so a link
+        has to say which of two things it is: a `./` path under the thread, or
+        an http(s) URL. Every link here either names one machine's filesystem
+        or resolves under the thread to nothing, and a bare relative path is
+        refused rather than guessed at, since `threads/t/s.md` and `s.md` look
+        the same to a parser and mean different things to whoever wrote them.
+        """
         d = _thread(tmp_path)
-        out = _reply(add_todo(str(tmp_path), "t", "A", "/Volumes/workspace/threads/t/s.md"))
-        assert out["error"] == "OUTSIDE_THREAD"
-        assert idx.read(d, "todos") == []
-
-    def test_a_link_escaping_the_thread_is_refused(self, tmp_path):
-        d = _thread(tmp_path)
-        out = _reply(add_todo(str(tmp_path), "t", "A", "../other/s.md"))
-        assert out["error"] == "OUTSIDE_THREAD"
+        assert _reply(add_todo(str(tmp_path), "t", "A", link))["error"] == "OUTSIDE_THREAD"
         assert idx.read(d, "todos") == []
 
     def test_an_external_url_is_a_valid_todo_link(self, tmp_path):
-        """A todo for an issue or a PR links to it, which is the documented use.
-
-        Nothing in the check special-cases a URL. It passes because a scheme is
-        an ordinary first segment to a path parser, so it is not absolute and
-        does not escape. This test is what holds that open: tighten the check
-        and it fails here rather than in someone's workspace.
-        """
+        """A todo for an issue or a PR links to it, which is the documented use."""
         d = _thread(tmp_path)
         urls = ["https://example.com/owner/repo/issues/16", "http://example.com/x"]
         for url in urls:

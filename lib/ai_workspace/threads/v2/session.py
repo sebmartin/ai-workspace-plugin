@@ -45,7 +45,7 @@ def ensure_indexed(thread_dir: Path, session_id: str, title: str) -> None:
             thread_dir, "sessions",
             idx.Entry(session_id, None, title, f"./sessions/{session_id}.md"),
         )
-    elif title and entry.title != title:
+    elif entry.title != title:
         entry.title = title
         idx.write(thread_dir, "sessions", entries)
 

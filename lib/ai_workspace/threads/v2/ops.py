@@ -345,12 +345,13 @@ def add_todo(thread, title: str, link: str, state: str = "active",
         return json.dumps({"error": "TITLE_REQUIRED"})
     if not link:
         return json.dumps({"error": "LINK_REQUIRED"})
-    # The workspace is not always mounted at the same path, and three readers
-    # resolve a stored link by stripping its leading slashes, which turns an
-    # absolute one into a path under the thread that cannot exist. An external
-    # URL passes, since a scheme is an ordinary segment to a path parser and
-    # there is a test holding that open.
-    if _inside(link) is None:
+    # Three readers resolve a stored link as `thread.dir / link`, so the only
+    # path that survives being read on another machine is one under the thread.
+    # A bare relative path, `~` and `file://` all name one machine's
+    # filesystem and resolve to nothing on the next, so the link has to say
+    # which of the two it is: `./` under the thread, or an http(s) URL.
+    if not link.startswith(("http://", "https://")) and (
+            not link.startswith("./") or _inside(link) is None):
         return json.dumps({"error": "OUTSIDE_THREAD", "detail": link})
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
