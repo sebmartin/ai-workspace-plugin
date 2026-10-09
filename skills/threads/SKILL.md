@@ -26,7 +26,7 @@ Thread: /path/to/workspace/threads/<thread-name>
 Schema: 2
 ```
 
-**A path saved in the workspace is relative to the file that holds it, never absolute.** It will be read on another machine where `workspace_dir` is a different string, and an absolute one is dead there. A path printed in a reply is the opposite: resolve it so the user can open it, against the directory of the file it came out of, which for an index entry is the thread directory in the `Thread:` header. That is safe because the reply is stored with a session whose `workspace_dir` does not change.
+**A path saved in the workspace is relative to the file that holds it, never absolute.** The same workspace is one string under one client and another under the next, so an absolute path is dead as soon as anything but this session opens the thread. A path printed in a reply is the opposite: resolve it so the user can open it, against the directory of the file it came out of, which for an index entry is the thread directory in the `Thread:` header. That is the form a client opens, where a relative one has no agreed base unless the session root happens to be the workspace.
 
 **Put a workspace error to the user and wait.** Each one names the choice in its reply. Don't guess a path.
 

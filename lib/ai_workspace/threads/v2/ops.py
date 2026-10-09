@@ -343,18 +343,14 @@ def add_todo(thread, title: str, link: str, state: str = "active",
         return json.dumps({"error": "STATE_UNKNOWN", "detail": state, "allowed": allowed})
     if not title.strip():
         return json.dumps({"error": "TITLE_REQUIRED"})
-    # Stripped before it is tested, not only before it is stored, so that
-    # surrounding space is not the difference between a link and a refusal.
     link = link.strip()
     if not link:
         return json.dumps({"error": "LINK_REQUIRED"})
-    # Three readers resolve a stored link as `thread.dir / link`, so the only
-    # path that survives being read on another machine is one under the thread.
-    # A bare relative path, `~` and `file://` all name one machine's
-    # filesystem and resolve to nothing on the next, so the link has to say
-    # which of the two it is: `./` under the thread, or an http(s) URL.
-    if not link.lower().startswith(("http://", "https://")) and (
-            not link.startswith("./") or _inside(link) is None):
+    # Three readers resolve a stored link as `thread.dir / link`, so a link
+    # that is neither of these two resolves to nothing on the next machine.
+    external = link.lower().startswith(("http://", "https://"))
+    under_the_thread = link.startswith("./") and _inside(link) is not None
+    if not (external or under_the_thread):
         return json.dumps({"error": "OUTSIDE_THREAD", "detail": link})
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
