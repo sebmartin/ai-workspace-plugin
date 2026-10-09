@@ -26,7 +26,7 @@ Thread: /path/to/workspace/threads/<thread-name>
 Schema: 2
 ```
 
-**A path saved in the workspace is relative to the file that holds it, never absolute.** It will be read on another machine where `workspace_dir` is a different string, and an absolute one is dead there. A path printed in a reply is the opposite: resolve it against `workspace_dir` so the user can open it, which is safe because the reply is stored with a session whose `workspace_dir` does not change.
+**A path saved in the workspace is relative to the file that holds it, never absolute.** It will be read on another machine where `workspace_dir` is a different string, and an absolute one is dead there. A path printed in a reply is the opposite: resolve it so the user can open it, against the directory of the file it came out of, which for an index entry is the thread directory in the `Thread:` header. That is safe because the reply is stored with a session whose `workspace_dir` does not change.
 
 **Put a workspace error to the user and wait.** Each one names the choice in its reply. Don't guess a path.
 
@@ -130,9 +130,9 @@ at the thread on the other end, read what it already says, and decide whether it
 can be written to at all. Fetch
 `skills/threads/v2/link-thread.md` when the user asks for a link.
 
-**A decision is a choice that was made.** Logging one is the user's call, like any index entry. Do not even propose one whose rejected alternative you cannot name, or that dies with this task; that is a session log entry.
+**A decision is a choice that was made.** Its summary loads on every resume, so do not even propose one whose rejected alternative you cannot name, or that dies with this task; that is a session log entry.
 
-**Next steps is the top of the todo list, bounded to five.** The rest of the list is in `todos-index.md`, and resume counts it for you. Nothing promotes anything: retire the first todo and the sixth becomes fifth by itself.
+**Next steps is the top of the todo list, bounded to five.** Parking takes a todo off the list, so it is the top five of what is active. The rest of the list is in `todos-index.md`, and resume counts it for you. Nothing promotes anything: retire the first todo and the sixth becomes fifth by itself.
 
 **The order is the user's.** Propose one and apply it once they agree, and say where you put a new todo so they can move it. When the user says to work on something, set its state to `started`.
 
