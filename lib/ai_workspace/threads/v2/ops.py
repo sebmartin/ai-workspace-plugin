@@ -345,6 +345,13 @@ def add_todo(thread, title: str, link: str, state: str = "active",
         return json.dumps({"error": "TITLE_REQUIRED"})
     if not link:
         return json.dumps({"error": "LINK_REQUIRED"})
+    # The workspace is not always mounted at the same path, and three readers
+    # resolve a stored link by stripping its leading slashes, which turns an
+    # absolute one into a path under the thread that cannot exist. An external
+    # URL passes, since a scheme is an ordinary segment to a path parser and
+    # there is a test holding that open.
+    if _inside(link) is None:
+        return json.dumps({"error": "OUTSIDE_THREAD", "detail": link})
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
 

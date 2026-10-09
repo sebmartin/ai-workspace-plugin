@@ -94,6 +94,35 @@ class TestTodos:
         assert out["error"] == "TITLE_REQUIRED"
         assert idx.read(d, "todos") == []
 
+    def test_an_absolute_link_is_refused(self, tmp_path):
+        """The workspace is not always mounted at the same path, so an absolute
+        link is wrong on the next machine, and three readers resolve a stored
+        link by stripping leading slashes, which mangles one."""
+        d = _thread(tmp_path)
+        out = _reply(add_todo(str(tmp_path), "t", "A", "/Volumes/workspace/threads/t/s.md"))
+        assert out["error"] == "OUTSIDE_THREAD"
+        assert idx.read(d, "todos") == []
+
+    def test_a_link_escaping_the_thread_is_refused(self, tmp_path):
+        d = _thread(tmp_path)
+        out = _reply(add_todo(str(tmp_path), "t", "A", "../other/s.md"))
+        assert out["error"] == "OUTSIDE_THREAD"
+        assert idx.read(d, "todos") == []
+
+    def test_an_external_url_is_a_valid_todo_link(self, tmp_path):
+        """A todo for an issue or a PR links to it, which is the documented use.
+
+        Nothing in the check special-cases a URL. It passes because a scheme is
+        an ordinary first segment to a path parser, so it is not absolute and
+        does not escape. This test is what holds that open: tighten the check
+        and it fails here rather than in someone's workspace.
+        """
+        d = _thread(tmp_path)
+        urls = ["https://example.com/owner/repo/issues/16", "http://example.com/x"]
+        for url in urls:
+            assert "error" not in _reply(add_todo(str(tmp_path), "t", "T", url))
+        assert [e.link for e in idx.read(d, "todos")] == urls
+
     def test_add_requires_a_link(self, tmp_path):
         _thread(tmp_path)
         assert _reply(add_todo(str(tmp_path), "t", "Email the contractor", ""))["error"] == "LINK_REQUIRED"
