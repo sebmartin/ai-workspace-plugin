@@ -1,5 +1,6 @@
 """Regression tests for Codex plugin packaging constraints."""
 
+import importlib.util
 import json
 from pathlib import Path
 
@@ -90,3 +91,28 @@ def test_every_top_level_skill_directory_has_skill_manifest():
     assert skill_dirs
     for skill_dir in skill_dirs:
         assert (skill_dir / "SKILL.md").is_file(), skill_dir.name
+
+
+def _sync_module():
+    spec = importlib.util.spec_from_file_location(
+        "sync_codex_agents", PLUGIN_ROOT / "scripts" / "sync-codex-agents.py"
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_sync_skips_agents_marked_claude_only(tmp_path):
+    (tmp_path / "a.md").write_text("---\nname: a\ndescription: x\n---\nbody\n")
+    (tmp_path / "b.md").write_text(
+        "---\nname: b\ndescription: x\ncodex-mirror: false\n---\nbody\n"
+    )
+    assert [p.name for p in _sync_module().mirrored_agents(tmp_path)] == ["a.md"]
+
+
+def test_codex_mirrors_match_the_agents_that_should_have_one():
+    sync = _sync_module()
+    expected = {p.stem for p in sync.mirrored_agents(PLUGIN_ROOT / "agents")}
+    actual = {p.stem for p in (PLUGIN_ROOT / ".codex-plugin" / "agents").glob("*.toml")}
+    assert actual == expected

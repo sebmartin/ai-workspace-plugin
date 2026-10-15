@@ -105,6 +105,7 @@ One source tree serves both CLIs. Maximum deduplication:
 **Agents (subagents):**
 - Canonical source: `agents/{name}.md` (Claude format: YAML frontmatter + markdown body)
 - Mirrors for Codex: `.codex-plugin/agents/{name}.toml` (generated via `scripts/sync-codex-agents.py`)
+- An agent with `codex-mirror: false` in its frontmatter is Claude Code only: the sync skips it and it has no `.toml`
 - `proponent` and `skeptic` are used by the `/debate` skill
 - On Claude Code, additional specialists ship in `tech-expert-agents@sebmartin`. Codex cannot bundle subagents in a plugin yet; users install specialist `.toml` files into `~/.codex/agents/` manually.
 
@@ -116,7 +117,7 @@ One source tree serves both CLIs. Maximum deduplication:
 
 1. **Read before modifying** - Always read files before editing them
 2. **Follow existing patterns** - Match the style and structure of existing code
-3. **Regenerate Codex agents after editing `agents/*.md`** - Run `python3 scripts/sync-codex-agents.py` and commit both the `.md` source and the `.toml` mirror together
+3. **Regenerate Codex agents after editing `agents/*.md`** - Run `python3 scripts/sync-codex-agents.py` and commit both the `.md` source and the `.toml` mirror together. An agent with `codex-mirror: false` in its frontmatter is Claude Code only; the sync skips it and it has no `.toml`
 4. **Run the tests** - `uv run --with pytest --with-requirements skills/threads/scripts/mcp_server.py python3 -m pytest tests/ -q`. That reads the server's own dependency block, so a bare `pytest` will not work and neither will a hand-written package list that drifts from it.
 5. **Lint and type-check before pushing** - both must be clean, and there is no CI to catch it if they are not:
    ```

@@ -147,7 +147,7 @@ codex
    ```bash
    python3 scripts/sync-codex-agents.py
    ```
-3. Commit both the `.md` source and the generated `.toml` files together. Do not hand-edit the `.toml` files; they are generated artifacts.
+3. Commit both the `.md` source and the generated `.toml` files together. Do not hand-edit the `.toml` files; they are generated artifacts. An agent with `codex-mirror: false` in its frontmatter is Claude Code only: the sync skips it and it has no `.toml`.
 4. Write prose vendor-neutrally so the same persona works under both CLIs' subagent systems.
 
 ## Pull Request Guidelines
