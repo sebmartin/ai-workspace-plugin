@@ -47,7 +47,7 @@ Give one rewrite per flagged text. It removes the disclosure and restates any re
 Input text:
 
 ```
-Skip the Harbor Group sync, Priya said legal wants it done after the board meeting
+Cap export batches at 500 rows, since Acme's nightly job kept timing out on the March import
 ```
 
 Output:
@@ -55,13 +55,13 @@ Output:
 ```
 <<<RESULT msg1>>>
 Verdict: FLAGGED
-Reason: Names a client (Harbor Group) and a person (Priya), and refers to a private board meeting and a legal requirement.
+Reason: Names a client (Acme) and refers to the client's private job and import.
 Rewrite:
-Skip the sync until a later step
+Cap export batches at 500 rows, since larger batches were timing out
 <<<END msg1>>>
 ```
 
-The rewrite keeps the point (the sync waits) and says nothing about who asked or why, because the original gave no reason that can be stated without the disclosure.
+The rewrite keeps the reason (batches were timing out) in technical terms, drops the client and the import, and adds no new detail.
 
 ## Input and output protocol
 
