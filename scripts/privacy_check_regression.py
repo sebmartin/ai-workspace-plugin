@@ -36,9 +36,8 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "privacy-check-cases.json"
 ALLOW_LIST_PATH = REPO_ROOT / "skills" / "privacy-check" / "allow-list.md"
 
-# Flags are the ones established by the Task 1 spike: --setting-sources project and
-# --strict-mcp-config keep the user's own instructions, hooks, plugins and MCP
-# servers out of the checker's context.
+# --setting-sources project and --strict-mcp-config keep the user's own
+# instructions, hooks, plugins and MCP servers out of the checker's context.
 RUNNER_COMMAND = [
     "claude",
     "-p",
@@ -97,6 +96,11 @@ def split_cases(cases: list[dict]) -> tuple[list[dict], list[dict]]:
         for index, case in enumerate(ordered):
             (tune if index % 2 == 0 else holdout).append(case)
     return tune, holdout
+
+
+def allow_list_entries(text: str) -> str:
+    """Keep only the entry lines ("- ...") of an allow-list file, as the skill does."""
+    return "\n".join(ln.strip() for ln in text.splitlines() if ln.lstrip().startswith("- "))
 
 
 def build_prompt(allow_list: str, texts: list[tuple[str, str]]) -> str:
@@ -266,7 +270,9 @@ def main(argv: list[str] | None = None) -> int:
     cases = load_cases(args.fixture)
     tune, holdout = split_cases(cases)
     selected = {"tune": tune, "holdout": holdout, "all": cases}[args.half]
-    allow_list = ALLOW_LIST_PATH.read_text() if ALLOW_LIST_PATH.exists() else ""
+    allow_list = (
+        allow_list_entries(ALLOW_LIST_PATH.read_text()) if ALLOW_LIST_PATH.exists() else ""
+    )
 
     all_ok = True
     for run in range(1, args.runs + 1):

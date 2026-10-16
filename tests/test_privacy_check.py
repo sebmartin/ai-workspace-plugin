@@ -97,6 +97,19 @@ def test_build_prompt_marks_empty_allow_list():
     assert "ALLOW LIST\n(empty)" in reg.build_prompt("  \n", [("a", "x")])
 
 
+def test_allow_list_without_entries_renders_empty():
+    text = "# Allow list\n\nProse header.\n\n<!-- add entries below -->\n"
+    prompt = reg.build_prompt(reg.allow_list_entries(text), [("a", "x")])
+    assert prompt.startswith("ALLOW LIST\n(empty)\n")
+
+
+def test_allow_list_keeps_only_entry_lines():
+    text = "# Allow list\nHeader prose\n- one\n<!-- c -->\n  - two\n"
+    assert reg.allow_list_entries(text) == "- one\n- two"
+    prompt = reg.build_prompt(reg.allow_list_entries(text), [("a", "x")])
+    assert prompt.startswith("ALLOW LIST\n- one\n- two\n")
+
+
 def test_build_prompt_renders_blocks():
     prompt = reg.build_prompt("entry one", [("a", "x"), ("b", "y")])
     assert "ALLOW LIST\nentry one\n" in prompt
