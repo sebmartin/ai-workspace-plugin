@@ -27,11 +27,15 @@ ai-workspace-plugin/
 │   └── agents/                      # Generated from agents/*.md (do not edit)
 ├── agents/                          # Canonical persona source (Claude reads directly)
 │   ├── proponent.md
-│   └── skeptic.md
+│   ├── skeptic.md
+│   └── privacy-checker.md           # Claude Code only, no Codex mirror
 ├── hooks/                           # Session-start hook
 ├── skills/                          # User-invocable skills (shared by both CLIs)
 │   ├── debate/SKILL.md
 │   ├── init/SKILL.md
+│   ├── privacy-check/
+│   │   ├── SKILL.md
+│   │   └── allow-list.md
 │   └── threads/
 │       ├── SKILL.md
 │       └── scripts/mcp_server.py    # Tool declarations; delegates to lib/ai_workspace/
@@ -50,8 +54,10 @@ ai-workspace-plugin/
 │   ├── settings.json.template       # Claude-only permission allowlist
 │   └── ...
 ├── scripts/
-│   └── sync-codex-agents.py         # Regenerates .codex-plugin/agents/*.toml
+│   ├── sync-codex-agents.py         # Regenerates .codex-plugin/agents/*.toml
+│   └── privacy_check_regression.py  # Runs the privacy checker over the regression cases
 ├── tests/test_mcp_server.py
+│   └── fixtures/privacy-check-cases.json
 ├── docs/examples/                   # User walkthroughs
 ├── AGENTS.md                        # Repo instructions (vendor-neutral)
 ├── CLAUDE.md                        # One-line "@AGENTS.md" for Claude

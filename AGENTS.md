@@ -35,13 +35,17 @@ ai-workspace-plugin/                # Plugin repository
 │       └── skeptic.toml            # Generated from agents/skeptic.md
 ├── agents/                         # Canonical persona source (Claude reads directly)
 │   ├── proponent.md
-│   └── skeptic.md
+│   ├── skeptic.md
+│   └── privacy-checker.md          # Claude Code only, no Codex mirror
 ├── hooks/                          # Session-start hook
 │   ├── hooks.json
 │   └── session-start-message.md
 ├── skills/                         # User-invocable skills (shared by both CLIs)
 │   ├── debate/SKILL.md
 │   ├── init/SKILL.md
+│   ├── privacy-check/
+│   │   ├── SKILL.md
+│   │   └── allow-list.md
 │   └── threads/
 │       ├── SKILL.md
 │       └── scripts/mcp_server.py   # Tool declarations; delegates to lib/ai_workspace/
@@ -62,8 +66,10 @@ ai-workspace-plugin/                # Plugin repository
 │   ├── thread-session-template.md
 │   └── decision-template.md
 ├── scripts/
-│   └── sync-codex-agents.py        # Regenerates .codex-plugin/agents/*.toml from agents/*.md
-├── tests/                          # test_mcp_server.py, test_server_launch.py, test_layering.py, test_codex_packaging.py
+│   ├── sync-codex-agents.py        # Regenerates .codex-plugin/agents/*.toml from agents/*.md
+│   └── privacy_check_regression.py # Runs the privacy checker over the regression cases
+├── tests/                          # test_mcp_server.py, test_server_launch.py, test_layering.py, test_codex_packaging.py, test_privacy_check.py
+│   └── fixtures/privacy-check-cases.json  # Fictional regression cases
 ├── docs/examples/                  # Walkthroughs for users
 ├── AGENTS.md                       # This file (vendor-neutral repo instructions)
 ├── CLAUDE.md                       # One-line "@AGENTS.md" for Claude Code
