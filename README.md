@@ -118,6 +118,21 @@ Install the [`tech-expert-agents`](https://github.com/sebmartin/ai-marketplace/t
 
 On Codex CLI: Codex's plugin manifest cannot bundle subagents yet, so `tech-expert-agents` is not installable as a plugin. The `init` skill installs the proponent and skeptic agents directly into `~/.codex/agents/`; specialist personas can be added there manually as `.toml` files until plugin-agent distribution lands.
 
+## Privacy check
+
+An advisory check of the wording of outgoing prose (commit messages, PR text, comments, emails) for private context such as names, private events and insider references. It runs a tool-less subagent that sees only the text you give it.
+
+```bash
+/ai-workspace:privacy-check <text>     # check the text you pass
+/ai-workspace:privacy-check            # check the draft in the previous response
+```
+
+To check several texts at once, start each with a `--- <label>` line. Results come back per label, with a suggested rewrite for anything flagged.
+
+It is advisory and blocks nothing. It runs on Claude Code only. A clean result means nothing was flagged in the wording, not that the text is safe to publish: it does not check code or documents, and it cannot recognise a private fact written as an ordinary statement.
+
+Concepts that are fine to say publicly can be listed in `skills/privacy-check/allow-list.md`, one per line as `- concept`. The checker treats them as context, not a bypass. Only you add entries; an agent never does.
+
 ## Custom Skills
 
 Skills placed inside a thread directory are discovered by Claude Code when you're working in that context. The [career-growth example](./docs/examples/career-growth/README.md) shows a skill that fetches activity from GitHub, Jira, and Slack. The [cottage-build example](./docs/examples/cottage-build/README.md) shows one built from PDF attachments that answers bylaw questions automatically.
@@ -153,6 +168,7 @@ You don't need to memorize these. You can tell Claude what you want in plain Eng
 | `/ai-workspace:threads restore <name>` | Move an archived thread back to threads/ |
 | `/ai-workspace:threads list-archived` | Show archived threads |
 | `/ai-workspace:threads unpack-legacy-archive <file>` | Restore a `.tar.gz` archive made before 3.0 |
+| `/ai-workspace:privacy-check [text]` | Advisory check of outgoing prose for private context (Claude Code only) |
 
 ## Archiving Old Threads
 

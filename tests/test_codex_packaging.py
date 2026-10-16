@@ -116,3 +116,8 @@ def test_codex_mirrors_match_the_agents_that_should_have_one():
     expected = {p.stem for p in sync.mirrored_agents(PLUGIN_ROOT / "agents")}
     actual = {p.stem for p in (PLUGIN_ROOT / ".codex-plugin" / "agents").glob("*.toml")}
     assert actual == expected
+
+
+def test_claude_only_skill_refuses_on_codex():
+    text = (PLUGIN_ROOT / "skills" / "privacy-check" / "SKILL.md").read_text()
+    assert "not supported here" in text

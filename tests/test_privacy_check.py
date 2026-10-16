@@ -1,6 +1,7 @@
 """The privacy-check agent and skill: their frontmatter and the protocol they share."""
 
 import importlib.util
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -226,3 +227,57 @@ def test_score_and_bar():
     assert missed.missed_leaks == ["l1"] and not reg.meets_bar(missed)
     err = reg.score(cases, [res("l1", "error"), res("l2", "flagged"), res("c1", "cleared"), res("c2", "cleared")])
     assert err.errors == ["l1"] and err.missed_leaks == [] and not reg.meets_bar(err)
+
+
+SKILL = PLUGIN_ROOT / "skills" / "privacy-check" / "SKILL.md"
+ALLOW_LIST = PLUGIN_ROOT / "skills" / "privacy-check" / "allow-list.md"
+AGENT_REF = "ai-workspace:privacy-checker"
+
+
+def test_skill_is_manual_only():
+    meta, _ = split_frontmatter(SKILL.read_text(), SKILL)
+    assert meta["name"] == "privacy-check"
+    assert meta.get("disable-model-invocation") is True
+    assert "explicit" in meta["description"].lower()
+
+
+def test_skill_opens_with_the_claude_code_only_check():
+    _, body = split_frontmatter(SKILL.read_text(), SKILL)
+    first_step = body.split("\n## ", 2)[1]
+    assert "The privacy check runs on Claude Code only; it is not supported here." in first_step
+
+
+def test_results_never_claim_safe_and_always_carry_limits():
+    _, body = split_frontmatter(SKILL.read_text(), SKILL)
+    assert "nothing flagged in the wording" in body
+    assert "Limits: the checker saw only this text." in body
+    assert "the check failed" in body
+    assert not re.search(r"\bsafe to (send|publish)\b|\bOK to send\b", body, re.I)
+
+
+def test_skill_passes_the_allow_list_and_spawns_the_checker():
+    body = SKILL.read_text()
+    assert "skills/privacy-check/allow-list.md" in body and "get_skill_file" in body
+    assert AGENT_REF in body
+
+
+def test_allow_list_says_only_the_user_adds_entries():
+    assert "Only the user adds entries; an agent never does." in ALLOW_LIST.read_text()
+    assert "Only the user adds entries; an agent never does." in SKILL.read_text()
+
+
+def test_nothing_else_points_to_the_skill():
+    hits = [
+        p
+        for p in (
+            *PLUGIN_ROOT.glob("skills/*/**/*.md"),
+            *PLUGIN_ROOT.glob("templates/**/*"),
+            *PLUGIN_ROOT.glob("hooks/*"),
+            *PLUGIN_ROOT.glob("agents/*.md"),
+        )
+        if p.is_file()
+        and "privacy-check" in p.read_text()
+        and "privacy-check" not in p.parts
+        and p.name != "privacy-checker.md"
+    ]
+    assert hits == []
