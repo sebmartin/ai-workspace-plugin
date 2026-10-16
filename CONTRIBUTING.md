@@ -56,7 +56,7 @@ ai-workspace-plugin/
 ├── scripts/
 │   ├── sync-codex-agents.py         # Regenerates .codex-plugin/agents/*.toml
 │   └── privacy_check_regression.py  # Runs the privacy checker over the regression cases
-├── tests/test_mcp_server.py
+├── tests/                           # test_mcp_server.py, test_server_launch.py, test_layering.py, test_codex_packaging.py, test_privacy_check.py
 │   └── fixtures/privacy-check-cases.json
 ├── docs/examples/                   # User walkthroughs
 ├── AGENTS.md                        # Repo instructions (vendor-neutral)
