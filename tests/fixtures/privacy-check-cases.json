@@ -1,0 +1,566 @@
+{
+  "description": "Labelled test cases for a privacy checker that sees only outgoing text. Fictional. label is leak or clean; two independent labellers agreed with the author on every case.",
+  "created": "2026-10-13",
+  "cases": [
+    {
+      "id": "G1-01",
+      "kind": "commit",
+      "category": "explicit",
+      "label": "leak",
+      "text": "Raise per-tenant rate limit for Halvorsen Freight to 900 rpm\n\nHalvorsen's ops lead told Priya they'd move their dispatch volume to a competitor if the 429s continue through peak season. This is a temporary override in tenant_overrides.yaml; revert once the shared limiter work lands."
+    },
+    {
+      "id": "G1-02",
+      "kind": "comment",
+      "category": "explicit",
+      "label": "leak",
+      "text": "This touches the same reconciliation path that Project Lantern is rewriting, so I'd hold off merging until Lantern's cutover plan is out. Otherwise we'll be resolving conflicts in ledger_sync.py for a month."
+    },
+    {
+      "id": "G1-03",
+      "kind": "reply",
+      "category": "explicit",
+      "label": "leak",
+      "text": "Fair point on the extra index, but in Tuesday's architecture sync Marcus and Dana were pretty firm that we don't add indexes to orders without a load test first. I'll open a follow-up for that and keep this PR to the query change only."
+    },
+    {
+      "id": "G1-04",
+      "kind": "commit",
+      "category": "explicit",
+      "label": "leak",
+      "text": "Enforce TLS 1.3 minimum on internal gRPC listeners\n\nImplements DEC-2026-031 from the infra steering group. Clients still on 1.2 will fail the handshake; see the exemption list in config/tls_exemptions.yaml."
+    },
+    {
+      "id": "G1-05",
+      "kind": "commit",
+      "category": "explicit",
+      "label": "leak",
+      "text": "Move billing-alerts ownership from team-kestrel to platform-core\n\nKestrel is being dissolved as part of the October reorg, so the CODEOWNERS entry and PagerDuty routing both need to point somewhere that will still exist next month."
+    },
+    {
+      "id": "G1-06",
+      "kind": "comment",
+      "category": "explicit",
+      "label": "leak",
+      "text": "Can someone else take the on-call swap for the week of the 20th? Removing jhollis from the rotation file since Friday is his last day after the layoffs."
+    },
+    {
+      "id": "G1-07",
+      "kind": "reply",
+      "category": "explicit",
+      "label": "leak",
+      "text": "Thanks for the thorough review. I'm starting paternity leave on Monday so I won't get to the remaining comments; Owen has agreed to pick this branch up and will ping you when the retry logic is reworked."
+    },
+    {
+      "id": "G1-08",
+      "kind": "commit",
+      "category": "explicit",
+      "label": "leak",
+      "text": "Fix SLA timer drift on fix/northgate-pharma-sla-breach\n\nThe escalation timer used wall-clock time and skipped an hour during the DST change, which is what produced the missed SLA in their report."
+    },
+    {
+      "id": "G1-09",
+      "kind": "comment",
+      "category": "explicit",
+      "label": "leak",
+      "text": "Context for reviewers: the pricing tiers in plans.py now mirror what's in https://wiki.corvane.internal/spaces/PAY/pages/Lumen-renewal-negotiation \u2014 please don't change the thresholds without checking that page first, the numbers were negotiated."
+    },
+    {
+      "id": "G1-10",
+      "kind": "reply",
+      "category": "explicit",
+      "label": "leak",
+      "text": "I went with the simpler lock here because of the thread Sam Okafor started in #payments-war-room last night. Apparently the double-charge reports were from this exact code path, so I didn't want anything clever until we've confirmed the fix."
+    },
+    {
+      "id": "G1-11",
+      "kind": "commit",
+      "category": "subtle",
+      "label": "leak",
+      "text": "Use the usual approach for the export job\n\nSwitching from the queue-based worker back to a cron-triggered batch. Not worth relitigating."
+    },
+    {
+      "id": "G1-12",
+      "kind": "commit",
+      "category": "subtle",
+      "label": "leak",
+      "text": "Add a guard against empty partition lists in the compactor\n\nAfter last week's incident we shouldn't let this run with zero partitions and silently truncate the target table again."
+    },
+    {
+      "id": "G1-13",
+      "kind": "reply",
+      "category": "subtle",
+      "label": "leak",
+      "text": "Per the earlier discussion I'm leaving the auth middleware alone for now. They asked us not to touch anything in that path until after the freeze, so this PR only changes the logging."
+    },
+    {
+      "id": "G1-14",
+      "kind": "comment",
+      "category": "subtle",
+      "label": "leak",
+      "text": "Keeping the deprecated `customer_ref` field in the response until end of quarter. That's what we agreed with them on the call, and I'd rather not give them a reason to reopen it."
+    },
+    {
+      "id": "G1-15",
+      "kind": "reply",
+      "category": "subtle",
+      "label": "leak",
+      "text": "Given the situation with the other team, I'd rather we vendor the client library than take a runtime dependency on their service. If they deprioritise it again we're stuck."
+    },
+    {
+      "id": "G1-16",
+      "kind": "reply",
+      "category": "subtle",
+      "label": "leak",
+      "text": "Yeah I know the ORM version would be shorter, but you know how he feels about ORMs in the hot path. Let's not reopen that one, raw SQL it is."
+    },
+    {
+      "id": "G1-17",
+      "kind": "comment",
+      "category": "subtle",
+      "label": "leak",
+      "text": "Leaving the legacy retry flag on by default for now. We really can't afford another escalation from that customer this month, so the new behaviour can wait until they've migrated."
+    },
+    {
+      "id": "G1-18",
+      "kind": "commit",
+      "category": "subtle",
+      "label": "leak",
+      "text": "Reapply the permission check fix to the v2 endpoints\n\nSame change we pushed quietly before the audit, just extended to the routes that were added since."
+    },
+    {
+      "id": "G1-19",
+      "kind": "commit",
+      "category": "subtle",
+      "label": "leak",
+      "text": "Pin storage writes to the existing region\n\nHardcoding the region until the budget conversation is resolved. Multi-region replication stays behind the flag."
+    },
+    {
+      "id": "G1-20",
+      "kind": "comment",
+      "category": "subtle",
+      "label": "leak",
+      "text": "Marking the migration integration test as skipped on CI for the next few weeks. We're short-handed until the new hires start and nobody has time to chase the flake right now. Tracking re-enable in #4812."
+    },
+    {
+      "id": "G2-01",
+      "kind": "branch",
+      "category": "identifier",
+      "label": "leak",
+      "text": "hotfix/corvane-freight-escalation-tz-offset"
+    },
+    {
+      "id": "G2-02",
+      "kind": "commit",
+      "category": "identifier",
+      "label": "leak",
+      "text": "Fix off-by-one in shift window rollover\n\nThe shift window end was exclusive in the parser but inclusive in the\nscheduler, so shifts ending exactly at 00:00 were counted in both days.\nNormalise to half-open intervals [start, end) everywhere and add a\nregression test for the midnight boundary.\n\nRepro notes: https://wiki.quillon.internal/eng/incidents/2026-09-sev1-midnight-double-billing-customer-credits"
+    },
+    {
+      "id": "G2-03",
+      "kind": "comment",
+      "category": "identifier",
+      "label": "leak",
+      "text": "Rounding here should match what `services/billing/kestrel_migration/legacy_rate_shim.py` does: banker's rounding to 2 dp, applied after the tax line rather than per item. Otherwise totals drift by a cent on invoices with many lines. Could you pull the helper out of there instead of reimplementing it?"
+    },
+    {
+      "id": "G2-04",
+      "kind": "issue",
+      "category": "identifier",
+      "label": "leak",
+      "text": "Title: Batch decoder truncates at 65,535 points (blocker for Veltrans Ostrava depot pilot)\n\n`decode_batch()` in `ingest/proto.py` reads the point count into a `uint16`, so any batch with more than 65,535 points wraps around and the decoder silently drops the remainder.\n\nRepro:\n1. Generate a batch with 70,000 points (`scripts/gen_batch.py --points 70000`).\n2. POST it to `/ingest/v1/batch`.\n3. Stored count is 4,464.\n\nExpected: all 70,000 points stored, or a 413 if the batch is over the limit.\nActual: 4,464 stored, 200 OK.\n\nSuggested fix: widen to `uint32` in the wire format (v2 header) and reject v1 batches over 65,535 with a 413."
+    },
+    {
+      "id": "G2-05",
+      "kind": "reply",
+      "category": "identifier",
+      "label": "leak",
+      "text": "Good catch on the timeout. The 30 s ceiling isn't arbitrary: it comes from the latency numbers in https://www.notion.so/quillonhq/Tessaline-renewal-SLA-penalty-clauses-draft-8c1f2e7a9b3d4e10a6f2c5d7e9b1a3c4 so I'd rather not raise it without checking there first. Happy to make it configurable per route though."
+    },
+    {
+      "id": "G2-06",
+      "kind": "commit",
+      "category": "identifier",
+      "label": "leak",
+      "text": "Move route-plan fixtures under tests/fixtures/\n\nRenames tests/data/northgate_acquisition_dry_run/*.json ->\ntests/fixtures/route_plans/*.json and updates the three loaders that\nreferenced the old path. No content changes; fixture checksums are\nunchanged."
+    },
+    {
+      "id": "G2-07",
+      "kind": "pr_body",
+      "category": "buried",
+      "label": "leak",
+      "text": "Batch geofence evaluation in the ingest worker\n\n## Summary\nMoves geofence evaluation from per-point to per-batch in `ingest/worker.py`. Until now, each GPS point triggered a separate polygon lookup against the R-tree. For devices reporting at 1 Hz that meant about 3,600 lookups per device-hour. Points are now grouped by device and evaluated in a single pass with a shared bounding-box prefilter.\n\n## Changes\n- New `GeofenceBatcher` class in `ingest/geofence.py` that buffers up to 500 points or 2 seconds, whichever comes first.\n- The R-tree query now uses the batch bounding box, then filters each point with the existing `point_in_polygon` helper.\n- Removed the per-point Redis cache for polygon ids. Its hit rate was about 4%, and batching makes it unnecessary.\n- Added `GEOFENCE_BATCH_MAX` and `GEOFENCE_BATCH_WINDOW_MS` settings with the defaults above.\n\n## Why now\nIn the last profiling run, the per-point path was the largest single contributor to ingest CPU (about 38% of worker time). This change also gets us under the p99 latency number Rafael promised Brennock Haulage on the renewal call, which is what actually got this picked up. On the replay set, batching cuts worker CPU by roughly 60%.\n\n## Behaviour changes\nEnter/exit events are now emitted when the batch flushes rather than immediately. The worst-case added delay is the window size (2 s). Event timestamps still come from the point's device timestamp, so downstream consumers that sort by event time are unaffected.\n\n## Testing\n- Unit tests for `GeofenceBatcher` covering size-triggered, time-triggered and shutdown flushes.\n- Replayed 24 h of anonymised telemetry (fixture `replay_2026_08.parquet`) through the old and new paths. The enter/exit event sets are identical, and ordering differs only within a batch.\n- Load test on staging: 12k points/s sustained, p99 ingest latency down from 180 ms to 95 ms.\n- Checked that a device with a single point in a window still flushes after 2 s and doesn't wait for more points.\n\n## Rollout\nBehind the `geofence_batching` flag, default off. The plan is to enable it on one ingest shard, watch the event-lag dashboard for a day, then roll it out to the rest.\n\n## Follow-ups\n- The R-tree is rebuilt on every polygon change. For accounts that edit polygons often this could be made incremental. Not in scope here."
+    },
+    {
+      "id": "G2-08",
+      "kind": "pr_body",
+      "category": "buried",
+      "label": "leak",
+      "text": "Replace hand-rolled retry loop in webhook dispatcher with tenacity\n\n## What\n`webhooks/dispatch.py` had its own retry loop: a `while attempts < 5` with `time.sleep(2 ** attempts)`. It had two problems:\n\n1. No jitter. When a receiving endpoint went down, every queued delivery retried on the same schedule and hit it in waves.\n2. It retried on every exception, including 4xx responses that will never succeed (400, 401, 404, 410).\n\nThis PR replaces it with `tenacity`, using:\n- `wait_random_exponential(multiplier=1, max=60)`\n- `stop_after_attempt(6)`\n- a `retry_if_exception` predicate that retries only on connection errors, timeouts, 429 and 5xx.\n\nOn 429 responses the dispatcher honours `Retry-After` when present, in either seconds or HTTP-date form (RFC 9110 \u00a710.2.3).\n\n## Why tenacity\nIt's already a transitive dependency through the object-storage SDK, it's actively maintained, and the decorator form keeps the dispatch function readable. Pinned to `>=8.2,<9`.\n\n## Changes\n- `webhooks/dispatch.py`: retry loop removed and `_send` decorated.\n- `webhooks/errors.py`: new `PermanentDeliveryError`, raised for non-retryable responses. The dispatcher now marks those deliveries `failed` immediately instead of after five attempts.\n- Metrics: `webhook_retry_total` now has a `reason` label (`timeout`, `connect`, `429`, `5xx`).\n\n## Testing\n- Unit tests use `responses` to mock each status class and assert call counts, including that a 4xx stops after one attempt.\n- Time is patched through tenacity's `sleep` hook, so the suite still runs in under a second.\n- End-to-end test against the sandbox receiver Lin set up for the Meridian Freight onboarding. The receiver returned 503 for the first three calls, and delivery succeeded on attempt four.\n- Verified that `Retry-After: 120` is respected and capped at the 60 s maximum wait.\n\n## Risk\nDeliveries that used to retry on 4xx now fail fast. In the last 30 days of logs, about 0.3% of deliveries got a 4xx, and none of those later succeeded on retry. I don't expect anything that eventually worked before to break.\n\n## Not in this PR\nA dead-letter replay UI. For now, the `failed` state can be queried through the existing admin endpoint."
+    },
+    {
+      "id": "G2-09",
+      "kind": "pr_body",
+      "category": "buried",
+      "label": "leak",
+      "text": "Add CSV export for trip summaries\n\nCloses #2184.\n\n### Summary\nAdds `GET /api/v2/trips/export.csv`, which returns one row per trip for a date range. Right now the only way to get trip data into a spreadsheet is to copy the trip table by hand. This adds a direct download.\n\n### Parameters\n- `from`, `to`: ISO 8601 dates, inclusive, maximum range 92 days\n- `vehicle_ids`: optional, comma-separated\n- `tz`: optional IANA zone, defaulting to the account's configured zone\n\n### Columns\n`trip_id, vehicle_id, vehicle_label, driver_id, start_time, end_time, duration_min, distance_km, idle_min, max_speed_kmh, start_address, end_address`\n\nTimes are rendered in the requested `tz` with an offset (e.g. `2026-09-14T07:32:10-04:00`), so the file is unambiguous when opened outside the account's region.\n\n### Implementation notes\n- Rows are streamed with a server-side cursor and `StreamingResponse`, so memory stays flat whatever the range. A 92-day export for a 400-vehicle account (~310k rows) peaks at about 40 MB RSS.\n- Uses the stdlib `csv` writer with `QUOTE_MINIMAL`, so addresses containing commas are quoted correctly.\n- Driver names and phone numbers are deliberately left out and only `driver_id` is exported. This follows the guidance legal sent us after the Halden depot complaint about driver data turning up in a customer's shared drive.\n- Formula-injection guard: any cell starting with `=`, `+`, `-` or `@` is prefixed with a single quote, following the OWASP CSV injection recommendation.\n\n### Permissions\nRequires the existing `trips:read` scope. No new scopes.\n\n### Testing\n- Unit tests for the formula-injection guard and for timezone rendering across a DST boundary (2026-11-01 in America/Toronto).\n- Integration test checking the header row, row count and quoting against a fixture whose addresses contain commas and newlines.\n- Opened the output by hand in LibreOffice Calc and Excel 365. Both parse it with their default import settings.\n- Load test: 10 concurrent 92-day exports on staging, with p95 time-to-first-byte of 220 ms.\n\n### Screenshots\nN/A, API only. The dashboard button comes in a separate PR."
+    },
+    {
+      "id": "G2-10",
+      "kind": "pr_body",
+      "category": "buried",
+      "label": "leak",
+      "text": "Switch DB driver from psycopg2 to psycopg 3\n\n## Motivation\npsycopg2 is in maintenance mode and its wheels lag behind new Python releases. We can't move the API service to Python 3.13 until the driver is replaced. psycopg 3 also brings native async support and server-side parameter binding, which removes a class of quoting bugs in the raw-SQL report queries.\n\n## What changed\n- `requirements.txt`: removed `psycopg2-binary`, added `psycopg[binary,pool]>=3.2`.\n- `db/session.py`: SQLAlchemy URL scheme changed from `postgresql+psycopg2://` to `postgresql+psycopg://`. Pool settings are unchanged (size 10, overflow 5).\n- `reports/raw_queries.py`: 14 queries that interpolated `IN` lists on the Python side now pass the lists as arrays (`= ANY(%(ids)s)`).\n- `db/copy.py`: bulk loads use `cursor.copy()` instead of `copy_expert`. The new API is a context manager.\n- Removed the custom `register_adapter` for `Decimal`, which psycopg 3 handles natively.\n\n## Compatibility\nThis is a client-side change only. The server stays on version 15 everywhere. We're holding off on the server upgrade for the reporting replica until the hiring freeze lifts and there's a second person who can be on call for the database. psycopg 3 supports PostgreSQL 10 and later, so nothing here depends on that upgrade.\n\n## Gotchas found along the way\n- psycopg 3 doesn't autocommit `SET` statements outside a transaction the way our old code assumed. `db/session.py` now sets `statement_timeout` through connection options instead.\n- After `executemany`, `cursor.rowcount` reflects the total rather than the last statement. One caller relied on the old behaviour and has been updated.\n- `timestamptz` values come back as aware datetimes in the session time zone. The session time zone is pinned to UTC in the connection options so behaviour stays the same.\n\n## Testing\n- Full test suite passes on Python 3.11 and 3.13.\n- Ran the nightly report job against a staging snapshot. The output files are byte-identical to the previous run apart from the generation timestamp.\n- Bulk load benchmark (2M rows): 41 s down to 34 s.\n- Ran staging for an hour with `PGOPTIONS='-c log_min_duration_statement=0'` and diffed the query shapes. Only the `ANY()` rewrites changed.\n\n## Rollback\nRevert the PR. There are no schema or data changes."
+    },
+    {
+      "id": "G2-11",
+      "kind": "email",
+      "category": "email",
+      "label": "leak",
+      "text": "Subject: Consumer lag spikes on prod-ingest after 7 Oct broker maintenance\n\nHi support team,\n\nSince the maintenance window on 7 October, consumer groups on our prod-ingest cluster (eu-west-3) show lag spikes of 2 to 4 minutes roughly every 40 minutes. Before the maintenance, lag stayed under 5 seconds.\n\nWhat we've checked:\n- Consumer logs show a rebalance at each spike, triggered by broker 3 leaving and rejoining the group coordinator.\n- Broker 3's JVM GC pauses in your metrics export line up with the spikes (pauses of 8 to 12 s).\n- No client-side config changes on our end since September.\n\nCould you check whether broker 3 came back from maintenance with a different heap size or GC setting? Our cluster ID is c-7f31a9e0.\n\nIf possible we'd appreciate an update by Friday. We go live with Corvane Freight's 1,200 trucks on the 28th, and our CTO has already told them this cluster is ready.\n\nThanks,\nInes Bakker\nPlatform Engineering"
+    },
+    {
+      "id": "G2-12",
+      "kind": "email",
+      "category": "email",
+      "label": "leak",
+      "text": "Subject: geohashkit: neighbours() wrong at the antimeridian for precision >= 7\n\nHi Sofia,\n\nThanks for maintaining geohashkit. We've used it in production for a couple of years with very few problems.\n\nI think I've found an edge case in `neighbours()`. For cells that touch the \u00b1180\u00b0 meridian at precision 7 or higher, the east/west neighbours come back on the same side of the meridian instead of wrapping. Minimal repro:\n\n    >>> geohashkit.neighbours(\"zbpbpbp\")[\"e\"]\n    'zbpbpbr'   # expected 'b0000000'-side cell\n\nIt looks like the carry in `_adjacent()` stops one level early when the parent cell is itself on the boundary. I have a patch with tests and can open a PR if you're happy with that approach.\n\nOn urgency: this hit us during a data migration for one of our largest customers and we ended up issuing them SLA credits, so I'd much rather get a fix upstream than keep carrying a local patch.\n\nBest,\nTomasz Wierzbicki"
+    },
+    {
+      "id": "G2-13",
+      "kind": "email",
+      "category": "email",
+      "label": "leak",
+      "text": "Hi Maeve,\n\nThanks for reaching out, and for the detail on the role. The scope (owning the data platform end to end, small team, Python and Postgres) sounds like a good fit.\n\nI'd be open to an initial call. The timing works on my side: my manager leaves at the end of the month and the platform team is being folded into Dana Okafor's org, so I've been thinking about what comes next.\n\nI'm free Tuesday or Thursday afternoon next week, Eastern time. Could you send over the salary band before we talk, if you have it?\n\nBest,\nPriya"
+    },
+    {
+      "id": "G2-14",
+      "kind": "email",
+      "category": "email",
+      "label": "leak",
+      "text": "Subject: Re: Follow-up from Tuesday's demo\n\nHi Jordan,\n\nThanks for the demo. The trace-to-log correlation looked good, and the OTLP ingest path means we wouldn't need to re-instrument anything.\n\nA few questions on pricing:\n1. Is ingest billed on compressed or uncompressed bytes?\n2. Do indexed log fields count toward the host price, or are they billed separately?\n3. What retention is included at the base tier, and what does 30-day retention on traces cost?\n\nFor planning: our current contract renews in March, and finance has asked engineering to cut observability spend by about a third, so a quote at roughly 60 hosts and 4 TB/month of logs would help.\n\nThanks,\nMarcus Oyelaran\nSRE"
+    },
+    {
+      "id": "G2-15",
+      "kind": "email",
+      "category": "email",
+      "label": "leak",
+      "text": "Hi Arjun,\n\nThanks for the review on #412. I've pushed changes for all your comments except one:\n\n- `simplify()` now takes `tolerance` as keyword-only.\n- Added the property-based test for self-intersecting rings you suggested.\n- Docs updated with an example for the new `snap_to_grid` option.\n\nThe one I'd push back on is making `rtree` a hard dependency. Our architecture review board ruled last quarter that we can't ship anything linking libspatialindex in our on-prem build, so I'd rather keep it as an optional extra (`pip install yourlib[index]`) with the pure-Python fallback as the default. The fallback is about 3x slower on 10k polygons, which seems acceptable for an extra.\n\nHappy to discuss if you feel strongly.\n\nCheers,\nLeon"
+    },
+    {
+      "id": "G2-16",
+      "kind": "brief",
+      "category": "brief",
+      "label": "leak",
+      "text": "Task: add per-API-key rate limiting to `GET /api/v2/positions`.\n\nRequirements:\n- Token bucket: 600 requests/minute sustained, burst of 100, keyed on the API key id (not the IP).\n- Over-limit requests get 429 with `Retry-After` in seconds and `RateLimit-Limit` / `RateLimit-Remaining` headers.\n- Store bucket state in the existing Redis instance (`REDIS_URL`), with a TTL so idle keys expire.\n- Use the usual approach from the other services so ops doesn't have to learn something new.\n\nTests:\n- Unit test for refill maths with a frozen clock.\n- Integration test: 700 requests in a minute yields exactly 100 x 429 after the burst is used up.\n\nDon't change any other endpoint. Open a draft PR when done."
+    },
+    {
+      "id": "G2-17",
+      "kind": "brief",
+      "category": "brief",
+      "label": "leak",
+      "text": "Refactor `exports/csv_writer.py` so it's testable. Right now it opens the DB connection and the output file inside one 300-line function.\n\nWhat I want:\n- Split into `build_rows(query_result) -> Iterator[dict]` and `write_csv(rows, fh)`.\n- `build_rows` is pure and has no I/O.\n- Keep the existing CLI entrypoint working with the same flags.\n\nHard constraint: the output must stay byte-for-byte identical. Same column order, same header spelling (including the typo `odometer_kms`), CRLF line endings, no BOM. Corvane's ops team parses this file with a fragile Excel macro, and we've broken them twice already this year.\n\nAdd a golden-file test using `tests/fixtures/export_sample.sql` to lock the output down."
+    },
+    {
+      "id": "G2-18",
+      "kind": "brief",
+      "category": "brief",
+      "label": "leak",
+      "text": "Please fix the flaky test `test_session_refresh_concurrent` in `tests/api/test_sessions.py`. It fails about 1 run in 20 on CI with `AssertionError: expected 1 refresh, got 2`.\n\nMy guess is a race in the test itself: two threads call `refresh()` before the lock in the fixture's fake store is acquired. Look at `FakeSessionStore.refresh` first.\n\nConstraints:\n- Only change files under `tests/`. Don't modify anything under `auth/`. Marek owns that module, and he's still sore after last week's token-leak incident, so any change there needs to go through him separately.\n- Don't paper over it with retries or `sleep`.\n\nVerify by running the test 200 times in a loop (`pytest -x --count=200`, pytest-repeat is installed)."
+    },
+    {
+      "id": "G2-19",
+      "kind": "brief",
+      "category": "brief",
+      "label": "leak",
+      "text": "Implement deduplication for inbound telematics webhooks in `ingest/webhooks.py`.\n\nProblem: some device gateways retry on timeout, so the same payload can arrive 2 to 3 times within a few seconds. Each payload carries `gateway_id` and a monotonically increasing `seq`.\n\nApproach:\n- Keep a per-gateway high-water mark of `seq` in Postgres (new table `gateway_seq`, one row per gateway, updated with `INSERT ... ON CONFLICT DO UPDATE ... WHERE excluded.seq > gateway_seq.seq`).\n- Drop any payload whose `seq` is at or below the mark. Return 200 so the gateway stops retrying.\n- Don't introduce Redis or any other new datastore for this. Per the infra guild's decision in September, new services get no new Redis dependencies until the cluster migration is done.\n\nInclude an Alembic migration and tests for out-of-order and duplicate delivery."
+    },
+    {
+      "id": "G2-20",
+      "kind": "brief",
+      "category": "brief",
+      "label": "leak",
+      "text": "Build the first pass of the new dispatch board UI behind the `dispatch_board_v2` flag.\n\nScope:\n- React page at `/dispatch/v2` listing today's jobs grouped by driver, with drag-and-drop reassignment calling the existing `PATCH /api/v2/jobs/{id}`.\n- Optimistic update with rollback on a non-2xx response.\n- Poll `/api/v2/jobs?date=today` every 15 s. No websockets yet.\n\nThis is the build we're demoing to Harlow Transit's operations director on Thursday, so put the happy path and visual polish first. Error states can be basic for now, but don't leave anything that throws in the console.\n\nUse the existing design-system components in `web/src/ui/`. Add Playwright coverage for drag-and-drop reassignment."
+    },
+    {
+      "id": "G3-01",
+      "kind": "commit",
+      "category": "sounds-private",
+      "label": "clean",
+      "text": "Add team-scoped API tokens\n\nTokens can now be scoped to a single team instead of the whole organisation. A team-scoped token gets 403 (not 404) from any endpoint whose resource belongs to another team, so clients can tell a permissions problem from a missing resource. Existing organisation-wide tokens keep working unchanged; the new `scope` column defaults to 'org'."
+    },
+    {
+      "id": "G3-02",
+      "kind": "issue",
+      "category": "sounds-private",
+      "label": "clean",
+      "text": "Meeting-room booking service allows double bookings under concurrent requests\n\nSteps to reproduce:\n1. Create a room with capacity 1.\n2. Fire two POST /bookings for the same room and the same 10:00-10:30 slot within ~50 ms of each other.\n\nExpected: one 201, one 409.\nActual: two 201s, and both bookings show up in GET /rooms/{id}/bookings.\n\nThe availability check and the INSERT run in separate transactions. Wrapping them in one transaction with SELECT ... FOR UPDATE on the room row should fix it."
+    },
+    {
+      "id": "G3-03",
+      "kind": "comment",
+      "category": "sounds-private",
+      "label": "clean",
+      "text": "// Private HTTP client. Keep it unexported: callers should go through Fetcher\n// so retries, timeouts and the User-Agent header stay consistent across\n// every outbound request, including the partner API endpoints."
+    },
+    {
+      "id": "G3-04",
+      "kind": "pr_body",
+      "category": "sounds-private",
+      "label": "clean",
+      "text": "## Customer table migration: move addresses to their own table\n\nMigration 0042 creates `customer_addresses` and copies `street`, `city`, `postal_code` and `country` out of `customers`, one row per customer. The old columns stay for one release so a rollback doesn't lose data; 0043 will drop them.\n\nThe copy runs in batches of 10,000 rows to keep lock time short. On a 2M-row test database it took 41 s.\n\n### Testing\n- `make migrate-test` up and down twice\n- Row counts and a checksum of the address fields match before and after"
+    },
+    {
+      "id": "G3-05",
+      "kind": "pr_body",
+      "category": "public-names",
+      "label": "clean",
+      "text": "Enforce PEP 8 naming with ruff\n\nEnables the `N` (pep8-naming) rule set in ruff and fixes the 37 violations it found, mostly camelCase function names in `utils/`. Formatting is still left to Black, so the line-length rule (E501) stays off to avoid the two tools disagreeing.\n\nNo behaviour change; renamed functions keep a deprecated alias until the next minor release."
+    },
+    {
+      "id": "G3-06",
+      "kind": "comment",
+      "category": "public-names",
+      "label": "clean",
+      "text": "# Only retry idempotent methods. RFC 9110 section 9.2.2 defines GET, HEAD,\n# OPTIONS, TRACE, PUT and DELETE as idempotent; POST and PATCH are not, so\n# retrying them on a timeout could apply the request twice."
+    },
+    {
+      "id": "G3-07",
+      "kind": "email",
+      "category": "public-names",
+      "label": "clean",
+      "text": "Subject: Readiness probe passes before gRPC server is listening (Kubernetes 1.30)\n\nHi,\n\nThe default readiness probe in the Helm chart (v3.2.1) checks /healthz on the HTTP port, which starts about two seconds before the gRPC listener. On Kubernetes 1.30 with containerd 1.7 this means a pod can be marked Ready and receive gRPC traffic it can't serve yet, so the first few calls fail with UNAVAILABLE.\n\nA minimal repro is a kind cluster with the chart's default values and a client that connects as soon as the Service has endpoints.\n\nWould you accept a PR that switches the probe to the standard gRPC health checking protocol (grpc.health.v1) when the gRPC port is enabled?\n\nThanks,\nA."
+    },
+    {
+      "id": "G3-08",
+      "kind": "reply",
+      "category": "public-names",
+      "label": "clean",
+      "text": "Agreed on the hashing: OWASP's Password Storage Cheat Sheet lists Argon2id with m=19 MiB, t=2, p=1 as a minimum, so I've switched from bcrypt to that. On the flag rename, I kept `--legacy-output` as a hidden alias. As Linus Torvalds likes to say, we don't break userspace, and scripts in the wild still pass it."
+    },
+    {
+      "id": "G3-09",
+      "kind": "commit",
+      "category": "opaque-ids",
+      "label": "clean",
+      "text": "Revert \"Parallelise fixture loading\"\n\nThis reverts commit 3f9e2c1d7a04b5e8c2f61a9d0e7b3c4f5a6d8e91.\n\nThe parallel loader makes test_order_totals flaky on arm64 runners (fails about 1 in 20 runs) because two fixtures share a sequence. Reverting until the fixtures stop depending on insert order.\n\nRefs #4821"
+    },
+    {
+      "id": "G3-10",
+      "kind": "pr_body",
+      "category": "opaque-ids",
+      "label": "clean",
+      "text": "Closes ENG-2214, ENG-2219\n\nBoth tickets are the same root cause: `parse_duration` treated \"1h30\" as 1 hour because the trailing minutes had no unit suffix. It now assumes minutes for a bare trailing number and rejects anything else with a clear error.\n\nAdded table-driven tests for the 14 formats listed in the docs."
+    },
+    {
+      "id": "G3-11",
+      "kind": "comment",
+      "category": "opaque-ids",
+      "label": "clean",
+      "text": "// TODO(#3307): remove this fallback once v1 clients are gone. Until then,\n// requests without an Accept-Version header are treated as version 1."
+    },
+    {
+      "id": "G3-12",
+      "kind": "issue",
+      "category": "opaque-ids",
+      "label": "clean",
+      "text": "Regression in v2.14.0: CSV export drops the header row\n\n`export --format csv` no longer writes the header row. v2.13.4 is fine.\n\nBisected to 9c41e07, which moved header writing into `writeChunk` but only calls it when `chunkIndex > 0`.\n\nFailing request id for the logs: req_01HZX3K7Q9M2V8TN4B6RCFJ5WD\n\nWorkaround: pin to 2.13.4."
+    },
+    {
+      "id": "G3-13",
+      "kind": "commit",
+      "category": "facts",
+      "label": "clean",
+      "text": "Limit export batches to 500 rows\n\nAt 1,000 rows, wide tables push the response past the endpoint's 6 MB payload cap and the request fails with 413. 500 rows stays under 3 MB for the widest table in the schema, which leaves headroom for future columns."
+    },
+    {
+      "id": "G3-14",
+      "kind": "comment",
+      "category": "facts",
+      "label": "clean",
+      "text": "# Retry up to 3 times with exponential backoff (200 ms, 400 ms, 800 ms) plus\n# jitter. The upstream rate-limits at 10 requests/second per API key and\n# answers 429 with a Retry-After header; when that header is present we use it\n# instead of the computed delay."
+    },
+    {
+      "id": "G3-15",
+      "kind": "pr_body",
+      "category": "facts",
+      "label": "clean",
+      "text": "## Summary\nCache verified JWT signing keys for 5 minutes instead of fetching the JWKS on every request.\n\n## Why\nEach authenticated request was making an outbound call to the JWKS endpoint, adding 30-60 ms of p50 latency. Keys rotate at most once every 24 hours and the provider publishes new keys at least 1 hour before using them, so a 5-minute TTL can't cause a valid token to be rejected.\n\n## Changes\n- `jwks.Cache` with a 300 s TTL and single-flight refresh\n- On an unknown `kid`, force one refresh before failing, so a rotation inside the TTL window still works\n- Metrics: `jwks_cache_hits_total`, `jwks_refresh_total`\n\n## Testing\n- Unit tests for TTL expiry, unknown-kid refresh and concurrent refresh\n- Load test: p50 down from 74 ms to 19 ms at 200 rps\n\n## Checklist\n- [x] Tests added\n- [x] Docs updated (`docs/auth.md`)\n- [ ] Changelog entry"
+    },
+    {
+      "id": "G3-16",
+      "kind": "branch",
+      "category": "facts",
+      "label": "clean",
+      "text": "fix/cap-upload-chunk-size-8mib"
+    },
+    {
+      "id": "G3-17",
+      "kind": "reply",
+      "category": "replies",
+      "label": "clean",
+      "text": "Fixed in a1b2c3d."
+    },
+    {
+      "id": "G3-18",
+      "kind": "reply",
+      "category": "replies",
+      "label": "clean",
+      "text": "Dropped: nitpick, and `fetch_all` already matches the naming used by the other helpers in this module."
+    },
+    {
+      "id": "G3-19",
+      "kind": "reply",
+      "category": "replies",
+      "label": "clean",
+      "text": "Good catch. The worker could return before the results channel was drained, so the last batch was sometimes lost. I moved `close(results)` into a defer and added `TestWorkerDrainsOnShutdown`, which failed about 1 in 5 runs before the fix. See 7e0d4b2."
+    },
+    {
+      "id": "G3-20",
+      "kind": "reply",
+      "category": "replies",
+      "label": "clean",
+      "text": "I'd keep the plain map with an RWMutex for now. sync.Map mainly helps when many goroutines write to disjoint keys, and the benchmark added in this PR shows reads outnumber writes about 50:1. If a profile later shows lock contention here, I'm happy to switch in a follow-up."
+    },
+    {
+      "id": "G4-01",
+      "kind": "pr_body",
+      "category": "long-pr",
+      "label": "clean",
+      "text": "## Summary\n\nAdds automatic retries to the outbound HTTP client for idempotent requests that fail with transient errors. Today a single dropped connection or a 503 from an upstream service bubbles straight up to the caller, even though repeating the same GET or PUT is safe and usually succeeds within a second or two.\n\n## Changes\n\n- New `RetryPolicy` dataclass in `http/retry.py` with `max_attempts` (default 4), `base_delay` (default 200 ms), `max_delay` (default 5 s) and a set of retryable status codes (default 502, 503, 504).\n- Backoff is exponential with full jitter: the delay before attempt *n* is a uniform random value between 0 and `min(max_delay, base_delay * 2**n)`. Full jitter avoids many clients retrying in lockstep after a shared upstream blip.\n- Retries apply only to methods RFC 9110 section 9.2.2 defines as idempotent (GET, HEAD, OPTIONS, PUT, DELETE). POST and PATCH are never retried automatically; callers that know a specific POST is safe can pass `retry=RetryPolicy(...)` explicitly.\n- If the response carries a `Retry-After` header, the client honours it, capped at `max_delay`, instead of using the computed backoff.\n- Connection errors (`ConnectError`, `ReadTimeout` before any response bytes arrive) are treated as retryable. A `ReadTimeout` after the body has started streaming is not, because the request may already have been processed.\n- Each retry is logged at DEBUG with the attempt number, delay and reason, and increments the `http_client_retries_total` counter labelled by method and outcome.\n\n## Testing\n\n- Unit tests for the delay calculation with a seeded RNG, covering the cap and the `Retry-After` override (including the HTTP-date form).\n- Integration tests against a local stub server that returns 503 twice and then 200; asserts three requests were made and the caller sees the 200.\n- A test confirming that POST is attempted exactly once even when the stub returns 503.\n- Ran the full suite locally: 1,284 passed, 0 failed.\n\n## Notes\n\n- Total worst-case latency with defaults is roughly 0.2 + 0.4 + 0.8 s of backoff plus request time, well under the 30 s request timeout, so no timeout changes were needed.\n- Retries are disabled when `RetryPolicy(max_attempts=1)` is passed, which keeps the old behaviour available for callers that implement their own retry logic.\n- Follow-up idea, not in this PR: a per-host circuit breaker so that a host failing every request stops being retried at all."
+    },
+    {
+      "id": "G4-02",
+      "kind": "pr_body",
+      "category": "long-pr",
+      "label": "clean",
+      "text": "## Summary\n\nReplaces the hand-written INI parser for `settings.ini` with TOML parsed by the standard library's `tomllib` (Python 3.11+). The old parser had no notion of types, so every value arrived as a string and was coerced ad hoc at each call site. It also silently accepted duplicate keys, with the last one winning, which made misconfigurations hard to spot.\n\n## Changes\n\n- `config/loader.py` now reads `settings.toml` with `tomllib.load` and validates the result against a typed schema built from frozen dataclasses (`ServerConfig`, `DatabaseConfig`, `LoggingConfig`).\n- Validation errors name the full key path and the expected type, for example `database.pool_size: expected int, got str (\"ten\")`.\n- Unknown keys are now an error rather than being ignored. A typo such as `databse.host` previously fell back to the default host without any warning.\n- Added `scripts/convert_ini_to_toml.py`, which reads an existing `settings.ini` and writes an equivalent `settings.toml`, inferring ints, floats and booleans where the value parses cleanly and leaving everything else as a string.\n- If only `settings.ini` exists at startup, the loader logs a deprecation warning and loads it through the converter in memory. That fallback will be removed in a later release.\n- Removed roughly 300 lines of parsing and coercion code from `config/legacy_ini.py` and 14 scattered `int(...)` / `== \"true\"` conversions across the codebase.\n\n## Testing\n\n- New tests in `tests/config/` cover valid files, each type error, unknown keys, missing required keys and the INI fallback path.\n- Round-trip test: every INI fixture in `tests/fixtures/` is converted, loaded, and compared field by field with the values the old parser plus manual coercion produced.\n- Started the service locally with a converted config and ran the smoke tests; all passed.\n\n## Notes\n\n- `tomllib` is read-only, which is fine here since the application never writes its own config.\n- TOML has no null value. Settings that were previously allowed to be empty strings to mean \"unset\" are now simply omitted, and the dataclass field defaults to `None`.\n- Minimum supported Python is already 3.11, so no new dependency is introduced."
+    },
+    {
+      "id": "G4-03",
+      "kind": "pr_body",
+      "category": "long-pr",
+      "label": "clean",
+      "text": "## Summary\n\nFixes an N+1 query pattern in `GET /orders`. For a page of 50 orders the endpoint issued 1 query for the orders, 50 for their line items and 50 more for each order's shipping address, so 101 queries per request. With this change it issues 3 regardless of page size.\n\n## Changes\n\n- `OrderRepository.list_page` now loads line items with a single `WHERE order_id = ANY(%s)` query after fetching the page, and groups them in Python by `order_id`.\n- Shipping addresses are fetched the same way in one query keyed by `address_id`.\n- The serializer no longer touches lazy relationships. It receives fully populated `OrderView` objects, so an accidental lazy load in future would raise in tests (see the `assert_no_lazy_loads` fixture below) instead of quietly adding queries.\n- Added a composite index `line_items(order_id, position)` so the batched lookup returns rows already in display order. The migration uses `CREATE INDEX CONCURRENTLY` so it does not block writes.\n\n## Testing\n\n- New `assert_max_queries(n)` context manager in `tests/helpers/db.py` that counts statements through the driver's execute hook. The endpoint test asserts at most 3 queries for page sizes 1, 50 and 200.\n- New `assert_no_lazy_loads` fixture that makes any lazy relationship access raise during the test.\n- Existing response-shape snapshot tests pass unchanged, so the JSON output is identical.\n- Local benchmark with 10,000 seeded orders: median latency for a 50-item page went from 182 ms to 21 ms; p99 from 410 ms to 48 ms.\n\n## Notes\n\n- The `ANY(%s)` form is used instead of building an `IN (...)` list so the statement text is the same for every page size, which keeps the prepared statement cache effective.\n- Memory use grows linearly with page size because all line items for the page are held at once. Page size is already capped at 200, so the worst case is a few thousand small rows.\n- The same pattern exists in `GET /invoices`. I left it for a separate PR to keep this diff reviewable."
+    },
+    {
+      "id": "G4-04",
+      "kind": "pr_body",
+      "category": "long-pr",
+      "label": "clean",
+      "text": "## Summary\n\nInstruments the background job worker with OpenTelemetry tracing so that a job can be followed from the HTTP request that enqueued it through to the worker that ran it. Until now the request trace ended at the enqueue call, and the job's own work showed up as an unrelated root span, if at all.\n\n## Changes\n\n- On enqueue, the producer injects the current trace context into the job's metadata using the W3C Trace Context propagator (`traceparent` and `tracestate` fields).\n- The worker extracts that context before running a job and starts a `job.run` span as a child of it, with `messaging.system`, `messaging.operation=process` and `messaging.destination.name` attributes following the OpenTelemetry semantic conventions for messaging.\n- Retries create a new `job.run` span each time, linked to the original enqueue span rather than parented to the previous attempt, so a job that retries five times does not produce a five-deep span chain.\n- Exceptions are recorded on the span with `span.record_exception` and the status set to ERROR before the job's own retry handling runs.\n- Job arguments are not added as attributes, since they can be large and may contain user data. Only the job type, queue name, attempt number and job id are recorded.\n- Tracing is a no-op when no exporter is configured, so local development and the test suite are unaffected unless `OTEL_EXPORTER_OTLP_ENDPOINT` is set.\n\n## Testing\n\n- Unit tests use the SDK's `InMemorySpanExporter` to assert parent/child relationships, links on retries, and the attribute set.\n- A test confirms that jobs enqueued by an older producer (no trace fields in metadata) still run and start a fresh root span.\n- Ran a local stack with an OTLP collector and Jaeger; screenshots of an end-to-end trace are attached below.\n\n## Notes\n\n- Overhead measured on a 10,000-job local run was under 1% of total job time with the batch span processor.\n- The metadata fields add about 120 bytes per job."
+    },
+    {
+      "id": "G4-05",
+      "kind": "pr_body",
+      "category": "long-pr",
+      "label": "clean",
+      "text": "## Summary\n\nReplaces the module-level dictionary used to cache rendered templates with a bounded LRU cache that also expires entries after a TTL. The dictionary had no size limit, so a process that rendered many distinct template/locale combinations kept every result forever. In a 24-hour soak test, resident memory grew from about 180 MB to 1.9 MB short of 2 GB and never came back down.\n\n## Changes\n\n- New `BoundedTTLCache` in `cache/bounded.py`: an `OrderedDict`-backed LRU with a maximum entry count and a per-entry expiry timestamp. `get` moves a hit to the end and drops it if expired; `set` evicts from the front when full.\n- Expiry uses `time.monotonic()` so wall-clock adjustments cannot make entries live forever or expire instantly.\n- The cache is guarded by a `threading.Lock`. Rendering still happens outside the lock, so two threads may occasionally render the same template concurrently; the second write simply overwrites the first. That is cheaper than holding the lock during rendering.\n- `TEMPLATE_CACHE_MAX_ENTRIES` (default 2,000) and `TEMPLATE_CACHE_TTL_SECONDS` (default 600) are read from the environment.\n- Hit, miss and eviction counts are exported as metrics.\n- `functools.lru_cache` was considered but not used, because it has no TTL and cannot be cleared per key when a template file changes on disk.\n\n## Testing\n\n- Unit tests for eviction order, expiry with an injected clock, and concurrent access from 16 threads.\n- Repeated the 24-hour soak test with the new cache: resident memory levelled off at about 240 MB after the first hour and stayed within 10 MB of that.\n- Hit rate during the soak test was 97.8%, compared with 99.1% for the unbounded dictionary, so the extra rendering cost is small.\n\n## Notes\n\n- Default sizes were chosen from the soak test: 2,000 entries covered the working set with room to spare.\n- If a deployment renders far more distinct combinations, raising the entry limit is safe; memory per entry averages about 40 KB."
+    },
+    {
+      "id": "G4-06",
+      "kind": "commit",
+      "category": "commit-body",
+      "label": "clean",
+      "text": "Clamp list endpoint page size to 500\n\nThe `limit` query parameter was passed straight through to the SQL\nLIMIT clause. A request with limit=1000000 made the server load and\nserialize every matching row, holding a connection and several hundred\nMB of memory until it finished or the client gave up.\n\nValues above 500 are now clamped to 500 rather than rejected, so\nexisting clients that ask for \"everything\" still get a valid first\npage and can follow the `next` cursor. Negative and zero values fall\nback to the default of 50. The effective limit is echoed back in the\nresponse body so clients can tell when clamping happened."
+    },
+    {
+      "id": "G4-07",
+      "kind": "commit",
+      "category": "commit-body",
+      "label": "clean",
+      "text": "Use monotonic clock for request deadlines\n\nDeadlines were computed with time.time(), which follows the system wall\nclock. When NTP stepped the clock backwards, in-flight requests could\nwait far longer than their timeout; stepping forwards made them time\nout immediately.\n\nSwitch deadline arithmetic to time.monotonic(), which never goes\nbackwards and is unaffected by clock adjustments. Wall-clock time is\nstill used for log timestamps and the Date header, where it is the\nright thing to show.\n\nAdds a test that patches the wall clock mid-request and checks the\ntimeout still fires on schedule."
+    },
+    {
+      "id": "G4-08",
+      "kind": "commit",
+      "category": "commit-body",
+      "label": "clean",
+      "text": "Normalize filenames to NFC before computing content keys\n\nThe same visible filename can arrive in two Unicode forms: macOS\nclients tend to send decomposed (NFD) names, while most other clients\nsend precomposed (NFC). \"r\u00e9sum\u00e9.pdf\" therefore hashed to two different\nstorage keys depending on where it was uploaded from, and the\ndeduplication step treated them as separate files.\n\nApply unicodedata.normalize(\"NFC\", name) at the upload boundary, before\nthe name is stored or hashed. NFC is chosen because it is what the W3C\nrecommends for content on the web and it keeps names short.\n\nExisting keys are not rewritten here; a separate migration will\nrecompute them."
+    },
+    {
+      "id": "G4-09",
+      "kind": "commit",
+      "category": "commit-body",
+      "label": "clean",
+      "text": "Derive advisory lock keys from a 64-bit hash\n\npg_advisory_lock takes a bigint, but the keys were produced with\nPython's built-in hash() truncated to 32 bits. hash() of a str is\nsalted per process (PYTHONHASHSEED), so two workers computed different\nkeys for the same job name and both acquired \"the\" lock. The 32-bit\ntruncation also made collisions between unrelated names more likely.\n\nUse the first 8 bytes of a BLAKE2b digest of the UTF-8 name,\ninterpreted as a signed 64-bit integer. This is stable across\nprocesses and Python versions and uses the full key space PostgreSQL\noffers.\n\nAdded a test that runs the key function in a subprocess with a\ndifferent PYTHONHASHSEED and compares the results."
+    },
+    {
+      "id": "G4-10",
+      "kind": "commit",
+      "category": "commit-body",
+      "label": "clean",
+      "text": "Revert \"Load plugin registry lazily on first lookup\"\n\nThis reverts commit 4e7b19c2.\n\nLazy loading moved registry initialisation from startup into the first\nrequest that needed a plugin. When several requests arrived at once\nafter a cold start, each one saw an empty registry and triggered its\nown load, and plugins with import-time side effects registered their\nhandlers more than once. Requests also paid a 1-2 s penalty that used\nto be absorbed during startup.\n\nGoing back to eager loading at startup until the lazy path has a lock\naround initialisation and a test that exercises concurrent first\nlookups."
+    },
+    {
+      "id": "G4-11",
+      "kind": "email",
+      "category": "email",
+      "label": "clean",
+      "text": "Subject: Regression in 3.4.0: parse_duration() rejects \"PT0S\"\n\nHello,\n\nI'd like to report what looks like a regression in 3.4.0 of the library.\n\nIn 3.3.2, parse_duration(\"PT0S\") returned a zero timedelta. In 3.4.0 it raises:\n\n    ValueError: duration must contain at least one non-zero component\n\nISO 8601 allows a zero duration, and \"PT0S\" is the form many systems emit for it (for example, several JSON serializers write it for an empty interval), so I believe the old behaviour was correct.\n\nMinimal reproduction:\n\n    from isodur import parse_duration\n    print(parse_duration(\"PT0S\"))\n\nThis was run on Python 3.12.6 on Linux with a clean virtual environment containing only the library.\n\nLooking at the changelog, 3.4.0 added stricter validation of empty durations such as \"P\" and \"PT\", which is a good change. I suspect the new check tests whether every component is zero rather than whether any component was present. If that's right, I'm happy to send a pull request that keeps rejecting \"P\" and \"PT\" while accepting explicit zeros, along with tests for both cases.\n\nPlease let me know if you'd like the patch or if there is a reason zero durations are intentionally rejected now.\n\nThanks for maintaining the library.\n\nBest regards"
+    },
+    {
+      "id": "G4-12",
+      "kind": "email",
+      "category": "email",
+      "label": "clean",
+      "text": "Subject: Re: Rotating TLS certificates without restarting the proxy\n\nHi,\n\nThanks for the detailed question. Yes, this can be done without a restart, with one caveat.\n\nSince version 2.1 the proxy watches the files named in `tls.cert_file` and `tls.key_file`. When either changes, it reloads both and uses the new pair for every new handshake. Connections that are already open keep the old certificate until they close, which is normally what you want.\n\nThe caveat is atomicity. If your renewal tool writes the certificate and key as two separate steps, the proxy can notice the first write and try to load a new certificate with the old key. That load fails, the proxy logs \"key does not match certificate\", and it keeps serving the previous pair, so nothing breaks, but you'll see the error and the reload won't happen until the next change.\n\nTwo ways to avoid that:\n\n1. Write both files to a temporary directory, then swap a symlink that points at the directory. The proxy follows symlinks and sees both files change at once.\n2. Use a single PEM file containing the key followed by the certificate chain, and point both settings at it.\n\nIf you're using an ACME client, most of them support a deploy hook where you can do the symlink swap.\n\nYou can confirm a reload happened by checking the `tls_reloads_total` metric, or with:\n\n    openssl s_client -connect host:443 </dev/null 2>/dev/null | openssl x509 -noout -enddate\n\nHope that helps.\n\nBest,"
+    },
+    {
+      "id": "G4-13",
+      "kind": "email",
+      "category": "email",
+      "label": "clean",
+      "text": "Subject: Question on the 2027 DST change entry for a proposed zone\n\nHello,\n\nI have a question about how the database handles a government announcement that has been reported in the press but not yet published in an official gazette.\n\nThe situation I'm looking at: a national government has announced that it will stop observing daylight saving time from 2027, but the decree text hasn't appeared yet and news reports disagree on whether the last transition will be in March or October 2026.\n\nFrom the theory file I understand the general preference is to wait for an authoritative source before changing future timestamps, since applications that convert future times will act on whatever the data says. Is there a recommended way to submit the information now, so that it's on record, without proposing a data change until the decree is out? For example, would a comment-only patch to the relevant region file be welcome, or is the mailing list the better place for it?\n\nI can supply links to the three news reports and to the ministry's press release.\n\nThank you for your time and for the work that goes into keeping the database current.\n\nKind regards"
+    },
+    {
+      "id": "G4-14",
+      "kind": "email",
+      "category": "email",
+      "label": "clean",
+      "text": "Subject: Deprecation timeline for Connection.execute_many()\n\nHi,\n\nThe 5.0 release notes say Connection.execute_many() is deprecated in favour of executemany() on the cursor and will be removed \"in a future major version\". I'd like to plan the migration in a library that wraps your driver, and I have two questions.\n\n1. Is removal planned for 6.0, or could it come later? Our library supports the two most recent major versions of the driver, so knowing when the method disappears tells us how long we need both code paths.\n\n2. The two methods differ in one way that matters for us: execute_many() returns the total row count, while cursor.executemany() leaves rowcount as -1 when the server doesn't report per-statement counts. Is that difference intended to stay, or would you accept a patch that makes cursor.executemany() sum the counts when they are available? PEP 249 leaves this open, so I can see arguments either way.\n\nIf a patch for the second point would be welcome, I'm glad to write it with tests against PostgreSQL 14 through 17.\n\nThanks,"
+    },
+    {
+      "id": "G4-15",
+      "kind": "email",
+      "category": "email",
+      "label": "clean",
+      "text": "Subject: Re: Clarification on section 4.3 of the draft (idempotency key reuse)\n\nHello,\n\nThank you for the quick reply on the list. I've reread section 4.3 with your explanation in mind, and I think the remaining ambiguity is narrower than I first suggested.\n\nThe draft says a server \"MUST return the original response\" when it receives a repeated idempotency key with an identical request. It doesn't say what to do when the key is repeated and the original request is still being processed. I can see three reasonable behaviours:\n\n- block until the first request completes, then return its response;\n- return 409 Conflict immediately;\n- return 425 Too Early, or 409 with a Retry-After header.\n\nImplementations I've tested do different things: two block, one returns 409, and one processes the second request as new, which defeats the purpose of the key.\n\nWould the working group be open to a sentence recommending 409 with Retry-After for the in-progress case? Blocking ties up a connection for an unbounded time, and 409 is already used in section 4.4 for a key reused with a different request body, so clients would only need to handle one status.\n\nI'm happy to propose specific text in a pull request against the draft repository if that's easier to review.\n\nBest regards"
+    },
+    {
+      "id": "G4-16",
+      "kind": "brief",
+      "category": "brief",
+      "label": "clean",
+      "text": "Task: add a streaming CSV export to the reports module.\n\nImplement `export_report_csv(query, out)` in `reports/export.py`, where `query` is the existing `ReportQuery` object and `out` is a writable binary file-like object.\n\nRequirements:\n- Stream rows. Do not build the full result in memory: exports can exceed a million rows, and the process has a 512 MB memory limit. Use a server-side cursor and fetch in batches of 5,000.\n- Write UTF-8 with a byte-order mark. Spreadsheet applications on Windows misread UTF-8 without one and mangle accented characters.\n- Use `csv.writer` with `quoting=csv.QUOTE_MINIMAL` and `lineterminator=\"\\r\\n\"`, which is what RFC 4180 specifies.\n- Guard against CSV formula injection: if a text cell starts with `=`, `+`, `-`, `@`, tab or carriage return, prefix it with a single quote. Numeric columns are exempt, so negative numbers stay negative.\n- Format datetimes as ISO 8601 in UTC with a trailing `Z`; format decimals without scientific notation.\n- The header row uses the column labels from `query.columns`, in order.\n\nTests to add in `tests/reports/test_export.py`: header order, BOM present, formula-injection escaping (including the numeric exemption), a 100,000-row export that stays under 50 MB of peak memory (use `tracemalloc`), and correct quoting of fields containing commas, quotes and newlines.\n\nDon't change the HTTP layer; wiring the endpoint to this function is a separate task."
+    },
+    {
+      "id": "G4-17",
+      "kind": "brief",
+      "category": "brief",
+      "label": "clean",
+      "text": "Implement webhook signature verification in `webhooks/verify.py`.\n\nIncoming webhook requests carry two headers: `X-Signature` (hex-encoded HMAC-SHA256) and `X-Timestamp` (Unix seconds). The signed payload is the timestamp, a literal `.`, and the raw request body bytes, in that order.\n\nWrite `verify_signature(secret: bytes, headers: Mapping[str, str], body: bytes, now: float) -> None` that raises `InvalidSignature` with a short reason on any failure and returns nothing on success.\n\nRequirements and why:\n- Compute the HMAC over the raw body bytes, not re-serialised JSON. Re-serialising can change key order or whitespace and break valid signatures.\n- Compare with `hmac.compare_digest`. A plain `==` returns early on the first differing byte, which leaks timing information.\n- Reject timestamps more than 300 seconds from `now` in either direction. This limits replay of captured requests while tolerating ordinary clock skew.\n- Accept a comma-separated list of signatures in `X-Signature` and succeed if any one matches. This lets the sender sign with both old and new secrets while a secret is being rotated.\n- Header lookup must be case-insensitive.\n- Take `now` as a parameter instead of calling the clock, so tests are deterministic.\n\nTests: valid signature, wrong secret, tampered body, timestamp just inside and just outside the window, missing headers, multiple signatures with one valid, and uppercase hex.\n\nDo not log the secret or the expected signature on failure."
+    },
+    {
+      "id": "G4-18",
+      "kind": "brief",
+      "category": "brief",
+      "label": "clean",
+      "text": "Write property-based tests for `merge_ranges` in `scheduling/ranges.py` using Hypothesis.\n\n`merge_ranges(ranges: list[tuple[date, date]]) -> list[tuple[date, date]]` takes inclusive date ranges in any order and returns a sorted list of non-overlapping ranges covering exactly the same days. Adjacent ranges (one ends on the 4th, the next starts on the 5th) should merge.\n\nThe function has example-based tests already, but it has had two off-by-one bugs around adjacency, so the goal is to pin down its properties rather than add more examples.\n\nProperties to test:\n1. The set of days covered by the output equals the set covered by the input.\n2. Output ranges are sorted by start date.\n3. No two output ranges overlap or touch: for consecutive ranges, the next start is at least two days after the previous end.\n4. Every output range has start <= end.\n5. Idempotence: merging the output again returns it unchanged.\n6. Order independence: shuffling the input does not change the output.\n\nBuild a strategy that generates ranges with start <= end within a two-year window, so overlaps and adjacency come up often. Cap list length at 50 to keep the suite fast. For property 1, expanding ranges to sets of days is fine at that size.\n\nIf a property fails, don't fix `merge_ranges` in the same change. Commit the failing test with `@pytest.mark.xfail(strict=True)` and a comment showing the minimal example Hypothesis found, then stop and report it."
+    },
+    {
+      "id": "G4-19",
+      "kind": "brief",
+      "category": "brief",
+      "label": "clean",
+      "text": "Refactor `billing/rates.py` to remove its module-level mutable state.\n\nCurrently the module holds `_RATES` (a dict loaded from the database on first use) and `_LAST_REFRESH` (a timestamp), and functions such as `price_for(sku)` read and update them directly. This causes three problems:\n\n- Tests leak into each other. A test that seeds custom rates leaves them in place for every later test in the same process, so results depend on test order.\n- Two threads can refresh at the same time and one can read a half-built dict.\n- It is impossible to run two rate tables side by side, which the preview feature needs in order to show prices under a proposed rate table next to current prices.\n\nWhat to do:\n- Introduce a `RateTable` class that owns the rates and the refresh timestamp. Build the replacement dict fully, then swap the reference in one assignment so readers never see a partial table.\n- Keep `price_for(sku)` and the other public functions working by delegating to a default `RateTable` instance created at import time. Callers outside this module must not need changes in this task.\n- Add `RateTable.from_mapping(dict)` for tests, so they can build a table without a database.\n- Replace the `reset_rates()` test helper with a pytest fixture that yields a fresh `RateTable`.\n\nRun the billing tests with `pytest -p randomly` three times with different seeds; they must pass in every order. Don't change pricing logic or rounding."
+    },
+    {
+      "id": "G4-20",
+      "kind": "brief",
+      "category": "brief",
+      "label": "clean",
+      "text": "Add a `currency` column to the `payments` table and backfill it.\n\nContext you need: `payments` has about 400 million rows, and the application writes to it continuously. Any statement that rewrites the table or holds an ACCESS EXCLUSIVE lock for more than a moment will block writes and cause request timeouts. The steps below are ordered to avoid that.\n\n1. Migration A: `ALTER TABLE payments ADD COLUMN currency char(3)` with no default and NULL allowed. In PostgreSQL 11+ this is a metadata-only change and completes instantly. Set `lock_timeout = '2s'` in the migration so it fails fast instead of queuing behind a long transaction.\n2. Application change: write `currency` on every insert and update from this point on. Reads must treat NULL as `'USD'`, which is the value every existing row implicitly has.\n3. Backfill script `scripts/backfill_payment_currency.py`: update rows in primary-key order in batches of 10,000 with `UPDATE ... WHERE id BETWEEN %s AND %s AND currency IS NULL`. Commit after each batch, sleep 100 ms between batches, and log progress. It must be safe to stop and restart at any point.\n4. Migration B, after the backfill finishes: add `CHECK (currency IS NOT NULL) NOT VALID`, then `VALIDATE CONSTRAINT` in a separate transaction. Validation takes only a SHARE UPDATE EXCLUSIVE lock, so writes continue.\n\nDeliver steps 1 to 3 in this task. Write step 4 as a migration file but leave it out of the migration list, with a comment explaining it runs after the backfill."
+    }
+  ]
+}

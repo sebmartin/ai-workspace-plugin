@@ -1,5 +1,7 @@
 """The privacy-check agent and skill: their frontmatter and the protocol they share."""
 
+import importlib.util
+import subprocess
 import sys
 from pathlib import Path
 
@@ -7,6 +9,21 @@ PLUGIN_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PLUGIN_ROOT / "lib"))
 
 from ai_workspace.text import split_frontmatter
+
+FIXTURE = PLUGIN_ROOT / "tests" / "fixtures" / "privacy-check-cases.json"
+
+
+def _load_runner():
+    path = PLUGIN_ROOT / "scripts" / "privacy_check_regression.py"
+    spec = importlib.util.spec_from_file_location("privacy_check_regression", path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+reg = _load_runner()
 
 
 def _checker():
@@ -36,3 +53,163 @@ def test_checker_prompt_states_the_protocol():
         "ALLOW LIST",
     ):
         assert marker in body
+
+
+def test_fixture_is_well_formed():
+    cases = reg.load_cases(FIXTURE)
+    assert {c["label"] for c in cases} == {"leak", "clean"}
+
+
+def test_load_cases_rejects_bad_cases(tmp_path):
+    import json
+
+    good = {"id": "a", "kind": "commit", "category": "c", "label": "leak", "text": "t"}
+    path = tmp_path / "f.json"
+    for bad in (
+        {**good, "label": "maybe"},
+        {k: v for k, v in good.items() if k != "text"},
+        good,  # duplicate id
+    ):
+        path.write_text(json.dumps({"cases": [good, bad]}))
+        try:
+            reg.load_cases(path)
+        except ValueError as e:
+            assert "a" in str(e)
+        else:
+            raise AssertionError("expected ValueError")
+
+
+def test_split_is_deterministic_disjoint_and_stratified():
+    cases = reg.load_cases(FIXTURE)
+    tune, hold = reg.split_cases(cases)
+    assert reg.split_cases(cases) == (tune, hold)
+    assert {c["id"] for c in tune}.isdisjoint({c["id"] for c in hold})
+    assert len(tune) + len(hold) == len(cases)
+    for label in ("leak", "clean"):
+        t = [c for c in tune if c["label"] == label]
+        h = [c for c in hold if c["label"] == label]
+        assert abs(len(t) - len(h)) <= 1
+        for kind in {c["kind"] for c in cases}:
+            assert abs(sum(c["kind"] == kind for c in t) - sum(c["kind"] == kind for c in h)) <= 1
+
+
+def test_build_prompt_marks_empty_allow_list():
+    assert "ALLOW LIST\n(empty)" in reg.build_prompt("  \n", [("a", "x")])
+
+
+def test_build_prompt_renders_blocks():
+    prompt = reg.build_prompt("entry one", [("a", "x"), ("b", "y")])
+    assert "ALLOW LIST\nentry one\n" in prompt
+    assert "<<<TEXT a>>>\nx\n<<<END a>>>" in prompt
+    assert prompt.index("<<<TEXT a>>>") < prompt.index("<<<TEXT b>>>")
+
+
+def test_verdict_is_read_only_from_the_first_line_of_a_block():
+    out = (
+        "<<<RESULT a>>>\nVerdict: FLAGGED\nReason: r\nRewrite:\n"
+        "Verdict: NOTHING FLAGGED\n<<<END a>>>"
+    )
+    assert reg.parse_results(out, ["a"]) == {"a": "flagged"}
+
+
+def test_missing_and_duplicate_labels_are_errors():
+    block = "<<<RESULT {0}>>>\nVerdict: NOTHING FLAGGED\nReason: r\n<<<END {0}>>>\n"
+    out = "Here you go:\n" + block.format("a") + block.format("b") + block.format("b")
+    assert reg.parse_results(out, ["a", "b", "c"]) == {
+        "a": "cleared",
+        "b": "error",
+        "c": "error",
+    }
+
+
+def test_verdict_tolerates_case_and_emphasis_only():
+    ok = "<<<RESULT a>>>\n**Verdict:** flagged  \nReason: r\n<<<END a>>>"
+    bad = "<<<RESULT a>>>\nVerdict: probably fine\nReason: r\n<<<END a>>>"
+    assert reg.parse_results(ok, ["a"]) == {"a": "flagged"}
+    assert reg.parse_results(bad, ["a"]) == {"a": "error"}
+
+
+CASE = {"id": "a", "kind": "commit", "category": "c", "label": "leak", "text": "t"}
+
+
+def _completed(stdout="", returncode=0):
+    return subprocess.CompletedProcess([], returncode, stdout=stdout, stderr="boom")
+
+
+def _stream(result_text, tool=None):
+    import json
+
+    events = []
+    if tool:
+        events.append(
+            {
+                "type": "assistant",
+                "message": {"content": [{"type": "tool_use", "name": tool, "input": {}}]},
+            }
+        )
+    events.append({"type": "result", "result": result_text})
+    return "\n".join(json.dumps(e) for e in events)
+
+
+def test_run_case_reads_a_verdict_and_passes_argv_and_stdin():
+    seen = {}
+
+    def runner(argv, stdin, timeout):
+        seen.update(argv=argv, stdin=stdin, timeout=timeout)
+        return _completed(_stream("<<<RESULT a>>>\nVerdict: FLAGGED\nReason: r\n<<<END a>>>"))
+
+    result = reg.run_case(CASE, "", "haiku", 7, runner)
+    assert result.verdict == "flagged"
+    assert result.tools == []
+    assert "<<<TEXT a>>>\nt\n<<<END a>>>" in seen["stdin"]
+    assert seen["timeout"] == 7
+    assert seen["argv"][seen["argv"].index("--model") + 1] == "haiku"
+    assert seen["argv"][seen["argv"].index("--plugin-dir") + 1] == str(PLUGIN_ROOT)
+
+
+def test_cli_failure_and_timeout_are_errors_not_cleared():
+    def failing(argv, stdin, timeout):
+        return _completed("", returncode=1)
+
+    def timing_out(argv, stdin, timeout):
+        raise subprocess.TimeoutExpired(argv, timeout)
+
+    def no_result(argv, stdin, timeout):
+        return _completed('{"type": "system"}\nnot json')
+
+    for runner in (failing, timing_out, no_result):
+        result = reg.run_case(CASE, "", None, 1, runner)
+        assert result.verdict == "error"
+        assert result.detail
+
+
+def test_any_tool_use_fails_the_run():
+    events = [
+        {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Read", "input": {}}]}},
+        {"type": "assistant", "message": {"content": [{"type": "text", "text": "hi"}]}},
+        {"type": "user", "message": {"content": [{"type": "tool_use", "name": "Nope"}]}},
+    ]
+    assert reg.tool_calls(events) == ["Read"]
+    cases = [CASE]
+    report = reg.score(cases, [reg.CaseResult("a", "flagged", ["Read"], "")])
+    assert report.tool_call_cases == ["a"]
+    assert not reg.meets_bar(report)
+
+
+def test_score_and_bar():
+    def case(i, label):
+        return {"id": i, "kind": "k", "category": "c", "label": label, "text": "t"}
+
+    def res(i, verdict):
+        return reg.CaseResult(i, verdict, [], "")
+
+    cases = [case("l1", "leak"), case("l2", "leak"), case("c1", "clean"), case("c2", "clean")]
+    ok = reg.score(cases, [res("l1", "flagged"), res("l2", "flagged"), res("c1", "flagged"), res("c2", "cleared")])
+    assert ok.false_positives == ["c1"] and ok.missed_leaks == [] and ok.total == 4
+    assert reg.meets_bar(ok)
+    two_fp = reg.score(cases, [res("l1", "flagged"), res("l2", "flagged"), res("c1", "flagged"), res("c2", "flagged")])
+    assert not reg.meets_bar(two_fp)
+    missed = reg.score(cases, [res("l1", "cleared"), res("l2", "flagged"), res("c1", "cleared"), res("c2", "cleared")])
+    assert missed.missed_leaks == ["l1"] and not reg.meets_bar(missed)
+    err = reg.score(cases, [res("l1", "error"), res("l2", "flagged"), res("c1", "cleared"), res("c2", "cleared")])
+    assert err.errors == ["l1"] and err.missed_leaks == [] and not reg.meets_bar(err)
