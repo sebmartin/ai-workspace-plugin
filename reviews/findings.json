@@ -1,0 +1,116 @@
+{
+  "source_tool": "deep-review:consolidated",
+  "target": "pr#33 (ordered-todo-list -> release/3, head fdf32d4)",
+  "findings": [
+    {
+      "file": "lib/ai_workspace/threads/v2/render.py",
+      "line": 92,
+      "severity": "blocker",
+      "category": "data-integrity",
+      "verdict": "CONFIRMED",
+      "sources": ["deep-review:testing"],
+      "mechanism": "render.py:92 is `text = pattern.sub(section, text, count=1)`. `section` is built at line 91 from `next_steps_body`, which embeds each entry's user-supplied title via `e.render()`. `Pattern.sub` processes backslash escapes in a string replacement, so a title's backslashes are interpreted as regex replacement syntax. The write guard `idx.unrepresentable` (index.py) only checks that the rendered line parses back through `_LINE_RE`, which is indifferent to backslashes, so it returns None for every one of these titles. The guard validates survival of the PARSER, never of the RENDERER.",
+      "failure_scenario": "Verified by probe. `add_todo(title=r\"Fix the \\d{4} regex\", link=\"./todos/x.md\")`: unrepresentable() returns None, `idx.write` persists the entry (ops.py:377), then `render.render` raises `PatternError: bad escape \\d`. The todo is in the index and the README is stale. It is then PERSISTENT: a second, innocent `add_todo` on that thread raises the same error, because every write re-renders from the index that still holds the title. The thread is unwritable by every tool until someone hand-edits the index, which SKILL.md forbids. Variants: `C:\\temp\\x` raises PatternError, `see \\g<id>` raises IndexError, and `Escape the \\n here` does NOT raise but silently renders a real newline into the README, splitting the entry across two lines so `_LINE_RE` no longer matches it.",
+      "fix": "Stop treating the rendered section as a replacement template. Pass a function: `pattern.sub(lambda _: section, text, count=1)`, which bypasses escape processing entirely. Escaping with `section.replace(chr(92), chr(92)*2)` also works but is easy to forget at the next call site. Then extend the round-trip guard, or add a render-side test, so the invariant is 'survives write AND render' rather than 'parses back'."
+    },
+    {
+      "file": "lib/ai_workspace/threads/v2/ops.py",
+      "line": 369,
+      "severity": "robustness",
+      "category": "invariant-violation",
+      "verdict": "CONFIRMED",
+      "sources": ["claude-code-review"],
+      "mechanism": "`add_todo` builds `idx.Entry(todo_id, state, title.strip(), link)` directly at ops.py:369 and inserts it. It implements half of the started invariant (`at = 0 if state == todos_mod.STARTED else len(entries)`, ops.py:359) and skips the other half: it never calls `todos_mod.start`, which is the function that clears STARTED from whatever held it (todos.py:123-126). `set_state` goes through `start` and so enforces it; `add_todo` does not.",
+      "failure_scenario": "Verified by probe. `add_todo(state=\"started\")` followed by a second `add_todo(state=\"started\")` leaves the index holding [('second','started'), ('first','started')]. todos.py:119-121 states the invariant being broken: 'Exactly one, because the state names what is being worked on now. A second one leaves the label meaning nothing once a few sessions have each marked something.'",
+      "fix": "In `add_todo`, after inserting the entry, call `todos_mod.start(entries, todo_id)` when `state == todos_mod.STARTED` instead of relying on the `at = 0` placement, so one code path owns the invariant. Add the two-started case to the add_todo tests, which currently cover only the `set_todo_state` path."
+    },
+    {
+      "file": "lib/ai_workspace/threads/migrate.py",
+      "line": 153,
+      "severity": "robustness",
+      "category": "false-positive-in-a-safety-gate",
+      "verdict": "CONFIRMED",
+      "sources": ["claude-code-review", "deep-review:testing"],
+      "mechanism": "migrate.py:150-154 loops `for kind in idx.TYPES` (which includes 'todos') and tests `(converted / entry.link.lstrip(\"./\")).exists()` for every entry. An http(s) URL is an explicitly blessed todo link as of this PR (ops.py:351, and tests/test_v2_ops.py calls it 'the documented use'), but it is not a path, so the existence test always fails and the entry is reported as lost. This is the same class of false positive that the `ORDERED` exemption two lines below (migrate.py:155-160) was added to avoid, with the same consequence the comment there names: 'which is how a gate stops being read.'",
+      "failure_scenario": "Verified by probe. A thread migrated exactly as skills/threads/v2/migrate-from-v1.md instructs, whose v1 Next steps said to chase an upstream issue and so carries a todo linked to that issue URL, audits as {\"clean\": false, \"dangling\": {\"todos\": [\"https://github.com/owner/repo/issues/16\"]}}. `audit_migration` is the gate that tells the user whether it is safe to delete the original thread, so a false 'clean: false' either stalls a correct migration or teaches the user to stop reading the audit.",
+      "fix": "Skip the existence test for a link that carries a scheme, reusing the same test the writer uses: `if link.lower().startswith((\"http://\", \"https://\")): continue`. Better, lift that predicate into one shared helper so the writer's definition of 'external' and the auditor's cannot drift. Pre-existing (at the PR base `add_todo` had no link gate at all), but this diff edits that loop and is what blessed URL links, so it is in scope."
+    },
+    {
+      "file": "lib/ai_workspace/threads/v2/index.py",
+      "line": 178,
+      "severity": "robustness",
+      "category": "data-duplication",
+      "verdict": "CONFIRMED",
+      "sources": ["claude-code-review"],
+      "mechanism": "`_window_first` (index.py:165-180) builds `first = [by_id[i] for i in named if i in by_id]` from the legacy block's id list without de-duplicating it, then appends every entry whose id is not in `set(named)`. A block naming the same id twice therefore yields the same Entry object twice in the returned list. Because indexes are rendered wholesale from the parsed entries rather than edited, the next write persists the duplicate line, and the docstring's 'The next write makes it permanent' is literally true of the duplicate too.",
+      "failure_scenario": "Reachable from data already on disk: the removed `idx.set_window` stored the caller's id list verbatim (`windows[section] = ids`) and validated only that each id was known, never that they were distinct, so `set_window(..., [\"a\", \"a\"])` wrote `next_steps: [a, a]`. Reading such an index returns entry a twice; the next add_todo or retire writes two identical lines for one todo. The user then has two index lines pointing at one file, and retiring one leaves the other.",
+      "fix": "De-duplicate while preserving first-seen order: `named = list(dict.fromkeys(i.strip() for i in found.group(1).split(\",\") if i.strip()))`. Add a read test over a block with a repeated id asserting the entry appears once."
+    },
+    {
+      "file": "lib/ai_workspace/threads/v2/render.py",
+      "line": 51,
+      "severity": "cleanup",
+      "category": "docstring-contradicts-behavior",
+      "verdict": "CONFIRMED",
+      "sources": ["claude-code-review"],
+      "mechanism": "The parked note at render.py:51-54 is an `elif` guarded by `not shown`, so it can only fire when nothing active is displayed. `next_steps_body`'s own docstring (render.py:38-43) promises the opposite: 'Says how much it is not showing, whether that is todos below the window or todos that were parked, because a section that hides the rest in silence is worse for the person reading it than one that points at the index.'",
+      "failure_scenario": "Verified by probe. Three active and ten parked todos render a README Next steps section listing the three with no mention of the ten, so the human reading README.md gets exactly the silence the docstring argues against. Mitigated, not hidden: `resume` reports both counts and lists the parked entries (thread.py:110-129), so only the README view loses it.",
+      "fix": "Make the two notes independent rather than exclusive, appending a parked note whenever `parked` is non-zero, or narrow the docstring to what the code does. Prefer the former: the docstring is making the better argument."
+    },
+    {
+      "file": "lib/ai_workspace/threads/v2/ops.py",
+      "line": 537,
+      "severity": "cleanup",
+      "category": "stale-docstring",
+      "verdict": "CONFIRMED",
+      "sources": ["claude-code-review"],
+      "mechanism": "`save_session`'s docstring still reads 'A session that dies before this still leaves its stub and a record of what it touched.' This diff deleted the stub mechanism outright: STUB_MARKER, note_created and the '## Created during this session' section are gone, and `ensure_stub` was split into `next_id` and `ensure_indexed`. SKILL.md and session.py were both updated; this copy was missed.",
+      "failure_scenario": "A reader, human or agent, trusts the docstring and expects a partial session to have left a recoverable stub on disk. Nothing writes one, so they look for a file that cannot exist. No runtime consequence.",
+      "fix": "Delete the sentence, or replace it with what now happens: session.save writes the file before indexing it, so a failure leaves no dangling index entry."
+    },
+    {
+      "file": "lib/ai_workspace/threads/v2/index.py",
+      "line": 37,
+      "severity": "cleanup",
+      "category": "unenforced-invariant",
+      "verdict": "CONFIRMED",
+      "sources": ["deep-review:testing"],
+      "mechanism": "The comment above ORDERED (index.py:32-37) asserts 'Nothing may re-sort one', but nothing enforces that. `add` (index.py:220-236) is an ordinary public function that accepts kind='todos' with retired=False, and 12 call sites in tests/test_schema_v2.py and tests/test_migrate.py do exactly that. The source module's claim is therefore prose, not a guarantee. NOTE, correcting the reporting module: `add` does NOT date-sort the existing list. It scans back from the end while `entries[at-1].id > entry.id` and inserts there, explicitly 'rather than silently reordering lines nobody asked about' (index.py:228-230). The real consequence of misuse is a new todo landing at a position decided by id comparison against a list that is not in id order, so it is misplaced, not destructive.",
+      "failure_scenario": "A future operation or migration helper appends a todo with `idx.add(thread.dir, 'todos', entry)` instead of the read/insert/write at ops.py:358-377. The new todo lands at an arbitrary position relative to the user's priority order rather than where the caller intended, and nothing in the test suite objects, because the suite itself uses that call shape for live todos.",
+      "fix": "Add a layering guard in the style of tests/test_layering.py: walk lib/ai_workspace/**/*.py with ast and assert no `idx.add`/`index.add` call passes a literal in `idx.ORDERED` as `kind` without `retired=True`. Cheaper to keep honest than the prose, and AGENTS.md already asks for guards to be verified by breaking them."
+    },
+    {
+      "file": "tests/test_v2_ops.py",
+      "line": 987,
+      "severity": "cleanup",
+      "category": "vacuous-test",
+      "verdict": "CONFIRMED",
+      "sources": ["deep-review:testing"],
+      "mechanism": "`test_readme_always_equals_the_projection` claims the README section always equals `render.next_steps_body(d)`, but it extracts the section as `split('## Next steps\\n\\n')[1].split('\\n\\n')[0]`, which is the first paragraph only, and it uses exactly two todos. `next_steps_body` appends its hidden and parked notes as a second paragraph (render.py:49-54), so with two todos there is no tail and the comparison is trivially satisfied.",
+      "failure_scenario": "A change to how the hidden-count tail is composed, dropping it, or rendering it into the README but not into `next_steps_body` or the reverse, leaves the README and the projection out of step for any thread with more than five todos. The one test that exists to catch exactly that stays green, because it never looks at the paragraph where the divergence lives.",
+      "fix": "Slice the section to the next `^## ` heading rather than the next blank line, and parametrize over three states: two active todos, six active todos to exercise the 'more in todos' tail, and three parked with none active to exercise the parked tail."
+    },
+    {
+      "file": "lib/ai_workspace/threads/v2/ops.py",
+      "line": [188, 192],
+      "severity": "cleanup",
+      "category": "test-coverage",
+      "verdict": "CONFIRMED",
+      "sources": ["deep-review:testing"],
+      "mechanism": "The amend path mutates the live entry in place, checks representability, and restores on failure: `was, entry.description = entry.description, description` then `entry.description = was` on refusal (ops.py:189-192). The restore is correct but unexercised. The only test of a rejected amendment, `test_the_refusal_leaves_the_previous_description_intact`, trips the length cap at ops.py:169-170, which returns before any entry is touched, so it does not reach this branch.",
+      "failure_scenario": "Reordering these four lines so the write happens before the check, or adding a second mutated field without a matching restore, puts an unparseable line into artifacts-index.md during an amend, losing the entry on the next read. Nothing in the suite fails.",
+      "fix": "Index an artifact with a good description, re-index it with a description containing a line break, and assert UNREPRESENTABLE, the in-memory description unchanged, and the index file byte-identical to before the call."
+    },
+    {
+      "file": "lib/ai_workspace/threads/v2/ops.py",
+      "line": [210, 215],
+      "severity": "cleanup",
+      "category": "test-coverage",
+      "verdict": "CONFIRMED",
+      "sources": ["deep-review:testing"],
+      "mechanism": "For an indexed file the link is derived from the filename rather than from caller prose, so the realistic breaker is a filename containing ')' or ']', which macOS and browsers produce by default ('Screenshot (1).png'). Every UNREPRESENTABLE test is on a todo title, a todo link or an artifact description; none uses a filename-derived link. VERIFIED CORRECT TODAY: a probe of `index_file('./artifacts/Screenshot (1).png')` returns {\"error\": \"UNREPRESENTABLE\", \"detail\": \"link cannot be read back from a line\"}, writes no index file, and leaves the artifacts index empty. So this is a missing regression test, not a live bug.",
+      "failure_scenario": "If the representability check were moved below `idx.add`, or a later kind routed around it, indexing that file would write a line whose `[^)]*` link group stops at the first ')' and whose tail then fails to parse, so the entry would vanish from the user's index on the next read. The guard that prevents this has no test naming it.",
+      "fix": "In TestIndexDirectory, create './artifacts/Screenshot (1).png' beside a well-named file, assert index_file on it returns UNREPRESENTABLE with 'link' in the detail and leaves the index empty, and assert index_directory reports it as skipped while still indexing its neighbour."
+    }
+  ]
+}

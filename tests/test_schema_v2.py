@@ -197,6 +197,20 @@ class TestIndex:
         assert [e.id for e in idx.read(d, "todos")] == [
             "20260101-c", "20260101-a", "20260101-b"]
 
+    def test_a_legacy_window_naming_one_id_twice_yields_one_entry(self, tmp_path):
+        """`set_window` checked that every id was known and never that they
+        were distinct, so a stored block can name one twice. Read as written
+        that put the same entry in the list twice, and because an index is
+        rendered whole rather than edited, the next write made the duplicate
+        permanent and retiring one left the other."""
+        d = _v2_thread(tmp_path)
+        _todos(d, ("a", "active"), ("b", "active"))
+        path = idx.index_path(d, "todos")
+        path.write_text(
+            "---\nwindows:\n  next_steps: [20260101-b, 20260101-b, 20260101-a]\n---\n"
+            + path.read_text())
+        assert [e.id for e in idx.read(d, "todos")] == ["20260101-b", "20260101-a"]
+
     def test_a_legacy_window_survives_a_tab_no_parser_accepts(self, tmp_path):
         """One real thread's block is indented with a tab, which is why this is
         read with a pattern rather than a YAML parser."""

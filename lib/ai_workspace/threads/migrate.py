@@ -150,6 +150,8 @@ def audit(original: Path, converted: Path) -> str:
     for kind in idx.TYPES:
         entries = idx.read(converted, kind)
         for entry in entries:
+            if idx.external(entry.link):
+                continue
             if not (converted / entry.link.lstrip("./")).exists():
                 problems.setdefault("dangling", {}).setdefault(kind, []).append(entry.link)
         if kind in idx.ORDERED:

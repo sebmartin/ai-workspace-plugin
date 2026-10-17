@@ -46,12 +46,16 @@ def next_steps_body(thread_dir: Path) -> str:
     active = todos_mod.next_up(entries)
     shown = todos_mod.window(entries)
     lines = [e.render() for e in shown] or ["- None"]
+    # Both, when both are true. Either one alone leaves the other hidden in
+    # silence, and with nothing active `- None` on its own reads as a thread
+    # with nothing left to do, where everything was set aside on purpose.
+    notes = []
     if hidden := len(active) - len(shown):
-        lines.append(f"\n{hidden} more in [todos](./todos-index.md).")
-    elif not shown and (parked := len(todos_mod.parked(entries))):
-        # Otherwise `- None` on its own reads as a thread with nothing left to
-        # do, where everything was set aside on purpose.
-        lines.append(f"\n{parked} parked in [todos](./todos-index.md).")
+        notes.append(f"{hidden} more")
+    if parked := len(todos_mod.parked(entries)):
+        notes.append(f"{parked} parked")
+    if notes:
+        lines.append(f"\n{' and '.join(notes)} in [todos](./todos-index.md).")
     return "\n".join(lines) + "\n"
 
 
@@ -89,7 +93,9 @@ def render(thread_dir: Path) -> str | None:
     if not pattern.search(text):
         return blocked(thread_dir)
     section = f"## {NEXT_STEPS}\n\n{next_steps_body(thread_dir)}\n"
-    text = pattern.sub(section, text, count=1)
+    # A function replacement, because a string one is read for `\1` and `\d`
+    # escapes, and the section carries titles the user wrote.
+    text = pattern.sub(lambda _: section, text, count=1)
     if "**Indexes**:" not in text:
         text = text.rstrip() + "\n\n---\n\n" + _links_line(thread_dir) + "\n"
     readme.write_text(text)

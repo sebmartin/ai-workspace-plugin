@@ -113,8 +113,8 @@ def spot(entries: list[Entry], place: str) -> Spot:
     return Spot(found if sense == "before" else found + 1)
 
 
-def start(entries: list[Entry], entry_id: str) -> None:
-    """Make this the started todo, and the only one, and put it on top.
+def only_started(entries: list[Entry], entry_id: str) -> None:
+    """Take the started label off every other todo, leaving places alone.
 
     Exactly one, because the state names what is being worked on now. A second
     one leaves the label meaning nothing once a few sessions have each marked
@@ -123,6 +123,11 @@ def start(entries: list[Entry], entry_id: str) -> None:
     for entry in entries:
         if entry.id != entry_id and entry.state == STARTED:
             entry.state = ACTIVE
+
+
+def start(entries: list[Entry], entry_id: str) -> None:
+    """Make this the started todo, and the only one, and put it on top."""
+    only_started(entries, entry_id)
     to_top(entries, entry_id)
 
 

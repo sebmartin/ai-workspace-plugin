@@ -1,6 +1,7 @@
 """Schema 2 write tools: one line per call, always re-rendered, refused on schema 1."""
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -115,6 +116,26 @@ class TestTodos:
         d = _thread(tmp_path)
         assert _reply(add_todo(str(tmp_path), "t", "A", link))["error"] == "OUTSIDE_THREAD"
         assert idx.read(d, "todos") == []
+
+    def test_two_adds_as_started_leave_one_started(self, tmp_path):
+        """`started` names the one thing being worked on, so a second one
+        leaves the label meaning nothing. `set_todo_state` enforced that and
+        `add_todo` implemented only the placement half of it."""
+        d = _thread(tmp_path)
+        add_todo(str(tmp_path), "t", "First", "./todos/a.md", state="started")
+        add_todo(str(tmp_path), "t", "Second", "./todos/b.md", state="started")
+        states = [(e.title, e.state) for e in idx.read(d, "todos")]
+        assert states == [("Second", "started"), ("First", "active")]
+
+    def test_starting_on_add_takes_the_label_without_taking_the_place(self, tmp_path):
+        """A place that was asked for wins over the one the state implies, so
+        clearing the label cannot be done by moving the new todo to the top."""
+        d = _thread(tmp_path)
+        add_todo(str(tmp_path), "t", "First", "./todos/a.md", state="started")
+        add_todo(str(tmp_path), "t", "Second", "./todos/b.md", state="started",
+                 place="end")
+        states = [(e.title, e.state) for e in idx.read(d, "todos")]
+        assert states == [("First", "active"), ("Second", "started")]
 
     def test_an_external_url_is_a_valid_todo_link(self, tmp_path):
         """A todo for an issue or a PR links to it, which is the documented use.
@@ -744,8 +765,44 @@ class TestArtifacts:
         index_file(ws, "t", link, "y" * 400)
         assert idx.read(d, "artifacts")[0].description == "A short one."
 
+    def test_an_unreadable_amendment_restores_the_description_it_replaced(self, tmp_path):
+        """A different branch from the one above. The cap is checked before the
+        entry is touched; this one mutates the live entry, tests it, and puts
+        the old value back, so the restore is the only thing standing between a
+        rejected amendment and an index line that cannot be read.
+        """
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        link = self._artifact(d)
+        index_file(ws, "t", link, "A short one.")
+        before = idx.index_path(d, "artifacts").read_bytes()
+        out = _reply(index_file(ws, "t", link, "one\ntwo"))
+        assert out["error"] == "UNREPRESENTABLE" and "description" in out["detail"]
+        assert idx.read(d, "artifacts")[0].description == "A short one."
+        assert idx.index_path(d, "artifacts").read_bytes() == before
+
 
 class TestIndexDirectory:
+    def test_a_filename_an_index_line_cannot_hold_is_refused(self, tmp_path):
+        """For an indexed file the link comes from the filename, so the
+        realistic breaker is a name a screenshot tool produced. Every other
+        UNREPRESENTABLE test drives it from caller prose, which leaves the
+        guard on the filename path with no test naming it.
+        """
+        d = self._thread_with(tmp_path, "artifacts", ["20260101-fine.md"])
+        (d / "artifacts" / "20260101-Screenshot (1).md").write_text("x\n")
+        out = _reply(index_file(str(tmp_path), "t",
+                                "./artifacts/20260101-Screenshot (1).md", "A shot."))
+        assert out["error"] == "UNREPRESENTABLE" and "link" in out["detail"]
+        assert idx.read(d, "artifacts") == []
+
+    def test_the_sweep_skips_that_file_and_indexes_its_neighbour(self, tmp_path):
+        d = self._thread_with(tmp_path, "artifacts", ["20260101-fine.md"])
+        (d / "artifacts" / "20260101-Screenshot (1).md").write_text("x\n")
+        out = _reply(index_directory(str(tmp_path), "t", "./artifacts"))
+        assert [e.id for e in idx.read(d, "artifacts")] == ["20260101-fine"]
+        assert "20260101-Screenshot (1).md" in json.dumps(out)
+
     def _thread_with(self, tmp_path, kind, names):
         d = _thread(tmp_path)
         (d / kind).mkdir(parents=True, exist_ok=True)
@@ -946,7 +1003,60 @@ class TestRoundTrip:
         assert idx.unrepresentable(entry) == "description cannot be read back from a line"
 
 
+class TestRenderedText:
+    """User text also has to survive the render, not only the index line.
+
+    `TestRoundTrip` above checks that an entry parses back out of a line, and
+    a line is indifferent to backslashes, so none of it can catch a title the
+    renderer chokes on.
+    """
+
+    @pytest.mark.parametrize("title", [
+        r"Fix the \d{4} regex",
+        r"C:\temp\x",
+        r"see \g<id>",
+        r"Escape the \n here",
+    ])
+    def test_a_backslash_in_a_todo_title_survives_the_render(self, tmp_path, title):
+        """Three of these raised out of `re.sub` after the entry was already
+        written, so every later write on the thread raised the same way and no
+        tool could reach the thread again. The fourth rendered a real newline
+        and split the entry in half, which is the quiet one.
+        """
+        d = _thread(tmp_path)
+        assert "error" not in _reply(add_todo(str(tmp_path), "t", title, "./todos/x.md"))
+        assert idx.read(d, "todos")[0].title == title
+        first = (d / "README.md").read_text().split("## Next steps\n\n")[1].split("\n")[0]
+        assert title in first
+
+    def test_a_backslash_in_the_status_survives_the_render(self, tmp_path):
+        """The Status paragraph is substituted the same way, and a save has
+        already written the log and its index entry by the time it runs."""
+        d = _thread(tmp_path)
+        from mcp_server import save_session
+        status = r"Chasing the \d{4} parser bug"
+        out = _reply(save_session(str(tmp_path), "t", "s", "A summary.", "k",
+                                  body="# x\n", status=status))
+        assert "error" not in out
+        assert status in (d / "README.md").read_text()
+
+
 class TestReadmeShape:
+    def test_the_section_names_what_is_hidden_and_what_is_parked(self, tmp_path):
+        """The parked note was an `elif` on nothing being shown, so it could
+        only fire for a thread with no active todos at all. A thread with six
+        active and ten parked mentioned neither the one below the window nor
+        the ten set aside, which is the silence the function's own docstring
+        argues against.
+        """
+        d = _thread(tmp_path)
+        for i in range(6):
+            add_todo(str(tmp_path), "t", f"A{i}", "./s.md")
+        for i in range(10):
+            add_todo(str(tmp_path), "t", f"P{i}", "./s.md", state="parked")
+        from ai_workspace.threads.v2 import render
+        assert "1 more and 10 parked in [todos](./todos-index.md)." in render.next_steps_body(d)
+
     def test_a_v1_readme_is_refused_rather_than_appended_to(self, tmp_path):
         """The Frankenstein case: a real migration hit this and was told it worked.
 
@@ -984,14 +1094,23 @@ class TestReadmeShape:
 
 
 class TestInvariant:
-    def test_readme_always_equals_the_projection(self, tmp_path):
+    @pytest.mark.parametrize("active,parked", [(2, 0), (6, 0), (0, 3), (6, 3)])
+    def test_readme_always_equals_the_projection(self, tmp_path, active, parked):
+        """Sliced to the next heading rather than the next blank line, and run
+        over enough todos to produce a tail. The hidden and parked notes are a
+        second paragraph, so the two-todo case this used to be had no tail and
+        the comparison could not fail however far the two drifted.
+        """
         d = _thread(tmp_path)
         ws = str(tmp_path)
-        add_todo(ws, "t", "A", "./s.md")
-        add_todo(ws, "t", "B", "./s.md")
+        for i in range(active):
+            add_todo(ws, "t", f"A{i}", "./s.md")
+        for i in range(parked):
+            add_todo(ws, "t", f"P{i}", "./s.md", state="parked")
         from ai_workspace.threads.v2 import render
         expected = render.next_steps_body(d)
-        section = (d / "README.md").read_text().split("## Next steps\n\n")[1].split("\n\n")[0]
+        after = (d / "README.md").read_text().split("## Next steps\n\n")[1]
+        section = re.split(r"(?m)^#{2,} ", after)[0]
         assert section.strip() == expected.strip()
 
 

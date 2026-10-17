@@ -1,0 +1,4 @@
+Ignoring 10 permissions.allow entries from .claude/settings.json: this workspace has not been trusted. Run Claude Code interactively here once and accept the trust dialog, or set projects["/Users/seb/src/ai-workspace-plugin"].hasTrustDialogAccepted: true in /Users/seb/.claude.json.
+Permission allow rule (../../.claude/settings.json): Write(/Volumes/sebmartin/ai-workspace/**) is not matched by file permission checks — only Edit(path) rules are. Use Edit(/Volumes/sebmartin/ai-workspace/**) instead (Edit rules cover all file-editing tools).
+Permission allow rule (../../.claude/settings.json): Write(//Volumes/sebmartin/ai-workspace/**) is not matched by file permission checks — only Edit(path) rules are. Use Edit(//Volumes/sebmartin/ai-workspace/**) instead (Edit rules cover all file-editing tools).
+Warning: no stdin data received in 3s, proceeding without it. If piping from a slow command, redirect stdin explicitly: < /dev/null to skip, or wait longer.

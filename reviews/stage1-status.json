@@ -1,0 +1,27 @@
+{
+  "target": "pr#33 (ordered-todo-list -> release/3, head fdf32d4)",
+  "stage1": {
+    "codex": {
+      "status": "skipped",
+      "cause": "operator reported codex unusable; binary present at /opt/homebrew/bin/codex (v0.146.0)"
+    },
+    "claude-code-review": {
+      "status": "failed",
+      "bytes": 0,
+      "cause": "headless `claude -p` did not inherit workspace trust: 'Ignoring 10 permissions.allow entries from .claude/settings.json: this workspace has not been trusted'. Finder ran without its permission allowlist and produced no output."
+    },
+    "claude-security": {
+      "status": "truncated",
+      "bytes": 163,
+      "cause": "terminated by the headless background wait ceiling: 'Background tasks still running after 600s; terminating.' The finder had delegated to its own sub-task, which was still running. Skill does not set CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0."
+    },
+    "data-integrity": {
+      "status": "stalled, relaunched",
+      "cause": "subagent stream watchdog: no progress for 600s, did not recover"
+    },
+    "testing": {
+      "status": "running"
+    }
+  },
+  "consequence": "All external finders are unavailable, so this run degrades to the skill's documented solo fallback (scout + gated modules). It is a PARTIAL review: the correctness and code-quality dimensions the ensemble delegates to the frontier finders were not covered by any reviewer, and cross-tool agreement is unavailable as a confidence signal."
+}

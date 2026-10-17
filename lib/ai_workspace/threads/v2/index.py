@@ -134,6 +134,17 @@ def unrepresentable(entry: Entry) -> str | None:
     return "the line it makes cannot be read back"
 
 
+def external(link: str) -> bool:
+    """Whether this link names something outside the workspace entirely.
+
+    An issue or a PR is a valid todo link, so a reader that resolves links as
+    `thread_dir / link` has to let these past rather than call them missing.
+    One definition, because a writer that accepts a link and an auditor that
+    calls the same link dangling is worse than either rule on its own.
+    """
+    return link.lower().startswith(("http://", "https://"))
+
+
 def is_content(path: Path) -> bool:
     """Whether a directory entry is thread content rather than filesystem noise.
 
@@ -173,7 +184,10 @@ def _window_first(text: str, entries: list[Entry]) -> list[Entry]:
     found = _LEGACY_WINDOW.search(text)
     if not found:
         return entries
-    named = [i.strip() for i in found.group(1).split(",") if i.strip()]
+    # Deduplicated first-seen: `set_window` validated that every id was known
+    # and never that they were distinct, so a stored block may name one twice.
+    named = list(dict.fromkeys(
+        i.strip() for i in found.group(1).split(",") if i.strip()))
     by_id = {e.id: e for e in entries}
     first = [by_id[i] for i in named if i in by_id]
     return first + [e for e in entries if e.id not in set(named)]

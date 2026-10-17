@@ -33,7 +33,11 @@ def _new_id(thread_dir: Path, kind: str, title: str) -> str:
 # artifacts have exactly one in-force state so it needs no deciding, and
 # decisions have three so theirs is read from the file.
 _STATE_FROM_FILE = object()
-_INDEXABLE = {
+# The kinds whose entry is built from a file on disk, which is what
+# `index_file` and `index_directory` do. Not every kind with an index: that is
+# `idx.TYPES`, and it includes todos, whose entry carries a title and a link
+# the user gave and so is written by `add_todo` instead.
+_FILE_KINDS = {
     "sessions": (None, False),
     "decisions": (_STATE_FROM_FILE, False),
     "artifacts": ("current", True),
@@ -162,7 +166,7 @@ def _index_one(thread, link: str, description: str = "",
         return Indexed(""), Refusal("OUTSIDE_THREAD")
 
     kind = relative.parts[0]
-    if kind not in _INDEXABLE:
+    if kind not in _FILE_KINDS:
         return Indexed(""), Refusal("NOT_INDEXABLE", kind)
 
     description = description.strip()
@@ -175,7 +179,7 @@ def _index_one(thread, link: str, description: str = "",
     if not idx.is_content(path):
         return Indexed(""), Refusal("METADATA")
 
-    default_state, takes_description = _INDEXABLE[kind]
+    default_state, takes_description = _FILE_KINDS[kind]
 
     normalised = f"./{relative}"
     if (found := _already_indexed(thread.dir, kind, normalised)) is not None:
@@ -269,7 +273,7 @@ def index_directory(thread, link: str) -> str:
         return json.dumps({"error": "OUTSIDE_THREAD", "detail": link})
 
     kind = relative.parts[0]
-    if kind not in _INDEXABLE:
+    if kind not in _FILE_KINDS:
         return json.dumps({"error": "NOT_INDEXABLE", "detail": kind})
 
     directory = thread.dir / relative
@@ -348,7 +352,7 @@ def add_todo(thread, title: str, link: str, state: str = "active",
         return json.dumps({"error": "LINK_REQUIRED"})
     # Three readers resolve a stored link as `thread.dir / link`, so a link
     # that is neither of these two resolves to nothing on the next machine.
-    external = link.lower().startswith(("http://", "https://"))
+    external = idx.external(link)
     under_the_thread = link.startswith("./") and _inside(link) is not None
     if not (external or under_the_thread):
         return json.dumps({"error": "OUTSIDE_THREAD", "detail": link})
@@ -370,6 +374,9 @@ def add_todo(thread, title: str, link: str, state: str = "active",
         return json.dumps({"error": "UNREPRESENTABLE", "detail": unreadable})
     was = list(entries)
     entries.insert(at, entry)
+    if state == todos_mod.STARTED:
+        # The label, not the placement: `at` above already honoured `place`.
+        todos_mod.only_started(entries, todo_id)
     idx.write(thread.dir, "todos", entries)
     render.render(thread.dir)
     reply: dict = {"id": todo_id}
@@ -534,8 +541,9 @@ def save_session(thread, slug: str, summary: str, keywords: str, body: str,
 
     The incremental tools have already written todos, decisions and artifacts as
     they happened, so a save is down to the session log and the Status
-    paragraph. A session that dies before this still leaves its stub and a
-    record of what it touched.
+    paragraph. The log is written before the index points at it, so a save
+    that dies in between leaves a file the audit calls unindexed rather than
+    an entry that names nothing.
     """
     from ai_workspace.threads.v2 import readme as readme_mod
 

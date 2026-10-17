@@ -1,0 +1,14 @@
+## Review: `ordered-todo-list` (19 commits vs `origin/release/3`)
+
+Replacing the stored `windows:` block with line order as the priority is a clean trade, and the mechanical parts hold up: `staying`/`reordered` index math is correct for all four `place` forms and preserves list length; `idx.add` is never reached for a live `todos` index, so nothing re-sorts the user's order; `unrepresentable` round-tripping against `_LINE_RE` rather than a character table is the right call and catches `]` in a title, `)` in a link, and line breaks anywhere. Baseline is clean: 316 tests pass, ruff clean, pyright clean.
+
+Findings (all confirmed by running the real tools):
+
+- `lib/ai_workspace/threads/v2/ops.py:360` — `add_todo(state="started")` does not clear `started` from the todo that already held it, so two todos end up `started`. `set_state` enforces the single-started invariant via `todos_mod.start`; `add_todo` builds the Entry directly and skips it. The existing test covers only the `set_todo_state` path.
+- `lib/ai_workspace/threads/migrate.py:153` — `audit` resolves every link as a filesystem path, so a todo linked to an `http(s)` URL is reported as `dangling` and `audit_migration` returns `clean: false` on a correct migration. Pre-existing loop, but this diff edits it and blesses `http(s)` links in `add_todo`; it is the same false-positive the new `ORDERED` exemption two lines down exists to avoid.
+- `lib/ai_workspace/threads/v2/index.py:178` — `_window_first` does not de-duplicate the legacy block's ids, so `next_steps: [a, a]` reads one entry twice and the next write makes the duplicate line permanent. The old `set_window` allowed repeats, so such an index can exist.
+- `lib/ai_workspace/threads/v2/render.py:51` — the parked note is an `elif` behind `not shown`, so a README with 3 active and 10 parked todos says nothing about the 10, contradicting `next_steps_body`'s own docstring. `compose`'s heading reports both counts, so only the human-facing view loses it.
+- `lib/ai_workspace/threads/v2/ops.py:537` — `save_session`'s docstring still promises the session stub this diff deleted. SKILL.md and `session.py` were both corrected; this copy was missed.
+- `skills/threads/scripts/mcp_server.py:255` — `set_todo_state` documents `active` as an unpark-only signal, but starting a parked todo also returns it.
+
+One thing I checked and am not reporting: `log_decision` tests `index_file`'s result with `startswith("Error:")`, which no longer matches any reachable refusal from that call (they are all JSON now, and the one bare-string path is `render.blocked`, already called earlier). I could not construct an input that actually reaches an `index_file` refusal there, so it is dead defensive code rather than a live bug — worth tidying if you touch the function, not worth a change on its own.

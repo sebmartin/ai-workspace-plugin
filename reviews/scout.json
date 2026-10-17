@@ -1,0 +1,55 @@
+{
+  "target": "pr#33 (ordered-todo-list -> release/3, head fdf32d4)",
+  "changed_lines": 1917,
+  "verdict": "surfaced",
+  "surfaces": {
+    "persistence": [
+      "lib/ai_workspace/threads/v2/index.py",
+      "lib/ai_workspace/threads/v2/ops.py",
+      "lib/ai_workspace/threads/v2/render.py",
+      "lib/ai_workspace/threads/v2/session.py",
+      "lib/ai_workspace/threads/v2/todos.py",
+      "lib/ai_workspace/threads/v2/thread.py",
+      "lib/ai_workspace/threads/migrate.py",
+      "lib/ai_workspace/threads/__init__.py",
+      "skills/threads/scripts/mcp_server.py",
+      "templates/v2/thread-template.md",
+      "templates/v2/thread-session-template.md"
+    ],
+    "concurrency": [],
+    "auth": [],
+    "untrusted_input": [
+      "lib/ai_workspace/threads/v2/ops.py",
+      "lib/ai_workspace/threads/v2/index.py",
+      "lib/ai_workspace/text.py",
+      "lib/ai_workspace/threads/v2/thread.py",
+      "lib/ai_workspace/threads/migrate.py"
+    ],
+    "tests_missing": [
+      "lib/ai_workspace/threads/migrate.py",
+      "lib/ai_workspace/threads/v2/todos.py"
+    ],
+    "config_only": [
+      ".claude-plugin/plugin.json",
+      ".codex-plugin/plugin.json",
+      "README.md",
+      "skills/threads/SKILL.md",
+      "skills/threads/v2/migrate-from-v1.md"
+    ]
+  },
+  "run": {
+    "finders": [
+      "claude-code-review"
+    ],
+    "modules": [
+      "data-integrity",
+      "testing"
+    ],
+    "security_review": true,
+    "unavailable": [
+      "codex"
+    ]
+  },
+  "short_circuit": null,
+  "notes": "codex binary present but reported unusable by the operator; one default finder dropped, so cross-tool agreement is unavailable as a confidence signal."
+}
