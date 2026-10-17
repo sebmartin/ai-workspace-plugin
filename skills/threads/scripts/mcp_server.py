@@ -181,9 +181,15 @@ def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
     add one only when the user asked for it or agreed to your suggestion. If
     you think something should be a todo, suggest it in your reply.
 
-    Every todo carries a link, always. Use a file under todos/ when the item has
-    state of its own, an external URL when there is an issue or PR, and
-    otherwise the session it came out of.
+    Every todo carries a link, and it has to say what the work is. An
+    external URL works only if it explains the work to do, like an issue whose
+    body is the spec. If the todo merely relates to an issue or PR, don't link
+    it: whoever follows that link lands on separate work, often already closed,
+    and still can't tell what the todo is asking for.
+
+    Write a file under todos/ for those, and for any todo with state of its
+    own. Put the related link inside that file. You can also link the session
+    the todo came out of, if that session says what to do.
 
     The list is in priority order and the new todo goes at the end unless you
     place it. Say where you put it, so the user can move it. Next steps shows

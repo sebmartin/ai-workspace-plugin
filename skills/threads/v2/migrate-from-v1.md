@@ -151,9 +151,11 @@ supersession, to tell which superseded which — the live one declares
 
 ### 5. The rest
 
-**Extract todos** from Next steps, Parked and Open Questions. Each needs a link:
-the session it came from when it has nothing of its own. A todo goes on the end
-of the list and Next steps shows the top five, so add the Next steps items
+**Extract todos** from Next steps, Parked and Open Questions. Each needs a
+link, and the skill's rule applies: link something that says what the work is.
+The session the item came from usually does, so link that. If all you have is an
+issue or PR the item mentions in passing, write a file for the todo instead. A todo goes on
+the end of the list and Next steps shows the top five, so add the Next steps items
 first, in the order the README listed them, and the rest after. Only carry
 something over as parked if the v1 README had it parked, and retire a parked
 entry that is already resolved rather than carrying it.
