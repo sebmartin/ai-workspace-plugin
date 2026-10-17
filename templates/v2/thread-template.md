@@ -9,7 +9,7 @@
 
 ## Status
 
-Where things stand, in a few sentences, written for a person. A save rewrites it when it passes `status`.
+One or two sentences on what changed. Next steps already lists what's next. A save rewrites it when it passes `status`.
 
 ## Next steps
 

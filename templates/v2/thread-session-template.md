@@ -6,8 +6,6 @@ keywords: [comma-separated terms — tools, people, topics, file paths you would
 
 # Session: [Topic] - [YYYY-MM-DD]
 
-## Created during this session
-
 ## Goal
 
 ## Discussion

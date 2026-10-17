@@ -317,3 +317,49 @@ def test_a_schema_imports_only_the_one_directly_below_it():
                         f"{allowed or 'nothing'}"
                     )
     assert not offenders, "\n  ".join(["schema import skipped a level:", *offenders])
+
+
+def test_no_ordered_index_is_appended_to_by_id():
+    """`idx.add` places a new entry by comparing ids, which is right for the
+    three date-ordered kinds and wrong for todos, whose order is the priority
+    the user set. `ORDERED` says "nothing may re-sort one" and nothing enforced
+    it, so the claim was prose.
+
+    Two assertions, because there are two ways in. A literal kind is the one a
+    future call site would be written with. A variable kind reaches `idx.add`
+    only through the indexing path, which is gated by `_FILE_KINDS`, so the
+    second assertion is what keeps that gate shut.
+    """
+    import ast
+
+    from ai_workspace.threads.v2 import index as idx
+    from ai_workspace.threads.v2 import ops
+
+    assert not set(ops._FILE_KINDS) & set(idx.ORDERED), (
+        "an indexable kind is also an ordered one, so the indexing path can "
+        "now reach idx.add with it"
+    )
+
+    offenders = []
+    for path in sorted((REPO / "lib").rglob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text())):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            if not (isinstance(func, ast.Attribute) and func.attr == "add"):
+                continue
+            args = node.args[1:2]
+            if not (args and isinstance(args[0], ast.Constant)):
+                continue
+            if args[0].value not in idx.ORDERED:
+                continue
+            retired = next((k.value for k in node.keywords if k.arg == "retired"), None)
+            if len(node.args) > 3:
+                retired = node.args[3]
+            if not (isinstance(retired, ast.Constant) and retired.value is True):
+                offenders.append(
+                    f"{path.relative_to(REPO)}:{node.lineno}: add(..., "
+                    f"{args[0].value!r}) without retired=True"
+                )
+
+    assert offenders == [], "\n".join(offenders)
