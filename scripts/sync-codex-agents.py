@@ -8,6 +8,9 @@ emits a parallel `.codex-plugin/agents/{name}.toml` (Codex format: TOML with
 The markdown body is the single source of truth for persona prose. This script
 keeps the Codex side in sync without manual duplication. Run it whenever an
 agent .md file changes (e.g. as a pre-commit step or before release).
+
+An agent whose frontmatter has `codex-mirror: false` is Claude Code only: the
+sync skips it and it gets no .toml mirror.
 """
 
 from __future__ import annotations
@@ -68,6 +71,15 @@ def sync_agent(md_path: Path) -> Path:
     return out_path
 
 
+def mirrored_agents(agents_dir: Path) -> list[Path]:
+    """Return the sorted agent .md files that should have a Codex mirror."""
+    return [
+        p
+        for p in sorted(agents_dir.glob("*.md"))
+        if parse_md_agent(p)[0].get("codex-mirror", "").lower() != "false"
+    ]
+
+
 def main() -> int:
     if not AGENTS_DIR.is_dir():
         print(f"error: {AGENTS_DIR} does not exist", file=sys.stderr)
@@ -78,7 +90,11 @@ def main() -> int:
         print(f"error: no .md agent files found in {AGENTS_DIR}", file=sys.stderr)
         return 1
 
+    mirrored = mirrored_agents(AGENTS_DIR)
     for md_path in md_files:
+        if md_path not in mirrored:
+            print(f"skipped agents/{md_path.name} (codex-mirror: false)")
+            continue
         out_path = sync_agent(md_path)
         print(f"wrote {out_path.relative_to(REPO_ROOT)}")
 

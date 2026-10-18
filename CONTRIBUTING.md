@@ -27,11 +27,15 @@ ai-workspace-plugin/
 │   └── agents/                      # Generated from agents/*.md (do not edit)
 ├── agents/                          # Canonical persona source (Claude reads directly)
 │   ├── proponent.md
-│   └── skeptic.md
+│   ├── skeptic.md
+│   └── privacy-checker.md           # Claude Code only, no Codex mirror
 ├── hooks/                           # Session-start hook
 ├── skills/                          # User-invocable skills (shared by both CLIs)
 │   ├── debate/SKILL.md
 │   ├── init/SKILL.md
+│   ├── privacy-check/
+│   │   ├── SKILL.md
+│   │   └── allow-list.md
 │   └── threads/
 │       ├── SKILL.md
 │       └── scripts/mcp_server.py    # Tool declarations; delegates to lib/ai_workspace/
@@ -50,8 +54,10 @@ ai-workspace-plugin/
 │   ├── settings.json.template       # Claude-only permission allowlist
 │   └── ...
 ├── scripts/
-│   └── sync-codex-agents.py         # Regenerates .codex-plugin/agents/*.toml
-├── tests/test_mcp_server.py
+│   ├── sync-codex-agents.py         # Regenerates .codex-plugin/agents/*.toml
+│   └── privacy_check_regression.py  # Runs the privacy checker over the regression cases
+├── tests/                           # test_mcp_server.py, test_server_launch.py, test_layering.py, test_codex_packaging.py, test_privacy_check.py
+│   └── fixtures/privacy-check-cases.json
 ├── docs/examples/                   # User walkthroughs
 ├── AGENTS.md                        # Repo instructions (vendor-neutral)
 ├── CLAUDE.md                        # One-line "@AGENTS.md" for Claude
@@ -147,8 +153,25 @@ codex
    ```bash
    python3 scripts/sync-codex-agents.py
    ```
-3. Commit both the `.md` source and the generated `.toml` files together. Do not hand-edit the `.toml` files; they are generated artifacts.
+3. Commit both the `.md` source and the generated `.toml` files together. Do not hand-edit the `.toml` files; they are generated artifacts. An agent with `codex-mirror: false` in its frontmatter is Claude Code only: the sync skips it and it has no `.toml`.
 4. Write prose vendor-neutrally so the same persona works under both CLIs' subagent systems.
+
+## Privacy check regression set
+
+`tests/fixtures/privacy-check-cases.json` holds fictional labelled cases (text that leaks private context, and text that does not). `scripts/privacy_check_regression.py` runs each one through the shipped `privacy-checker` agent via the `claude` CLI and reports missed leaks and false positives.
+
+Run it whenever `agents/privacy-checker.md` or `skills/privacy-check/allow-list.md` changes. On demand only: it calls a model and costs money, so it is not part of the unit tests.
+
+```bash
+uv run python3 scripts/privacy_check_regression.py --half tune
+uv run python3 scripts/privacy_check_regression.py --half holdout --runs 3   # a measurement
+```
+
+The bar on the held-out half: every leak caught and at most one false positive, in every run.
+
+Tune against the tune half only. Use the held-out half to measure, never to tune.
+
+**Adding cases.** When a real leak is missed or a real false positive turns up, rewrite it into a fictional equivalent (invented names, products, events) that keeps the pattern, then add it with a new unique `id` and the right `kind`, `category` and `label`. Never add real text to the fixture; this repository is public. Adding cases can move other cases between halves, so after adding cases treat the next held-out run as a fresh measurement.
 
 ## Pull Request Guidelines
 

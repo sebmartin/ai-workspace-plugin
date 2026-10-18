@@ -35,13 +35,17 @@ ai-workspace-plugin/                # Plugin repository
 │       └── skeptic.toml            # Generated from agents/skeptic.md
 ├── agents/                         # Canonical persona source (Claude reads directly)
 │   ├── proponent.md
-│   └── skeptic.md
+│   ├── skeptic.md
+│   └── privacy-checker.md          # Claude Code only, no Codex mirror
 ├── hooks/                          # Session-start hook
 │   ├── hooks.json
 │   └── session-start-message.md
 ├── skills/                         # User-invocable skills (shared by both CLIs)
 │   ├── debate/SKILL.md
 │   ├── init/SKILL.md
+│   ├── privacy-check/
+│   │   ├── SKILL.md
+│   │   └── allow-list.md
 │   └── threads/
 │       ├── SKILL.md
 │       └── scripts/mcp_server.py   # Tool declarations; delegates to lib/ai_workspace/
@@ -62,8 +66,10 @@ ai-workspace-plugin/                # Plugin repository
 │   ├── thread-session-template.md
 │   └── decision-template.md
 ├── scripts/
-│   └── sync-codex-agents.py        # Regenerates .codex-plugin/agents/*.toml from agents/*.md
-├── tests/                          # test_mcp_server.py, test_server_launch.py, test_layering.py, test_codex_packaging.py
+│   ├── sync-codex-agents.py        # Regenerates .codex-plugin/agents/*.toml from agents/*.md
+│   └── privacy_check_regression.py # Runs the privacy checker over the regression cases
+├── tests/                          # test_mcp_server.py, test_server_launch.py, test_layering.py, test_codex_packaging.py, test_privacy_check.py
+│   └── fixtures/privacy-check-cases.json  # Fictional regression cases
 ├── docs/examples/                  # Walkthroughs for users
 ├── AGENTS.md                       # This file (vendor-neutral repo instructions)
 ├── CLAUDE.md                       # One-line "@AGENTS.md" for Claude Code
@@ -105,6 +111,7 @@ One source tree serves both CLIs. Maximum deduplication:
 **Agents (subagents):**
 - Canonical source: `agents/{name}.md` (Claude format: YAML frontmatter + markdown body)
 - Mirrors for Codex: `.codex-plugin/agents/{name}.toml` (generated via `scripts/sync-codex-agents.py`)
+- An agent with `codex-mirror: false` in its frontmatter is Claude Code only: the sync skips it and it has no `.toml`
 - `proponent` and `skeptic` are used by the `/debate` skill
 - On Claude Code, additional specialists ship in `tech-expert-agents@sebmartin`. Codex cannot bundle subagents in a plugin yet; users install specialist `.toml` files into `~/.codex/agents/` manually.
 
@@ -116,7 +123,7 @@ One source tree serves both CLIs. Maximum deduplication:
 
 1. **Read before modifying** - Always read files before editing them
 2. **Follow existing patterns** - Match the style and structure of existing code
-3. **Regenerate Codex agents after editing `agents/*.md`** - Run `python3 scripts/sync-codex-agents.py` and commit both the `.md` source and the `.toml` mirror together
+3. **Regenerate Codex agents after editing `agents/*.md`** - Run `python3 scripts/sync-codex-agents.py` and commit both the `.md` source and the `.toml` mirror together. An agent with `codex-mirror: false` in its frontmatter is Claude Code only; the sync skips it and it has no `.toml`
 4. **Run the tests** - `uv run --with pytest --with-requirements skills/threads/scripts/mcp_server.py python3 -m pytest tests/ -q`. That reads the server's own dependency block, so a bare `pytest` will not work and neither will a hand-written package list that drifts from it.
 5. **Lint and type-check before pushing** - both must be clean, and there is no CI to catch it if they are not:
    ```
