@@ -684,6 +684,48 @@ class TestTodos:
         assert "file_unchanged" not in _reply(
             retire_todo(str(tmp_path), "t", todo_id, "done"))
 
+    def test_a_body_line_that_looks_like_the_field_is_left_alone(self, tmp_path):
+        """The frontmatter is set as a field, so the body is never searched.
+
+        A whole-file text replace rewrote a line inside a fenced block and
+        reported success, leaving the frontmatter with no state at all.
+        """
+        d = _thread(tmp_path)
+        f = d / "todos" / "20260101-x.md"
+        f.write_text(
+            "---\ntitle: Document the template\n---\n\n"
+            "```yaml\nstate: active\n```\n")
+        todo_id = _reply(add_todo(str(tmp_path), "t", "X", "./todos/20260101-x.md"))["id"]
+        out = _reply(retire_todo(str(tmp_path), "t", todo_id, "done"))
+        assert out["file_unchanged"] == "./todos/20260101-x.md"
+        assert "state: active" in f.read_text()
+
+    def test_the_rest_of_the_frontmatter_survives_the_write(self, tmp_path):
+        """Key order and quoting are kept, so a state change is a one-line
+        diff rather than a reordered block."""
+        d = _thread(tmp_path)
+        f = d / "todos" / "20260101-x.md"
+        f.write_text('---\ntitle: Pick X\nstate: active\n'
+                     'summary: "Chose X: it is simplest."\n---\n\n# Pick X\n')
+        todo_id = _reply(add_todo(str(tmp_path), "t", "X", "./todos/20260101-x.md"))["id"]
+        retire_todo(str(tmp_path), "t", todo_id, "done")
+        got = f.read_text()
+        assert "state: done" in got
+        assert got.index("title:") < got.index("state:") < got.index("summary:")
+        assert '"Chose X: it is simplest."' in got
+        assert got.rstrip().endswith("# Pick X")
+
+    def test_an_unrecognised_value_in_the_file_is_still_replaced(self, tmp_path):
+        """The old code matched the field *and* a known value, so a file
+        holding anything else was skipped."""
+        d = _thread(tmp_path)
+        f = d / "todos" / "20260101-x.md"
+        f.write_text("---\ntitle: X\nstate: whatever\n---\n\n# X\n")
+        todo_id = _reply(add_todo(str(tmp_path), "t", "X", "./todos/20260101-x.md"))["id"]
+        assert "file_unchanged" not in _reply(
+            retire_todo(str(tmp_path), "t", todo_id, "done"))
+        assert "state: done" in f.read_text()
+
     def test_retiring_a_todo_tracked_elsewhere_writes_no_file(self, tmp_path):
         """An external link names no file, so the sync has nothing to open."""
         _thread(tmp_path, stubs=False)

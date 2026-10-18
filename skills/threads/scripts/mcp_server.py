@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.12"
-# dependencies = ["mcp>=2", "python-frontmatter"]
+# dependencies = ["mcp>=2", "python-frontmatter", "ruamel.yaml"]
 # ///
 """Threads MCP Server - the tool surface.
 

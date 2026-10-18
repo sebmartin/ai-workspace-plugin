@@ -14,7 +14,7 @@ from datetime import date
 from pathlib import Path, PurePosixPath
 from typing import NamedTuple
 
-from ai_workspace.text import split_frontmatter, yaml_value
+from ai_workspace.text import set_frontmatter_field, split_frontmatter, yaml_value
 from ai_workspace.threads.v2 import ids as ids_mod
 from ai_workspace.threads.v2 import index as idx
 from ai_workspace.threads.v2 import render, session
@@ -407,7 +407,7 @@ def retire_todo(thread, todo_id: str, state: str) -> str:
     entry = idx.find(idx.read(thread.dir, "todos"), todo_id)
     if error := idx.retire(thread.dir, "todos", todo_id, state):
         return json.dumps(error)
-    stale = _sync_file_state(thread.dir, entry, "todos", state) if entry else ""
+    stale = _sync_file_state(thread.dir, entry, state) if entry else ""
     render.render(thread.dir)
     reply: dict = {"id": todo_id}
     if stale:
@@ -415,23 +415,23 @@ def retire_todo(thread, todo_id: str, state: str) -> str:
     return json.dumps(reply)
 
 
-def _sync_file_state(thread_dir: Path, entry, kind: str, state: str) -> str:
-    """Rewrite the entry file's `state:` to match the index, so an entry found
+def _sync_file_state(thread_dir: Path, entry, state: str) -> str:
+    """Set the entry file's own `state:` to match the index, so an entry found
     by grep says what it is.
 
-    Returns the link of a file it could not update, or "". A file holding no
-    recognised `state:` line now disagrees with the index, and nothing else
-    would say so. An external link names no file, which is not a failure.
+    Returns the link of a file it could not update, or "". A file whose
+    frontmatter has no `state:` field now disagrees with the index, and
+    nothing else would say so, which includes a file written when the field
+    was called `status:`. An external link names no file, which is not a
+    failure.
     """
     path = _entry_file(thread_dir, entry.link)
     if path is None:
         return ""
-    text = path.read_text()
-    for live in idx.IN_FORCE[kind]:
-        if f"state: {live}" in text:
-            path.write_text(text.replace(f"state: {live}", f"state: {state}", 1))
-            return ""
-    return entry.link
+    try:
+        return "" if set_frontmatter_field(path, "state", state) else entry.link
+    except ValueError:
+        return entry.link
 
 
 def set_state(thread, kind: str, entry_id: str, state: str) -> str:
@@ -459,7 +459,7 @@ def set_state(thread, kind: str, entry_id: str, state: str) -> str:
         elif state == todos_mod.ACTIVE and was == todos_mod.PARKED:
             todos_mod.to_end(entries, entry_id)
     idx.write(thread.dir, kind, entries)
-    stale = _sync_file_state(thread.dir, entry, kind, state)
+    stale = _sync_file_state(thread.dir, entry, state)
     render.render(thread.dir)
     reply: dict = {"id": entry_id}
     if stale:
@@ -555,7 +555,7 @@ def retire_decision(thread, decision_id: str, state: str) -> str:
     entry = idx.find(entries, decision_id)
     if error := idx.retire(thread.dir, "decisions", decision_id, state):
         return json.dumps(error)
-    stale = _sync_file_state(thread.dir, entry, "decisions", state) if entry else ""
+    stale = _sync_file_state(thread.dir, entry, state) if entry else ""
     render.render(thread.dir)
     reply: dict = {"id": decision_id}
     if stale:

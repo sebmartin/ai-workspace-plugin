@@ -1,9 +1,48 @@
 """Reading a markdown file's YAML frontmatter. Independent of any schema."""
 
+import io
 from pathlib import Path
 
 import frontmatter
 import yaml
+from frontmatter.default_handlers import YAMLHandler
+from ruamel.yaml import YAML
+
+# PyYAML alphabetises keys and drops quoting on dump, so a file written back
+# through it comes out reordered. ruamel keeps both.
+_ROUND_TRIP = YAML()
+_ROUND_TRIP.preserve_quotes = True
+
+
+class _Handler(YAMLHandler):
+    """`frontmatter`'s own handler, dumping through ruamel."""
+
+    def load(self, fm, **kwargs):
+        return _ROUND_TRIP.load(fm)
+
+    def export(self, metadata, **kwargs):
+        out = io.StringIO()
+        _ROUND_TRIP.dump(metadata, out)
+        return out.getvalue().rstrip("\n")
+
+
+def set_frontmatter_field(path: Path, key: str, value: str) -> bool:
+    """Set one frontmatter field in place. False if the file has no such field.
+
+    The body is untouched because nothing here reads it: `frontmatter` splits
+    it off and hands it back unexamined, so a line in the body that looks like
+    the field cannot be hit. Raises ValueError on frontmatter that does not
+    parse, as `split_frontmatter` does.
+    """
+    try:
+        post = frontmatter.loads(path.read_text(), handler=_Handler())
+    except yaml.YAMLError as e:
+        raise ValueError(f"Frontmatter in {path} is not valid YAML. {e}") from e
+    if not isinstance(post.metadata, dict) or key not in post.metadata:
+        return False
+    post[key] = value
+    path.write_text(frontmatter.dumps(post, handler=_Handler()) + "\n")
+    return True
 
 
 def split_frontmatter(text: str, source: Path | str | None = None) -> tuple[dict, str]:
