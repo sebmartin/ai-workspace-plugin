@@ -8,6 +8,10 @@ disable-model-invocation: true
 
 Advisory check of the wording of text that is about to leave the workspace. Invoked as `/ai-workspace:privacy-check [text]`.
 
+The rule it checks against is **Thread privacy is this plugin's invariant**, in the threads skill. Two things are private there and the check covers both: the thread itself, meaning that it exists, its name, and the id or title of anything in it; and what it holds. The checker carries those criteria inline rather than reading them, because it runs without tools, so a change to the rule has to be made in both places.
+
+This check is advisory and manually invoked. It does not gate anything, and passing it is not permission: the invariant applies whether or not the check was run.
+
 ## Claude Code only
 
 If you cannot spawn the `ai-workspace:privacy-checker` subagent (you are not Claude Code), reply with exactly this line and stop:
