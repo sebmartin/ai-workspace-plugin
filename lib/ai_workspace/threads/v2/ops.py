@@ -102,6 +102,21 @@ def _inside(link: str) -> PurePosixPath | None:
     return relative
 
 
+def _entry_file(thread_dir: Path, link: str) -> Path | None:
+    """The file an index link names, or None when it names anything else.
+
+    An external URL names no file, and neither does a path that escapes the
+    thread, so both answer None rather than a path that cannot be read.
+    """
+    if idx.external(link):
+        return None
+    relative = _inside(link)
+    if relative is None:
+        return None
+    path = thread_dir / relative
+    return path if path.is_file() else None
+
+
 def _already_indexed(thread_dir: Path, kind: str, link: str):
     """The entry already covering this file, wherever it lives, or None.
 
@@ -353,9 +368,14 @@ def add_todo(thread, title: str, link: str, state: str = "active",
     # Three readers resolve a stored link as `thread.dir / link`, so a link
     # that is neither of these two resolves to nothing on the next machine.
     external = idx.external(link)
-    under_the_thread = link.startswith("./") and _inside(link) is not None
-    if not (external or under_the_thread):
+    relative = _inside(link) if link.startswith("./") else None
+    if not (external or relative is not None):
         return json.dumps({"error": "OUTSIDE_THREAD", "detail": link})
+    # Write the file, then add the todo. An entry pointing at nothing renders
+    # into Next steps and the migration audit reports it as dangling, and
+    # `index_file` already refuses the same situation.
+    if relative is not None and not (thread.dir / relative).exists():
+        return json.dumps({"error": "MISSING", "detail": link})
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
 
@@ -388,10 +408,31 @@ def add_todo(thread, title: str, link: str, state: str = "active",
 def retire_todo(thread, todo_id: str, state: str) -> str:
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
+    entry = idx.find(idx.read(thread.dir, "todos"), todo_id)
     if error := idx.retire(thread.dir, "todos", todo_id, state):
         return json.dumps(error)
+    if entry:
+        _sync_file_state(thread.dir, entry, "todos", "state", state)
     render.render(thread.dir)
     return json.dumps({"id": todo_id})
+
+
+def _sync_file_state(thread_dir: Path, entry, kind: str, field: str,
+                     state: str) -> None:
+    """Rewrite the entry file's own state field to match the index.
+
+    So that an entry found by grep or in a file browser says what it is
+    without depending on which index led there. A retired todo whose file
+    still reads `state: active` is the failure this prevents.
+    """
+    path = _entry_file(thread_dir, entry.link)
+    if path is None:
+        return
+    text = path.read_text()
+    for live in idx.IN_FORCE[kind]:
+        if f"{field}: {live}" in text:
+            path.write_text(text.replace(f"{field}: {live}", f"{field}: {state}", 1))
+            return
 
 
 def set_state(thread, kind: str, entry_id: str, state: str) -> str:
@@ -512,16 +553,8 @@ def retire_decision(thread, decision_id: str, state: str) -> str:
     entry = idx.find(entries, decision_id)
     if error := idx.retire(thread.dir, "decisions", decision_id, state):
         return json.dumps(error)
-    # Keep the file's own status in step, so a decision found by grep or in a
-    # file browser says what it is without depending on which index led there.
     if entry:
-        path = thread.dir / entry.link.lstrip("./")
-        if path.is_file():
-            text = path.read_text()
-            for live in idx.IN_FORCE["decisions"]:
-                if f"status: {live}" in text:
-                    path.write_text(text.replace(f"status: {live}", f"status: {state}", 1))
-                    break
+        _sync_file_state(thread.dir, entry, "decisions", "status", state)
     render.render(thread.dir)
     return json.dumps({"id": decision_id})
 

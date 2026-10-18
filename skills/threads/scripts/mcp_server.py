@@ -181,15 +181,17 @@ def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
     add one only when the user asked for it or agreed to your suggestion. If
     you think something should be a todo, suggest it in your reply.
 
-    Every todo carries a link, and it has to say what the work is. An
-    external URL works only if it explains the work to do, like an issue whose
-    body is the spec. If the todo merely relates to an issue or PR, don't link
-    it: whoever follows that link lands on separate work, often already closed,
-    and still can't tell what the todo is asking for.
+    Every todo carries a link, and it names the record of this todo. When the
+    work is tracked in an external system, link its item there, because the
+    item is the todo. Otherwise write a file under todos/ and link the file.
 
-    Write a file under todos/ for those, and for any todo with state of its
-    own. Put the related link inside that file. You can also link the session
-    the todo came out of, if that session says what to do.
+    Never link something the todo merely relates to, such as a PR it mentions
+    or the session it came out of. Whoever follows that link lands on separate
+    work, often already finished, and still can't tell what the todo is asking
+    for. Those belong inside the todo file under `## Links`.
+
+    Write the file before calling this. A `./` path with no file behind it is
+    refused.
 
     The list is in priority order and the new todo goes at the end unless you
     place it. Say where you put it, so the user can move it. Next steps shows
@@ -214,12 +216,13 @@ def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
         workspace_dir: The tracked workspace path from session context.
         thread_name: Name of the thread (kebab-case).
         title: Short label for the todo.
-        link: A path under the thread starting with `./`, such as
-            ./todos/<id>.md, or an `http(s)` URL. Never omit; use the
-            originating session if nothing else. Anything else is refused,
-            because the workspace is not mounted at the same place on every
-            machine that resumes the thread, so an absolute path, a `~` and a
-            bare relative path all resolve to nothing on the next one.
+        link: The record of this todo. Either a path under the thread
+            starting with `./`, such as ./todos/YYYYMMDD-slug.md, which must
+            already exist, or the `http(s)` URL of the todo's own item in an
+            external tracker. Anything else is refused, because the workspace
+            is not mounted at the same place on every machine that resumes the
+            thread, so an absolute path, a `~` and a bare relative path all
+            resolve to nothing on the next one.
         state: `active`, `started` for what is being worked on now, which
             puts it at the top, or `parked` for deliberately not now.
         place: Where it goes. `top` for something to do next, such as a piece

@@ -49,7 +49,7 @@ def _isolated_config_dir(tmp_path, monkeypatch):
     monkeypatch.setenv("AI_WORKSPACE_CONFIG_DIR", str(tmp_path / "_config"))
 
 
-def _thread(tmp_path, name="t", schema=2):
+def _thread(tmp_path, name="t", schema=2, stubs=True):
     d = tmp_path / "threads" / name
     for sub in ("sessions", "decisions", "artifacts", "attachments", "todos"):
         (d / sub).mkdir(parents=True)
@@ -57,6 +57,15 @@ def _thread(tmp_path, name="t", schema=2):
         "# Thread: t\n\n**Started**: 2026-01-01\n\n## Status\n\nx\n\n"
         "## Next steps\n\n- None\n\n## About\n\ny\n"
     )
+    # A todo's link must name a file that exists, so the throwaway links the
+    # todo tests pass are real files here.
+    # A todo's link has to name a file that exists, so the throwaway links the
+    # todo tests pass are real files. Opt out where a test counts what is in a
+    # directory, since a stub would be one more entry than it expects.
+    if stubs:
+        for stub in ("s.md", "x.md", "sessions/s.md", "sessions/20260101-s.md",
+                     "todos/a.md", "todos/b.md", "todos/x.md"):
+            (d / stub).write_text("stub\n")
     if schema == 2:
         marker.write(d, 2)
     return d
@@ -138,10 +147,11 @@ class TestTodos:
         assert states == [("First", "active"), ("Second", "started")]
 
     def test_an_external_url_is_a_valid_todo_link(self, tmp_path):
-        """A todo for an issue or a PR links to it, which is the documented use.
+        """A todo tracked in an external system links its item there.
 
         The scheme is matched without regard to case, because a capital is what
-        a person pastes and the accepted set is closed either way.
+        a person pastes and the accepted set is closed either way. Whether that
+        URL is the right one is judgement the skill holds; this is the shape.
         """
         d = _thread(tmp_path)
         urls = [
@@ -597,6 +607,51 @@ class TestTodos:
         assert _reply(add_todo(str(tmp_path), "t", "A", "./s.md", "banana"))["error"] == "STATE_UNKNOWN"
 
 
+    def test_a_todo_whose_file_was_never_written_is_refused(self, tmp_path):
+        """Write the file, then add the todo.
+
+        An entry pointing at nothing renders into Next steps and the migration
+        audit reports it as dangling, and `index_file` already refuses the same
+        situation. It was mostly unreachable while the usual link was an
+        existing session; it is the normal path now that the file is.
+        """
+        d = _thread(tmp_path, stubs=False)
+        out = _reply(add_todo(str(tmp_path), "t", "A", "./todos/20260101-nope.md"))
+        assert out["error"] == "MISSING"
+        assert out["detail"] == "./todos/20260101-nope.md"
+        assert idx.read(d, "todos") == []
+
+    def test_an_external_link_is_added_without_a_file_behind_it(self, tmp_path):
+        """A tracker item is the record and there is no local file to check."""
+        d = _thread(tmp_path, stubs=False)
+        out = _reply(add_todo(str(tmp_path), "t", "A",
+                              "https://example.com/owner/repo/issues/1"))
+        assert "error" not in out
+        assert len(idx.read(d, "todos")) == 1
+
+    def test_retiring_a_todo_updates_the_state_in_its_own_file(self, tmp_path):
+        """So a todo found by grep says what it is, as a decision already does.
+
+        Retiring used to touch only the index, so a finished todo's file read
+        `state: active` for good. That was survivable while a todo file was the
+        exception and is not now that it is the normal case.
+        """
+        d = _thread(tmp_path)
+        f = d / "todos" / "20260101-x.md"
+        f.write_text("---\ntitle: X\nstate: active\n---\n\n# X\n")
+        todo_id = _reply(add_todo(str(tmp_path), "t", "X", "./todos/20260101-x.md"))["id"]
+        retire_todo(str(tmp_path), "t", todo_id, "done")
+        assert "state: done" in f.read_text()
+        assert "state: active" not in f.read_text()
+
+    def test_retiring_a_todo_tracked_elsewhere_writes_no_file(self, tmp_path):
+        """An external link names no file, so the sync has nothing to open."""
+        _thread(tmp_path, stubs=False)
+        todo_id = _reply(add_todo(str(tmp_path), "t", "X",
+                                  "https://example.com/i/1"))["id"]
+        assert "error" not in _reply(retire_todo(str(tmp_path), "t", todo_id, "done"))
+
+
 class TestDecisions:
     def test_file_and_index_entry_are_written(self, tmp_path):
         d = _thread(tmp_path)
@@ -804,7 +859,7 @@ class TestIndexDirectory:
         assert "20260101-Screenshot (1).md" in json.dumps(out)
 
     def _thread_with(self, tmp_path, kind, names):
-        d = _thread(tmp_path)
+        d = _thread(tmp_path, stubs=False)
         (d / kind).mkdir(parents=True, exist_ok=True)
         for n in names:
             (d / kind / n).write_text("---\nstatus: locked\n---\nx\n")
@@ -867,7 +922,7 @@ class TestIndexDirectory:
     def test_refusals_are_grouped_by_cause(self, tmp_path):
         """Per-file detail made a report of twenty-four broken decisions
         10,463 characters, nine tenths of it one sentence repeated."""
-        d = _thread(tmp_path)
+        d = _thread(tmp_path, stubs=False)
         (d / "decisions").mkdir(parents=True, exist_ok=True)
         for i in range(24):
             (d / "decisions" / f"202602{i + 1:02d}-broken-{i}.md").write_text(
@@ -886,7 +941,7 @@ class TestIndexDirectory:
 
     def test_one_file_still_gets_the_whole_message(self, tmp_path):
         """The batch names the files; index_file is where the detail lives."""
-        d = _thread(tmp_path)
+        d = _thread(tmp_path, stubs=False)
         (d / "decisions").mkdir(parents=True, exist_ok=True)
         (d / "decisions" / "20260201-x.md").write_text(
             "---\nstatus: locked\nsummary: Lot: subdivides.\n---\nx\n")
@@ -898,7 +953,7 @@ class TestIndexDirectory:
         assert _reply(index_directory(str(tmp_path), "t", "./artifacts"))["undated"] == ["orphan"]
 
     def test_a_path_outside_the_thread_is_refused(self, tmp_path):
-        _thread(tmp_path)
+        _thread(tmp_path, stubs=False)
         for link in ("../../etc", "/etc", "./sessions/nested", "./"):
             assert "error" in _reply(index_directory(str(tmp_path), "t", link)), link
 
@@ -908,7 +963,7 @@ class TestIndexDirectory:
         `._20260125-x.md` sorts before `20260125-x.md`, so the AppleDouble file
         claimed that session's id and the real file was demoted to `-2`.
         """
-        d = _thread(tmp_path)
+        d = _thread(tmp_path, stubs=False)
         (d / "sessions").mkdir(parents=True, exist_ok=True)
         for n in ("20260125-real.md", ".DS_Store", "._20260125-real.md", "._.DS_Store"):
             (d / "sessions" / n).write_text("x\n")
@@ -920,7 +975,7 @@ class TestIndexDirectory:
     def test_a_decision_with_invalid_yaml_is_told_what_is_wrong(self, tmp_path):
         """Blaming a missing status sends the reader to the wrong fix: the
         status is fine, the file just cannot be parsed."""
-        d = _thread(tmp_path)
+        d = _thread(tmp_path, stubs=False)
         (d / "decisions").mkdir(parents=True, exist_ok=True)
         (d / "decisions" / "20260619-lot.md").write_text(
             "---\nstatus: locked\nsummary: Lot 4 579 subdivides: 6 736 633.\n---\nx\n")
@@ -930,21 +985,21 @@ class TestIndexDirectory:
         assert "line 3" in r["detail"]
 
     def test_metadata_is_refused_even_when_named_explicitly(self, tmp_path):
-        d = _thread(tmp_path)
+        d = _thread(tmp_path, stubs=False)
         (d / "sessions").mkdir(parents=True, exist_ok=True)
         (d / "sessions" / ".DS_Store").write_text("x\n")
         assert _reply(index_file(str(tmp_path), "t", "./sessions/.DS_Store"))["error"] == "METADATA"
 
     def test_a_missing_directory_is_an_error_not_silence(self, tmp_path):
         """create lays all three down, so a missing one means something is wrong."""
-        d = _thread(tmp_path)
+        d = _thread(tmp_path, stubs=False)
         import shutil
         shutil.rmtree(d / "artifacts", ignore_errors=True)
         r = _reply(index_directory(str(tmp_path), "t", "./artifacts"))
         assert r["error"] == "NO_SUCH_DIRECTORY" and r["detail"] == "artifacts"
 
     def test_a_bad_kind_is_refused(self, tmp_path):
-        _thread(tmp_path)
+        _thread(tmp_path, stubs=False)
         assert _reply(index_directory(str(tmp_path), "t", "./todos"))["error"] == "NOT_INDEXABLE"
 
 

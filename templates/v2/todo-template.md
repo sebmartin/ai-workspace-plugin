@@ -1,6 +1,6 @@
 ---
 title: [Todo Title]
-state: active # active | parked
+state: active # active | started | parked | done | dropped
 ---
 
 # [Todo Title]

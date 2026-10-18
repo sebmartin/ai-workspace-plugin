@@ -363,3 +363,44 @@ def test_no_ordered_index_is_appended_to_by_id():
                 )
 
     assert offenders == [], "\n".join(offenders)
+
+
+def test_the_todo_link_rule_is_stated_the_same_way_in_every_file():
+    """One rule, four files, and it diverged once with the suite green.
+
+    `add_todo`'s docstring said to use an external URL whenever there was an
+    issue or PR; the migration procedure said to link the session the item came
+    from. Both matched a todo with nothing of its own, so one took a PR as its
+    link and lost any statement of its own work. Nothing failed, because no
+    test read the prose.
+    """
+    RULE = "record of this todo"
+    SCHEME = "todos/YYYYMMDD-slug.md"
+    states = ("active", "started", "parked", "done", "dropped")
+
+    for rel in ("skills/threads/SKILL.md",
+                "skills/threads/scripts/mcp_server.py",
+                "skills/threads/v2/migrate-from-v1.md"):
+        text = (REPO / rel).read_text()
+        assert RULE in text, (
+            f"{rel} no longer says a todo's link names the {RULE}. Every file "
+            f"that states the rule says it the same way, or they drift apart "
+            f"again."
+        )
+
+    for rel in ("skills/threads/SKILL.md", "skills/threads/scripts/mcp_server.py"):
+        text = (REPO / rel).read_text()
+        assert SCHEME in text, (
+            f"{rel} no longer names {SCHEME} as the todo filename. The other "
+            f"scheme this once held, ./todos/<id>.md, cannot be produced by a "
+            f"caller: the id is minted inside the call, after the link has "
+            f"already been validated."
+        )
+
+    template = (REPO / "templates" / "v2" / "todo-template.md").read_text()
+    for state in states:
+        assert state in template, (
+            f"templates/v2/todo-template.md does not offer `{state}`. It lists "
+            f"every state a todo can hold, because a reader editing the file by "
+            f"hand has only this comment to go on."
+        )

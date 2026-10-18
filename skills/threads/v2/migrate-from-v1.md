@@ -151,12 +151,18 @@ supersession, to tell which superseded which — the live one declares
 
 ### 5. The rest
 
-**Extract todos** from Next steps, Parked and Open Questions. Each needs a
-link, and the skill's rule applies: link something that says what the work is.
-The session the item came from usually does, so link that. If all you have is an
-issue or PR the item mentions in passing, write a file for the todo instead. A todo goes on
-the end of the list and Next steps shows the top five, so add the Next steps items
-first, in the order the README listed them, and the rest after. Only carry
+**Extract todos** from Next steps, Parked and Open Questions. Write a file for
+each one, `todos/YYYYMMDD-slug.md` from the todo template, and copy the v1 line
+verbatim into **What**. That file is the record of this todo, which is what a
+todo's link has to name. Do not summarise it and do not go hunting for what it
+meant; that digging belongs to whoever picks the todo up. Say in the file that it
+came from the v1 README on this date and that its context has not been reviewed,
+so a later reader knows the one line is all anyone knows. Put the session it came
+from, or an issue it names, under **## Links**, and leave that heading out when
+there is nothing to put there.
+
+A todo goes on the end of the list and Next steps shows the top five, so add the
+Next steps items first, in the order the README listed them, and the rest after. Only carry
 something over as parked if the v1 README had it parked, and retire a parked
 entry that is already resolved rather than carrying it.
 
