@@ -7,6 +7,7 @@ import frontmatter
 import yaml
 from frontmatter.default_handlers import YAMLHandler
 from ruamel.yaml import YAML
+from ruamel.yaml.error import YAMLError as RoundTripError
 
 # PyYAML alphabetises keys and drops quoting on dump, so a file written back
 # through it comes out reordered. ruamel keeps both.
@@ -34,9 +35,12 @@ def set_frontmatter_field(path: Path, key: str, value: str) -> bool:
     the field cannot be hit. Raises ValueError on frontmatter that does not
     parse, as `split_frontmatter` does.
     """
+    # ruamel's hierarchy, because `_Handler` reads through ruamel.
+    # `split_frontmatter` catches PyYAML's, since it reads through the default
+    # handler, and the two are unrelated: neither catches the other.
     try:
         post = frontmatter.loads(path.read_text(), handler=_Handler())
-    except yaml.YAMLError as e:
+    except RoundTripError as e:
         raise ValueError(f"Frontmatter in {path} is not valid YAML. {e}") from e
     if not isinstance(post.metadata, dict) or key not in post.metadata:
         return False

@@ -726,6 +726,25 @@ class TestTodos:
             retire_todo(str(tmp_path), "t", todo_id, "done"))
         assert "state: done" in f.read_text()
 
+    def test_frontmatter_that_does_not_parse_is_reported_not_raised(self, tmp_path):
+        """The two YAML parsers raise from unrelated hierarchies.
+
+        This reads through ruamel while `split_frontmatter` reads through
+        PyYAML, so catching only PyYAML's let a `ScannerError` out of the tool
+        instead of a reply. An unquoted value containing ": " is the fault the
+        skill already calls the common one.
+        """
+        d = _thread(tmp_path)
+        f = d / "todos" / "20260101-x.md"
+        f.write_text("---\ntitle: X\nstate: active\n"
+                     "summary: Chose X: it is simplest\n---\n\n# X\n")
+        todo_id = _reply(add_todo(str(tmp_path), "t", "X", "./todos/20260101-x.md"))["id"]
+        out = _reply(retire_todo(str(tmp_path), "t", todo_id, "done"))
+        assert out["file_unchanged"] == "./todos/20260101-x.md"
+        assert "state: active" in f.read_text()
+        retired = idx.find(idx.read(d, "todos", retired=True), todo_id)
+        assert retired is not None and retired.state == "done"
+
     def test_retiring_a_todo_tracked_elsewhere_writes_no_file(self, tmp_path):
         """An external link names no file, so the sync has nothing to open."""
         _thread(tmp_path, stubs=False)
