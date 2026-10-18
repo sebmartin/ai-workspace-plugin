@@ -412,19 +412,30 @@ def retire_todo(thread, todo_id: str, state: str) -> str:
     if error := idx.retire(thread.dir, "todos", todo_id, state):
         return json.dumps(error)
     if entry:
-        _sync_file_state(thread.dir, entry, "todos", "state", state)
+        _sync_file_state(thread.dir, entry, "todos", state)
     render.render(thread.dir)
     return json.dumps({"id": todo_id})
 
 
-def _sync_file_state(thread_dir: Path, entry, kind: str, field: str,
-                     state: str) -> None:
+# The frontmatter field each kind states its own state in. An artifact has
+# neither the field nor a template that would put one there, so it is absent
+# rather than guessed at.
+_STATE_FIELD = {"todos": "state", "decisions": "status"}
+
+
+def _sync_file_state(thread_dir: Path, entry, kind: str, state: str) -> None:
     """Rewrite the entry file's own state field to match the index.
 
     So that an entry found by grep or in a file browser says what it is
     without depending on which index led there. A retired todo whose file
     still reads `state: active` is the failure this prevents.
+
+    Called from every operation that changes a state, not only retirement:
+    parking is the same drift through another door.
     """
+    field = _STATE_FIELD.get(kind)
+    if field is None:
+        return
     path = _entry_file(thread_dir, entry.link)
     if path is None:
         return
@@ -460,6 +471,7 @@ def set_state(thread, kind: str, entry_id: str, state: str) -> str:
         elif state == todos_mod.ACTIVE and was == todos_mod.PARKED:
             todos_mod.to_end(entries, entry_id)
     idx.write(thread.dir, kind, entries)
+    _sync_file_state(thread.dir, entry, kind, state)
     render.render(thread.dir)
     reply: dict = {"id": entry_id}
     if kind == "todos" and (waiting := todos_mod.just_crowded(before, entries)):
@@ -554,7 +566,7 @@ def retire_decision(thread, decision_id: str, state: str) -> str:
     if error := idx.retire(thread.dir, "decisions", decision_id, state):
         return json.dumps(error)
     if entry:
-        _sync_file_state(thread.dir, entry, "decisions", "status", state)
+        _sync_file_state(thread.dir, entry, "decisions", state)
     render.render(thread.dir)
     return json.dumps({"id": decision_id})
 

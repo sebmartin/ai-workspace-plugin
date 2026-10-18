@@ -644,6 +644,22 @@ class TestTodos:
         assert "state: done" in f.read_text()
         assert "state: active" not in f.read_text()
 
+    def test_parking_a_todo_updates_the_state_in_its_own_file(self, tmp_path):
+        """Retirement is not the only door.
+
+        The template advertises every state in the file, so a parked todo that
+        reads `state: active` on disk while the index says `parked` is the same
+        drift the sync exists to stop, reached through `set_todo_state`.
+        """
+        d = _thread(tmp_path)
+        f = d / "todos" / "20260101-x.md"
+        f.write_text("---\ntitle: X\nstate: active\n---\n\n# X\n")
+        todo_id = _reply(add_todo(str(tmp_path), "t", "X", "./todos/20260101-x.md"))["id"]
+        set_todo_state(str(tmp_path), "t", todo_id, "parked")
+        assert "state: parked" in f.read_text()
+        set_todo_state(str(tmp_path), "t", todo_id, "active")
+        assert "state: active" in f.read_text()
+
     def test_retiring_a_todo_tracked_elsewhere_writes_no_file(self, tmp_path):
         """An external link names no file, so the sync has nothing to open."""
         _thread(tmp_path, stubs=False)

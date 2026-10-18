@@ -397,6 +397,13 @@ def test_the_todo_link_rule_is_stated_the_same_way_in_every_file():
             f"already been validated."
         )
 
+    server = SERVER.read_text()
+    assert "`MISSING` for a `./` path with no file behind it" in server, (
+        "add_todo's enumerated refusal codes no longer list MISSING. The codes "
+        "paragraph is what a caller recovers from, so a refusal the body "
+        "describes in prose but the list omits reads as unreachable."
+    )
+
     template = (REPO / "templates" / "v2" / "todo-template.md").read_text()
     for state in states:
         assert state in template, (
