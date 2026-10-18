@@ -14,10 +14,11 @@ from datetime import date
 from pathlib import Path, PurePosixPath
 from typing import NamedTuple
 
-from ai_workspace.text import split_frontmatter, yaml_value
+from ai_workspace.text import set_frontmatter_field, split_frontmatter, yaml_value
 from ai_workspace.threads.v2 import ids as ids_mod
 from ai_workspace.threads.v2 import index as idx
 from ai_workspace.threads.v2 import render, session
+from ai_workspace.threads.v2 import todos as todos_mod
 
 
 def _new_id(thread_dir: Path, kind: str, title: str) -> str:
@@ -32,7 +33,11 @@ def _new_id(thread_dir: Path, kind: str, title: str) -> str:
 # artifacts have exactly one in-force state so it needs no deciding, and
 # decisions have three so theirs is read from the file.
 _STATE_FROM_FILE = object()
-_INDEXABLE = {
+# The kinds whose entry is built from a file on disk, which is what
+# `index_file` and `index_directory` do. Not every kind with an index: that is
+# `idx.TYPES`, and it includes todos, whose entry carries a title and a link
+# the user gave and so is written by `add_todo` instead.
+_FILE_KINDS = {
     "sessions": (None, False),
     "decisions": (_STATE_FROM_FILE, False),
     "artifacts": ("current", True),
@@ -44,7 +49,8 @@ _INDEXABLE = {
 # thread's payload. This refuses rather than truncating: a slug cut short is
 # still an identifier, where a sentence cut short reads as whole and the reader
 # cannot tell. Refusing also reaches the only party that can fix it, since the
-# caller wrote the sentence and is still holding it.
+# caller wrote the sentence and is still holding it. The same field is checked
+# against the line format, which is what a line break in it defeats.
 MAX_DESCRIPTION = 200
 
 
@@ -55,7 +61,7 @@ class Refusal(NamedTuple):
     sentence explaining what `FRONTMATTER_UNPARSEABLE` means is filler here and
     belongs in the tool's docstring, which is read once instead of once per
     failure. `detail` is only what the code cannot carry, and only ever varies
-    per file: a parser's position, or the status a file actually declared.
+    per file: a parser's position, or the state a file actually declared.
     """
 
     code: str
@@ -63,11 +69,11 @@ class Refusal(NamedTuple):
 
 
 def _decision_state(path: Path) -> tuple[str | None, Refusal | None]:
-    """A decision's status, or why it has none.
+    """A decision's state, or why it has none.
 
     Two different faults, and reporting the wrong one sends the reader to the
     wrong fix. A file whose frontmatter is invalid YAML usually states a
-    perfectly good status; it just cannot be read.
+    perfectly good state; it just cannot be read.
     """
     try:
         fields, _ = split_frontmatter(path.read_text(errors="ignore")[:2000], path)
@@ -78,10 +84,10 @@ def _decision_state(path: Path) -> tuple[str | None, Refusal | None]:
         # real fault. Guessing at a cause here would send the reader to the
         # wrong fix whenever the guess was wrong.
         return None, Refusal("FRONTMATTER_UNPARSEABLE", str(e))
-    status = str(fields.get("status") or "").strip()
-    if status in idx.IN_FORCE["decisions"]:
-        return status, None
-    return None, Refusal("STATUS_UNKNOWN", status)
+    state = str(fields.get("state") or "").strip()
+    if state in idx.IN_FORCE["decisions"]:
+        return state, None
+    return None, Refusal("FILE_STATE_UNKNOWN", state)
 
 
 def _inside(link: str) -> PurePosixPath | None:
@@ -96,29 +102,41 @@ def _inside(link: str) -> PurePosixPath | None:
     return relative
 
 
+def _entry_file(thread_dir: Path, link: str) -> Path | None:
+    """The file an index link names. None for an external URL, for a path that
+    escapes the thread, and for a path with nothing at it."""
+    if idx.external(link):
+        return None
+    relative = _inside(link)
+    if relative is None:
+        return None
+    path = thread_dir / relative
+    return path if path.is_file() else None
+
+
 def _already_indexed(thread_dir: Path, kind: str, link: str):
     """The entry already covering this file, wherever it lives, or None.
 
     Both indexes, because a retired artifact is still indexed and minting a
     second id for it would leave two entries for one file in two files.
-    Returns what a rewrite needs: `(entry, entries, frontmatter, retired)`.
+    Returns what a rewrite needs: `(entry, entries, retired)`.
     """
     for retired in (False, True):
-        entries, fm = idx.read(thread_dir, kind, retired)
+        entries = idx.read(thread_dir, kind, retired)
         for entry in entries:
             if entry.link == link:
-                return entry, entries, fm, retired
+                return entry, entries, retired
     return None
 
 
-def _redate(thread_dir: Path, kind: str, entry, entries: list, fm: dict,
+def _redate(thread_dir: Path, kind: str, entry, entries: list,
             retired: bool, when: date) -> tuple[str, str | None]:
     """Give an indexed file a new date, and with it a new id.
 
     The only repair for an entry that landed on the epoch, since a filename is
     never renamed and an index line is never hand-edited. The id changes, so
-    the reply has to say so: ids are what set_window and the retire tools take,
-    and the caller is holding the old one.
+    the reply has to say so: ids are what order_todos and the retire tools
+    take, and the caller is holding the old one.
 
     Removed and re-added rather than edited in place, so it lands where its new
     date puts it instead of where its old one did.
@@ -128,7 +146,7 @@ def _redate(thread_dir: Path, kind: str, entry, entries: list, fm: dict,
         return entry.id, None
     was = entry.id
     entries.remove(entry)
-    idx.write(thread_dir, kind, entries, fm, retired)
+    idx.write(thread_dir, kind, entries, retired)
     entry.id = ids_mod.unique_id(base, idx.taken_ids(thread_dir, kind))
     if entry.title == was:
         entry.title = entry.id
@@ -160,9 +178,10 @@ def _index_one(thread, link: str, description: str = "",
         return Indexed(""), Refusal("OUTSIDE_THREAD")
 
     kind = relative.parts[0]
-    if kind not in _INDEXABLE:
+    if kind not in _FILE_KINDS:
         return Indexed(""), Refusal("NOT_INDEXABLE", kind)
 
+    description = description.strip()
     if len(description) > MAX_DESCRIPTION:
         return Indexed(""), Refusal("DESCRIPTION_TOO_LONG", str(MAX_DESCRIPTION))
 
@@ -172,21 +191,24 @@ def _index_one(thread, link: str, description: str = "",
     if not idx.is_content(path):
         return Indexed(""), Refusal("METADATA")
 
-    default_state, takes_description = _INDEXABLE[kind]
+    default_state, takes_description = _FILE_KINDS[kind]
 
     normalised = f"./{relative}"
     if (found := _already_indexed(thread.dir, kind, normalised)) is not None:
-        entry, entries, fm, retired = found
+        entry, entries, retired = found
         # An empty description means "not given" rather than "set it to
         # nothing", the same conversion every other optional field makes at this
         # boundary. Without it, re-indexing to correct a link would silently
         # erase the sentence.
         if description and takes_description and entry.description != description:
-            entry.description = description
-            idx.write(thread.dir, kind, entries, fm, retired)
+            was, entry.description = entry.description, description
+            if (unreadable := idx.unrepresentable(entry)) is not None:
+                entry.description = was
+                return Indexed(""), Refusal("UNREPRESENTABLE", unreadable)
+            idx.write(thread.dir, kind, entries, retired)
         if when is None:
             return Indexed(entry.id), None
-        return Indexed(*_redate(thread.dir, kind, entry, entries, fm, retired, when)), None
+        return Indexed(*_redate(thread.dir, kind, entry, entries, retired, when)), None
     if default_state is _STATE_FROM_FILE:
         state, refusal = _decision_state(path)
         if refusal is not None:
@@ -200,15 +222,18 @@ def _index_one(thread, link: str, description: str = "",
         ids_mod.make_id(when, rest), idx.taken_ids(thread.dir, kind)
     )
 
-    idx.add(thread.dir, kind, idx.Entry(
+    entry = idx.Entry(
         entry_id, state, entry_id, f"./{relative}",
         description if takes_description else "",
-    ))
+    )
+    if (unreadable := idx.unrepresentable(entry)) is not None:
+        return Indexed(""), Refusal("UNREPRESENTABLE", unreadable)
+    idx.add(thread.dir, kind, entry)
     return Indexed(entry_id), None
 
 
 def index_file(thread, link: str, description: str = "",
-               when: str | None = None, session_id: str | None = None) -> str:
+               when: str | None = None) -> str:
     """Index a file that is already in the thread.
 
     The only way an index entry for a file is minted; the tools that author one
@@ -232,7 +257,6 @@ def index_file(thread, link: str, description: str = "",
     if refusal is not None:
         return json.dumps({"error": refusal.code, "detail": refusal.detail})
     render.render(thread.dir)
-    _record(thread.dir, session_id, f"{PurePosixPath(link).parts[-2][:-1]} {indexed.id}")
     reply: dict = {"id": indexed.id}
     if indexed.was:
         reply["was"] = indexed.was
@@ -241,7 +265,7 @@ def index_file(thread, link: str, description: str = "",
     return json.dumps(reply)
 
 
-def index_directory(thread, link: str, session_id: str | None = None) -> str:
+def index_directory(thread, link: str) -> str:
     """Index every top-level entry in one directory that is not indexed yet.
 
     Migration is the reason this exists. A thread with sixty-six sessions is
@@ -261,7 +285,7 @@ def index_directory(thread, link: str, session_id: str | None = None) -> str:
         return json.dumps({"error": "OUTSIDE_THREAD", "detail": link})
 
     kind = relative.parts[0]
-    if kind not in _INDEXABLE:
+    if kind not in _FILE_KINDS:
         return json.dumps({"error": "NOT_INDEXABLE", "detail": kind})
 
     directory = thread.dir / relative
@@ -274,7 +298,7 @@ def index_directory(thread, link: str, session_id: str | None = None) -> str:
     already = {
         PurePosixPath(e.link).name
         for retired in (False, True)
-        for e in idx.read(thread.dir, kind, retired)[0]
+        for e in idx.read(thread.dir, kind, retired)
     }
     pending = sorted(
         p for p in directory.iterdir()
@@ -294,7 +318,6 @@ def index_directory(thread, link: str, session_id: str | None = None) -> str:
 
     if indexed:
         render.render(thread.dir)
-        _record(thread.dir, session_id, f"{len(indexed)} {kind} indexed")
 
     # No news is good news. Asking to index a directory and being told every
     # file went in is a hundred filenames of nothing; the caller asked for all
@@ -308,84 +331,183 @@ def index_directory(thread, link: str, session_id: str | None = None) -> str:
     return json.dumps(reply)
 
 
-def _record(thread_dir: Path, session_id: str | None, line: str) -> None:
-    if session_id:
-        session.note_created(thread_dir, session_id, line)
+def _unplaceable(where) -> str:
+    """A refusal for a `place` that resolved to nothing.
+
+    The forms are listed only when the form is what was wrong. An anchor that
+    is simply not in the list was spelled correctly, and offering the grammar
+    there points at the wrong fix.
+    """
+    reply = {"error": where.error, "detail": where.detail}
+    if where.error == "PLACE_UNKNOWN":
+        reply["allowed"] = list(todos_mod.PLACES)
+    return json.dumps(reply)
 
 
 def add_todo(thread, title: str, link: str, state: str = "active",
-             session_id: str | None = None) -> str:
+             place: str = "") -> str:
+    """Add a todo at a chosen place in the list.
+
+    The caller places it because only the caller knows what the todo is for:
+    a piece of the current task goes above it, something that has to follow
+    another goes below that one, and anything else goes at the end. One thing
+    places itself: `started` means this is what is being worked on, so it goes
+    to the top unless a place was named.
+    """
     if state not in idx.IN_FORCE["todos"]:
         allowed = list(idx.IN_FORCE["todos"])
         return json.dumps({"error": "STATE_UNKNOWN", "detail": state, "allowed": allowed})
+    if not title.strip():
+        return json.dumps({"error": "TITLE_REQUIRED"})
+    link = link.strip()
     if not link:
         return json.dumps({"error": "LINK_REQUIRED"})
+    # Three readers resolve a stored link as `thread.dir / link`, so a link
+    # that is neither of these two resolves to nothing on the next machine.
+    external = idx.external(link)
+    relative = _inside(link) if link.startswith("./") else None
+    if not (external or relative is not None):
+        return json.dumps({"error": "OUTSIDE_THREAD", "detail": link})
+    # Write the file, then add the todo: an entry pointing at nothing renders
+    # into Next steps and the audit reports it as dangling.
+    if relative is not None and not (thread.dir / relative).exists():
+        return json.dumps({"error": "MISSING", "detail": link})
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
+
+    entries = idx.read(thread.dir, "todos")
+    # A place that was asked for wins over the one the state implies.
+    at = 0 if state == todos_mod.STARTED else len(entries)
+    if place := place.strip():
+        where = todos_mod.spot(entries, place)
+        if where.at is None:
+            return _unplaceable(where)
+        at = where.at
+
     todo_id = _new_id(thread.dir, "todos", title)
-    idx.add(thread.dir, "todos", idx.Entry(todo_id, state, title, link))
+    entry = idx.Entry(todo_id, state, title.strip(), link)
+    if (unreadable := idx.unrepresentable(entry)) is not None:
+        return json.dumps({"error": "UNREPRESENTABLE", "detail": unreadable})
+    was = list(entries)
+    entries.insert(at, entry)
+    if state == todos_mod.STARTED:
+        # The label, not the placement: `at` above already honoured `place`.
+        todos_mod.only_started(entries, todo_id)
+    idx.write(thread.dir, "todos", entries)
     render.render(thread.dir)
-    _record(thread.dir, session_id, f"todo {todo_id}")
-    return json.dumps({"id": todo_id})
+    reply: dict = {"id": todo_id}
+    if waiting := todos_mod.just_crowded(was, entries):
+        reply["active"] = waiting
+    return json.dumps(reply)
 
 
 def retire_todo(thread, todo_id: str, state: str) -> str:
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
-    error = idx.retire(thread.dir, "todos", todo_id, state)
-    if error:
-        return error
-    _drop_from_windows(thread.dir, "todos", todo_id)
+    entry = idx.find(idx.read(thread.dir, "todos"), todo_id)
+    if error := idx.retire(thread.dir, "todos", todo_id, state):
+        return json.dumps(error)
+    stale = _sync_file_state(thread.dir, entry, state) if entry else ""
     render.render(thread.dir)
-    return json.dumps({"id": todo_id})
+    reply: dict = {"id": todo_id}
+    if stale:
+        reply["file_unchanged"] = stale
+    return json.dumps(reply)
+
+
+def _sync_file_state(thread_dir: Path, entry, state: str) -> str:
+    """Set the entry file's own `state:` to match the index, so an entry found
+    by grep says what it is.
+
+    Returns the link of a file it could not update, or "". A file whose
+    frontmatter has no `state:` field now disagrees with the index, and
+    nothing else would say so, which includes a file written when the field
+    was called `status:`. An external link names no file, which is not a
+    failure.
+    """
+    path = _entry_file(thread_dir, entry.link)
+    if path is None:
+        return ""
+    try:
+        return "" if set_frontmatter_field(path, "state", state) else entry.link
+    except ValueError:
+        return entry.link
 
 
 def set_state(thread, kind: str, entry_id: str, state: str) -> str:
-    """Move an entry between in-force states, e.g. parking or unparking a todo."""
+    """Move an entry between in-force states, e.g. parking or starting a todo.
+
+    Two of the todo states carry a position as well as a name, and both are
+    applied here rather than left to a second call: `started` means this is
+    what is being worked on, and `active` after `parked` means it is wanted
+    again but behind whatever became current while it was away.
+    """
     if state not in idx.IN_FORCE[kind]:
         return json.dumps({"error": "STATE_UNKNOWN", "detail": state,
                            "allowed": list(idx.IN_FORCE[kind])})
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
-    entries, fm = idx.read(thread.dir, kind)
+    entries = idx.read(thread.dir, kind)
     entry = idx.find(entries, entry_id)
     if entry is None:
         return json.dumps({"error": "NO_SUCH_ENTRY", "detail": entry_id})
-    entry.state = state
-    idx.write(thread.dir, kind, entries, fm)
-    if state == "parked":
-        _drop_from_windows(thread.dir, kind, entry_id)
+    before = [idx.Entry(e.id, e.state, e.title, e.link, e.description) for e in entries]
+    was, entry.state = entry.state, state
+    if kind == "todos":
+        if state == todos_mod.STARTED:
+            todos_mod.start(entries, entry_id)
+        elif state == todos_mod.ACTIVE and was == todos_mod.PARKED:
+            todos_mod.to_end(entries, entry_id)
+    idx.write(thread.dir, kind, entries)
+    stale = _sync_file_state(thread.dir, entry, state)
     render.render(thread.dir)
-    return json.dumps({"id": entry_id})
+    reply: dict = {"id": entry_id}
+    if stale:
+        reply["file_unchanged"] = stale
+    if kind == "todos" and (waiting := todos_mod.just_crowded(before, entries)):
+        reply["active"] = waiting
+    return json.dumps(reply)
 
 
-def set_window(thread, kind: str, section: str, entry_ids: list[str]) -> str:
+def order_todos(thread, todo_ids: list[str], place: str = "") -> str:
+    """Move the named todos together, in the order given.
+
+    Everything else keeps its relative order, so moving the two items that
+    matter does not disturb the rest of the list. The default place is the
+    top, which is what reordering is usually for.
+    """
+    if not todo_ids:
+        return json.dumps({"error": "IDS_REQUIRED"})
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
-    error = idx.set_window(thread.dir, kind, section, entry_ids)
-    if error:
-        return error
+    entries = idx.read(thread.dir, "todos")
+    known = {e.id for e in entries}
+    if missing := [i for i in todo_ids if i not in known]:
+        return json.dumps({"error": "NO_SUCH_ENTRY", "detail": ", ".join(missing)})
+    # Refused rather than de-duplicated: collapsing a repeat would produce an
+    # order nobody asked for, and say nothing about having done so.
+    if repeated := [i for i in set(todo_ids) if todo_ids.count(i) > 1]:
+        return json.dumps({"error": "DUPLICATE_ID", "detail": ", ".join(sorted(repeated))})
+
+    # Resolved against the list the movers have been taken out of, which is
+    # also what makes an anchor that is itself moving impossible to resolve.
+    staying = todos_mod.staying(entries, todo_ids)
+    where = todos_mod.spot(staying, place) if place.strip() else todos_mod.Spot(0)
+    if where.at is None:
+        if where.error == "NO_SUCH_ENTRY" and where.detail in todo_ids:
+            return json.dumps({"error": "ANCHOR_IS_MOVING", "detail": where.detail})
+        return _unplaceable(where)
+    idx.write(thread.dir, "todos",
+              todos_mod.reordered(entries, todo_ids, where.at))
     render.render(thread.dir)
-    return json.dumps({"window": section, "size": len(entry_ids)})
-
-
-def _drop_from_windows(thread_dir: Path, kind: str, entry_id: str) -> None:
-    entries, fm = idx.read(thread_dir, kind)
-    windows = fm.get("windows") or {}
-    changed = False
-    for name, members in windows.items():
-        if entry_id in members:
-            windows[name] = [m for m in members if m != entry_id]
-            changed = True
-    if changed:
-        idx.write(thread_dir, kind, entries, {"windows": windows})
+    return json.dumps({"ordered": len(todo_ids)})
 
 
 def log_decision(thread, title: str, summary: str, body: str,
-                 status: str = "proposed", supersedes: list[str] | None = None,
-                 session_id: str | None = None) -> str:
-    if status not in idx.IN_FORCE["decisions"]:
-        return json.dumps({"error": "STATUS_UNKNOWN", "detail": status,
+                 state: str = "proposed",
+                 supersedes: list[str] | None = None) -> str:
+    if state not in idx.IN_FORCE["decisions"]:
+        return json.dumps({"error": "STATE_UNKNOWN", "detail": state,
                            "allowed": list(idx.IN_FORCE["decisions"])})
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
@@ -398,7 +520,7 @@ def log_decision(thread, title: str, summary: str, body: str,
     front = [
         "---",
         f"title: {yaml_value(title)}",
-        f"status: {status}",
+        f"state: {state}",
         f"summary: {yaml_value(summary)}",
         f"supersedes: [{', '.join(supersedes)}]",
         "---",
@@ -407,7 +529,7 @@ def log_decision(thread, title: str, summary: str, body: str,
     path.write_text("\n".join(front) + body.rstrip() + "\n")
     # Indexed the same way a pre-existing file is, so the id it just chose for
     # the filename is the id that lands on the line. Nothing can disagree.
-    indexed = index_file(thread, f"./decisions/{decision_id}.md", session_id=session_id)
+    indexed = index_file(thread, f"./decisions/{decision_id}.md")
     if indexed.startswith("Error:"):
         return indexed
 
@@ -429,31 +551,23 @@ def log_decision(thread, title: str, summary: str, body: str,
 def retire_decision(thread, decision_id: str, state: str) -> str:
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
-    entries, _ = idx.read(thread.dir, "decisions")
+    entries = idx.read(thread.dir, "decisions")
     entry = idx.find(entries, decision_id)
-    error = idx.retire(thread.dir, "decisions", decision_id, state)
-    if error:
-        return error
-    # Keep the file's own status in step, so a decision found by grep or in a
-    # file browser says what it is without depending on which index led there.
-    if entry:
-        path = thread.dir / entry.link.lstrip("./")
-        if path.is_file():
-            text = path.read_text()
-            for live in idx.IN_FORCE["decisions"]:
-                if f"status: {live}" in text:
-                    path.write_text(text.replace(f"status: {live}", f"status: {state}", 1))
-                    break
+    if error := idx.retire(thread.dir, "decisions", decision_id, state):
+        return json.dumps(error)
+    stale = _sync_file_state(thread.dir, entry, state) if entry else ""
     render.render(thread.dir)
-    return json.dumps({"id": decision_id})
+    reply: dict = {"id": decision_id}
+    if stale:
+        reply["file_unchanged"] = stale
+    return json.dumps(reply)
 
 
 def retire_artifact(thread, artifact_id: str, state: str) -> str:
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
-    error = idx.retire(thread.dir, "artifacts", artifact_id, state)
-    if error:
-        return error
+    if error := idx.retire(thread.dir, "artifacts", artifact_id, state):
+        return json.dumps(error)
     render.render(thread.dir)
     return json.dumps({"id": artifact_id})
 
@@ -464,8 +578,9 @@ def save_session(thread, slug: str, summary: str, keywords: str, body: str,
 
     The incremental tools have already written todos, decisions and artifacts as
     they happened, so a save is down to the session log and the Status
-    paragraph. A session that dies before this still leaves its stub and a
-    record of what it touched.
+    paragraph. The log is written before the index points at it, so a save
+    that dies in between leaves a file the audit calls unindexed rather than
+    an entry that names nothing.
     """
     from ai_workspace.threads.v2 import readme as readme_mod
 

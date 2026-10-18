@@ -9,7 +9,15 @@ Threads organize long-running discussions so they can be picked up across sessio
 
 **Don't bring up the workspace's git state.** Uncommitted thread files and a workspace with no repository are both normal. Don't point them out or suggest committing or initialising anything for them. Answer if the user asks, and relay the migration safety check when migrating.
 
-**Anything that leaves the workspace must stand alone.** Text written for someone else, such as docs, code comments, commit messages, pull requests, issues, emails and chat messages, is read by a person who cannot open the workspace. That includes text you draft in the conversation for the user to paste. Never cite a thread, decision, session or artifact in it, by path, id or name. When a reference carries an argument, such as why an approach was dropped, restate the argument. Threads also hold candid and private material, so ask before carrying across anything that looks private.
+**Thread privacy is this plugin's invariant.** Where protecting it costs capability, brevity, elegance or the ability to show your work, privacy wins. Two things are private, and protecting one is not protecting the other:
+
+- **The thread itself**: that it exists, its name, and the id or title of anything in it. `kitchen-reno`, `20260412-call-the-plumber`.
+- **What it holds**: decision text, session logs, Status and About, `memory.md`, artifact contents, attachment filenames, the people named in it.
+
+Neither reaches anyone who cannot open the workspace, which includes a doc, a code comment, a commit message, a pull request, an issue, an email, a chat message, a published artifact, a prompt you hand a subagent, and text you draft for the user to paste.
+
+Citing as evidence is still citing. In anything written for someone who cannot open the workspace, say what you verified and what it showed, never where you got it: "a real index carrying a four-id block came out in that order", not which thread. When a reference carries an argument, such as why an approach was dropped, restate the argument. In doubt, leave it out.
+
 
 ## Workspace Resolution
 
@@ -25,6 +33,8 @@ Workspace: /path/to/workspace
 Thread: /path/to/workspace/threads/<thread-name>
 Schema: 2
 ```
+
+**A path saved in the workspace is relative to the file that holds it, never absolute.** The same workspace is one string under one client and another under the next, so an absolute path is dead as soon as anything but this session opens the thread. A path printed in a reply is the opposite: resolve it so the user can open it, against the directory of the file it came out of, which for an index entry is the thread directory in the `Thread:` header. That is the form a client opens, where a relative one has no agreed base unless the session root happens to be the workspace.
 
 **Put a workspace error to the user and wait.** Each one names the choice in its reply. Don't guess a path.
 
@@ -98,7 +108,9 @@ A schema 1 thread keeps all of that inline in its README, so one read covers it.
 
 `resume_thread` returns the whole thread in one call; its docstring lists what.
 
-**Print only Status and Next steps**, with the todo count from its heading. Everything else is context you hold, not output. A list of thirty-five decisions is for you, not for the screen. Counts are not stored anywhere, so say them from what you read.
+**Print only Status and Next steps**, with the counts from its heading. Everything else is context you hold, not output. A list of thirty-five decisions is for you, not for the screen. Counts are not stored anywhere, so say them from what you read.
+
+**Print each todo as a markdown link on its title**, so the user can open what it points at rather than asking you for it. An external URL goes as it is. Drop the id, which is for your calls rather than the screen, and name a state only when it is not `active`.
 
 **Decision bodies are never opened on resume.** Open one when a constraint is challenged, or when you are about to extend or reverse it.
 
@@ -116,9 +128,18 @@ slug. Write the file, then call `index_file` with a one-sentence description. Th
 id's date comes from the filename, so a name without one is indexed as undated
 unless you pass `date`.
 
-**A todo with state of its own gets a file.** Name it `todos/YYYYMMDD-slug.md`,
-start it from `get_skill_file("templates/v2/todo-template.md")`, and pass its path
-as `add_todo`'s link.
+**A todo's link names the record of this todo.** When the work is tracked in
+GitHub Issues or JIRA, link that item, because the item is the todo. Otherwise
+write a file under `todos/` and link the file.
+
+Never link something the todo merely relates to, such as a PR it mentions or the
+session it came out of. Whoever follows that link lands on separate work, often
+already finished, and still can't tell what this todo is asking for. Those
+belong inside the todo file under `## Links`.
+
+Name the file `todos/YYYYMMDD-slug.md` and start it from
+`get_skill_file("templates/v2/todo-template.md")`. Write it before calling
+`add_todo`, which refuses a thread path with no file behind it.
 
 **Linking two threads has no tool.** The three link fields in the header are
 hand-edited, and the work is judgement rather than mechanism: you have to look
@@ -126,9 +147,11 @@ at the thread on the other end, read what it already says, and decide whether it
 can be written to at all. Fetch
 `skills/threads/v2/link-thread.md` when the user asks for a link.
 
-**A decision is a choice that was made.** Its summary loads on every resume, so log one only when you can name the alternative that was rejected.
+**A decision is a choice that was made.** Its summary loads on every resume, so do not even propose one whose rejected alternative you cannot name, or that dies with this task; that is a session log entry.
 
-**Leave the Next steps window alone.** Change it only when the user asks. Retiring or parking a todo drops it from the window and nothing refills it; an empty window is fine.
+**Next steps is the top of the todo list, bounded to five.** Parking takes a todo off the list, so it is the top five of what is active. The rest of the list is in `todos-index.md`, and resume counts it for you. Nothing promotes anything: retire the first todo and the sixth becomes fifth by itself.
+
+**The order is the user's.** Propose one and apply it once they agree, and say where you put a new todo so they can move it. When the user says to work on something, set its state to `started`.
 
 ### Memory
 
@@ -143,7 +166,7 @@ Add or change an entry only when the user asks you to remember something or agre
 
 ### Saving
 
-A save writes the session log and the Status paragraph, because todos, decisions and artifacts were written when they happened. It is also the moment to read `memory.md` through, if the thread has one, and propose dropping anything that no longer applies. A session that ends without a save still leaves its stub and a record of what it touched.
+A save writes the session log and the Status paragraph, because todos, decisions and artifacts were written when they happened. It is also the moment to read `memory.md` through, if the thread has one, and propose dropping anything that no longer applies. A session that ends without a save leaves no log, and what it produced is still in the indexes.
 
 Everything from here on applies whatever the schema, except where a schema's own file says otherwise.
 

@@ -167,6 +167,20 @@ class TestAudit:
                                                 "./artifacts/nope.md"))
         assert "dangling" in json.loads(migrate.audit(v1, conv))
 
+    def test_an_external_todo_link_is_not_dangling(self, tmp_path):
+        """A todo tracked in an external system links its item there, which
+        `add_todo` accepts, so the audit cannot resolve it as a path and call it
+        lost. The audit is what says whether the original is safe to delete, so
+        a false `clean: false` either stalls a correct migration or teaches the
+        user to ignore it."""
+        v1 = _v1(tmp_path)
+        conv = _converted_from(v1, tmp_path)
+        idx.add(conv, "todos", idx.Entry(
+            "20260101-chase-it", "active", "Chase the upstream issue",
+            "https://example.com/owner/repo/issues/16"))
+        out = json.loads(migrate.audit(v1, conv))
+        assert "todos" not in out.get("dangling", {})
+
     def test_out_of_order_index_is_caught(self, tmp_path):
         """Written directly, because idx.add would place them in order.
 
@@ -178,8 +192,19 @@ class TestAudit:
         idx.write(conv, "artifacts", [
             idx.Entry("20260301-b", "current", "B", "./artifacts/"),
             idx.Entry("20260101-a", "current", "A", "./artifacts/"),
-        ], {})
+        ])
         assert "out_of_date_order" in json.loads(migrate.audit(v1, conv))
+
+    def test_a_todo_list_is_not_expected_in_date_order(self, tmp_path):
+        """Its order is the priority the user put it in, so a migration that
+        got it right would otherwise be reported as broken."""
+        v1 = _v1(tmp_path)
+        conv = _converted_from(v1, tmp_path)
+        idx.write(conv, "todos", [
+            idx.Entry("20260301-b", "active", "B", "./todos/b.md"),
+            idx.Entry("20260101-a", "active", "A", "./todos/a.md"),
+        ])
+        assert "out_of_date_order" not in json.loads(migrate.audit(v1, conv))
 
     def test_unknown_dates_are_counted(self, tmp_path):
         v1 = _v1(tmp_path)

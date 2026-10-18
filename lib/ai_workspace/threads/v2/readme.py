@@ -16,7 +16,9 @@ def set_status(thread_dir: Path, status: str) -> None:
     text = readme.read_text() if readme.exists() else ""
     block = f"## Status\n\n{status.strip()}\n\n"
     if _STATUS_RE.search(text):
-        text = _STATUS_RE.sub(block, text, count=1)
+        # A function replacement. A string one reads the Status paragraph the
+        # user wrote for `\1` and `\d` escapes.
+        text = _STATUS_RE.sub(lambda _: block, text, count=1)
     else:
         text = text.rstrip() + "\n\n" + block
     readme.write_text(text)

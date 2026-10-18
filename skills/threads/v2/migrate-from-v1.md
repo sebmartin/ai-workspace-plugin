@@ -85,9 +85,11 @@ where you will read the dates for everything else that has none.
 
 `index_directory` with `./decisions`, then artifacts.
 
-Decisions need their status vocabulary substituted first, in each file's own
-frontmatter, because `index_file` reads `status:` off the file and refuses
-anything this schema does not know. `index_directory` reports each refusal with
+Decisions need the key renamed and its vocabulary substituted first, in each
+file's own frontmatter, because `index_file` reads `state:` off the file and
+refuses anything this schema does not know. A v1 file says `status:`, and some
+state it only in a `> Status:` or `**Status**:` line in the body with nothing
+in the frontmatter at all, so this is reading rather than a replace. `index_directory` reports each refusal with
 its filename and indexes the rest, so running it, fixing what it names, and
 running it again is the expected loop; it never double-indexes what already
 went in.
@@ -139,25 +141,39 @@ index line links to it. Renaming would break links from session logs into
 decisions, from decision bodies into artifacts, from the README and from other
 threads, none of which anything rewrites and none of which error when dangling.
 
-**Substitute the status vocabulary before indexing a decision**, in the file's
-own frontmatter: `decided`, `active`, `confirmed`, `adopted` and `Accepted`
-become `locked`; `mostly-locked` becomes `partially-locked`; `open` becomes
-`proposed`. `index_file` reads `status:` off the file and refuses anything
-outside that vocabulary, so a decision you have not converted will say so.
+**Rename the key and substitute its vocabulary before indexing a decision**,
+in the file's own frontmatter. The key is `status:` in v1 and `state:` here.
+The values: `decided`, `active`, `confirmed`, `adopted` and `Accepted` become
+`locked`; `mostly-locked` becomes `partially-locked`; `open` becomes
+`proposed`. `index_file` reads `state:` and refuses anything outside that
+vocabulary, so a decision you have not converted will say so, with
+`FILE_STATE_UNKNOWN` and an empty `detail` when the key is still the old one.
 
-Decisions with no status need reading. So do any whose prose describes
+Decisions with no state in their frontmatter need reading, and so do the ones
+that state it in a `> Status:` or `**Status**:` body line, where the value is
+often prose rather than a word from any vocabulary. So do any whose prose describes
 supersession, to tell which superseded which — the live one declares
 `supersedes`.
 
 ### 5. The rest
 
-**Extract todos** from Next steps, Parked and Open Questions. Each needs a link:
-the session it came from when it has nothing of its own. Parked entries that are
-already resolved should be retired rather than carried over. Then `set_window`
-with about five, in priority order.
+**Extract todos** from Next steps, Parked and Open Questions. Write a file for
+each one, `todos/YYYYMMDD-slug.md` from the todo template, and copy the v1 line
+verbatim into **What**. That file is the record of this todo, which is what a
+todo's link has to name. Do not summarise it and do not go hunting for what it
+meant; that digging belongs to whoever picks the todo up. Say in the file that it
+came from the v1 README on this date and that its context has not been reviewed,
+so a later reader knows the one line is all anyone knows. Put the session it came
+from, or an issue it names, under **## Links**, and leave that heading out when
+there is nothing to put there.
 
-**Collapse Quick Resume into Status** — a few sentences for a person, taken from
-Current focus.
+A todo goes on the end of the list and Next steps shows the top five, so add the
+Next steps items first, in the order the README listed them, and the rest after. Only carry
+something over as parked if the v1 README had it parked, and retire a parked
+entry that is already resolved rather than carrying it.
+
+**Collapse Quick Resume into Status**: one or two sentences on what changed,
+taken from Current focus.
 
 **A section the template does not define is the part most likely to be lost.**
 Schema 1 said the README is the thread and to read it in full, so anyone could
@@ -172,10 +188,11 @@ loaded before you can act?
 | | you have to be holding it | you only have to know it exists |
 |---|---|---|
 | **for you** | `memory.md` | a decision or an artifact: its index line loads, its body does not |
-| **for the user** | Status, and the Next steps window | About, a session log, an artifact |
+| **for the user** | Status, and Next steps | About, a session log, an artifact |
 
-Anything still to do is a todo whichever row it came from. The window decides
-whether the user meets it on resume.
+Anything still to do is a todo whichever row it came from. Where it sits in the
+list decides whether the user meets it on resume, since Next steps shows the
+top five.
 
 `memory.md` is the cell schema 1 had no file for, and that is why these sections
 became custom headings in the first place. Schema 1 said the README was the
@@ -214,8 +231,8 @@ description gets authored.
 
 **Leave the backup as a todo, not as a sentence.** A migration ends with exactly
 one outstanding commitment, deciding what happens to `{name}-v1`, and saying it
-in conversation loses it the moment the session ends. Write a `todos/` file for
-it and put it in the window:
+in conversation loses it the moment the session ends. Write a `todos/` file for it and
+order it where it belongs:
 
 ```
 Title: Remove or archive threads/{name}-v1
