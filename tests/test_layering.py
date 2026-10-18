@@ -411,3 +411,29 @@ def test_the_todo_link_rule_is_stated_the_same_way_in_every_file():
             f"every state a todo can hold, because a reader editing the file by "
             f"hand has only this comment to go on."
         )
+
+
+def test_every_tool_that_can_return_file_unchanged_documents_it():
+    """A reply key the surface does not mention is a key nobody surfaces.
+
+    `file_unchanged` says the index and an entry file now disagree, and
+    nothing else reports it, so a tool that can return it and does not say so
+    leaves the human never finding out.
+    """
+    import ast
+
+    tree = ast.parse(SERVER.read_text())
+    tools = {f.name: (ast.get_docstring(f) or "")
+             for f in tree.body if isinstance(f, ast.FunctionDef)}
+    ops = (REPO / "lib" / "ai_workspace" / "threads" / "v2" / "ops.py").read_text()
+    assert '"file_unchanged"' in ops, (
+        "ops.py no longer sets file_unchanged; drop this test with it."
+    )
+    for name in ("retire_todo", "retire_decision", "set_todo_state"):
+        assert name in tools, f"{name} is no longer a tool on the surface"
+        assert "file_unchanged" in tools[name], (
+            f"{name} can return `file_unchanged` and its docstring does not "
+            f"mention it. The docstring is the model-facing API, so an "
+            f"assistant that has not read it will drop the key and the index "
+            f"and the file stay silently disagreeing."
+        )
