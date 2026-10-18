@@ -638,11 +638,11 @@ class TestTodos:
         """
         d = _thread(tmp_path)
         f = d / "todos" / "20260101-x.md"
-        f.write_text("---\ntitle: X\nstatus: active\n---\n\n# X\n")
+        f.write_text("---\ntitle: X\nstate: active\n---\n\n# X\n")
         todo_id = _reply(add_todo(str(tmp_path), "t", "X", "./todos/20260101-x.md"))["id"]
         retire_todo(str(tmp_path), "t", todo_id, "done")
-        assert "status: done" in f.read_text()
-        assert "status: active" not in f.read_text()
+        assert "state: done" in f.read_text()
+        assert "state: active" not in f.read_text()
 
     def test_parking_a_todo_updates_the_state_in_its_own_file(self, tmp_path):
         """Retirement is not the only door.
@@ -653,12 +653,12 @@ class TestTodos:
         """
         d = _thread(tmp_path)
         f = d / "todos" / "20260101-x.md"
-        f.write_text("---\ntitle: X\nstatus: active\n---\n\n# X\n")
+        f.write_text("---\ntitle: X\nstate: active\n---\n\n# X\n")
         todo_id = _reply(add_todo(str(tmp_path), "t", "X", "./todos/20260101-x.md"))["id"]
         set_todo_state(str(tmp_path), "t", todo_id, "parked")
-        assert "status: parked" in f.read_text()
+        assert "state: parked" in f.read_text()
         set_todo_state(str(tmp_path), "t", todo_id, "active")
-        assert "status: active" in f.read_text()
+        assert "state: active" in f.read_text()
 
     def test_retiring_a_todo_tracked_elsewhere_writes_no_file(self, tmp_path):
         """An external link names no file, so the sync has nothing to open."""
@@ -694,17 +694,17 @@ class TestDecisions:
         assert [e.id for e in live] == [e.id for e in live if e.id != old]
         assert gone[0].id == old and gone[0].state == "superseded"
 
-    def test_retire_updates_the_file_status_too(self, tmp_path):
+    def test_retire_updates_the_file_state_too(self, tmp_path):
         d = _thread(tmp_path)
         ws = str(tmp_path)
         log_decision(ws, "t", "X", "Chose X.", "b", "locked"); did = _only_id(d, "decisions")
         retire_decision(ws, "t", did, "withdrawn")
-        assert "status: withdrawn" in (d / "decisions" / f"{did}.md").read_text()
+        assert "state: withdrawn" in (d / "decisions" / f"{did}.md").read_text()
 
-    def test_bad_status_rejected(self, tmp_path):
+    def test_bad_state_rejected(self, tmp_path):
         _thread(tmp_path)
         assert _reply(log_decision(
-            str(tmp_path), "t", "T", "s", "b", "locked-ish"))["error"] == "STATUS_UNKNOWN"
+            str(tmp_path), "t", "T", "s", "b", "locked-ish"))["error"] == "STATE_UNKNOWN"
 
 
     @pytest.mark.parametrize("summary", [
@@ -717,7 +717,7 @@ class TestDecisions:
         """The reader refuses invalid frontmatter, so the writer must emit none.
 
         Every one of these was written unquoted once and came back as an
-        unparseable file, which cost the decision its title and status too.
+        unparseable file, which cost the decision its title and state too.
         """
         from ai_workspace.text import split_frontmatter
 
@@ -878,7 +878,7 @@ class TestIndexDirectory:
         d = _thread(tmp_path, stubs=False)
         (d / kind).mkdir(parents=True, exist_ok=True)
         for n in names:
-            (d / kind / n).write_text("---\nstatus: locked\n---\nx\n")
+            (d / kind / n).write_text("---\nstate: locked\n---\nx\n")
         return d
 
     def test_indexes_a_whole_directory_in_one_call(self, tmp_path):
@@ -910,10 +910,10 @@ class TestIndexDirectory:
                               [f"202608{(i % 28) + 1:02d}-ok-{i}.md" for i in range(95)])
         for i in range(5):
             (d / "decisions" / f"202607{i + 1:02d}-bad-{i}.md").write_text(
-                "---\nstatus: decided\n---\nx\n")
+                "---\nstate: decided\n---\nx\n")
         out = index_directory(str(tmp_path), "t", "./decisions")
         assert set(_reply(out)) == {"refused"}
-        assert len(_reply(out)["refused"]["STATUS_UNKNOWN"]) == 5
+        assert len(_reply(out)["refused"]["STATE_UNKNOWN"]) == 5
         assert len(out) < 200, len(out)
         assert len(idx.read(d, "decisions")) == 95
 
@@ -924,14 +924,14 @@ class TestIndexDirectory:
         assert len(idx.read(d, "sessions")) == 1
 
     def test_a_refusal_reports_and_does_not_stop_the_rest(self, tmp_path):
-        """A migrated thread full of v1 statuses is the reason this matters."""
+        """A migrated thread full of v1 states is the reason this matters."""
         d = self._thread_with(tmp_path, "decisions", ["20260101-good.md"])
-        (d / "decisions" / "20260102-old.md").write_text("---\nstatus: decided\n---\nx\n")
+        (d / "decisions" / "20260102-old.md").write_text("---\nstate: decided\n---\nx\n")
         r = _reply(index_directory(str(tmp_path), "t", "./decisions"))
-        assert r == {"refused": {"STATUS_UNKNOWN": ["20260102-old.md"]}}
+        assert r == {"refused": {"STATE_UNKNOWN": ["20260102-old.md"]}}
         assert [e.id for e in idx.read(d, "decisions")] == ["20260101-good"]
 
-        (d / "decisions" / "20260102-old.md").write_text("---\nstatus: locked\n---\nx\n")
+        (d / "decisions" / "20260102-old.md").write_text("---\nstate: locked\n---\nx\n")
         index_directory(str(tmp_path), "t", "./decisions")
         assert len(idx.read(d, "decisions")) == 2
 
@@ -942,17 +942,17 @@ class TestIndexDirectory:
         (d / "decisions").mkdir(parents=True, exist_ok=True)
         for i in range(24):
             (d / "decisions" / f"202602{i + 1:02d}-broken-{i}.md").write_text(
-                f"---\nstatus: locked\nsummary: Lot {i}: subdivides.\n---\nx\n")
+                f"---\nstate: locked\nsummary: Lot {i}: subdivides.\n---\nx\n")
         for i in range(3):
             (d / "decisions" / f"202603{i + 1:02d}-old-{i}.md").write_text(
-                "---\nstatus: decided\n---\nx\n")
+                "---\nstate: decided\n---\nx\n")
         out = index_directory(str(tmp_path), "t", "./decisions")
 
         # one key per cause however many files share it, and every file named
         r = _reply(out)
         assert set(r) == {"refused"}
         assert len(r["refused"]["FRONTMATTER_UNPARSEABLE"]) == 24
-        assert len(r["refused"]["STATUS_UNKNOWN"]) == 3
+        assert len(r["refused"]["STATE_UNKNOWN"]) == 3
         assert len(out) < 900, len(out)
 
     def test_one_file_still_gets_the_whole_message(self, tmp_path):
@@ -960,7 +960,7 @@ class TestIndexDirectory:
         d = _thread(tmp_path, stubs=False)
         (d / "decisions").mkdir(parents=True, exist_ok=True)
         (d / "decisions" / "20260201-x.md").write_text(
-            "---\nstatus: locked\nsummary: Lot: subdivides.\n---\nx\n")
+            "---\nstate: locked\nsummary: Lot: subdivides.\n---\nx\n")
         out = index_file(str(tmp_path), "t", "./decisions/20260201-x.md")
         assert _reply(out)["error"] == "FRONTMATTER_UNPARSEABLE" and "line 3" in _reply(out)["detail"]
 
@@ -989,12 +989,12 @@ class TestIndexDirectory:
             ("20260125-real", "./sessions/20260125-real.md")]
 
     def test_a_decision_with_invalid_yaml_is_told_what_is_wrong(self, tmp_path):
-        """Blaming a missing status sends the reader to the wrong fix: the
-        status is fine, the file just cannot be parsed."""
+        """Blaming a missing state sends the reader to the wrong fix: the
+        state is fine, the file just cannot be parsed."""
         d = _thread(tmp_path, stubs=False)
         (d / "decisions").mkdir(parents=True, exist_ok=True)
         (d / "decisions" / "20260619-lot.md").write_text(
-            "---\nstatus: locked\nsummary: Lot 4 579 subdivides: 6 736 633.\n---\nx\n")
+            "---\nstate: locked\nsummary: Lot 4 579 subdivides: 6 736 633.\n---\nx\n")
         r = _reply(index_file(str(tmp_path), "t", "./decisions/20260619-lot.md"))
         assert r["error"] == "FRONTMATTER_UNPARSEABLE"
         # the parser's own complaint, with a position, rather than a guess

@@ -11,7 +11,7 @@ def split_frontmatter(text: str, source: Path | str | None = None) -> tuple[dict
 
     Frontmatter that does not parse raises. Returning no fields would be worse
     than failing: the fields are what a thread is indexed and resumed by, so a
-    decision would come back without its summary or its status, and nothing
+    decision would come back without its summary or its state, and nothing
     would say why. An error names the file, and whoever reads it can open that
     file and fix it.
 

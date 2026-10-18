@@ -61,7 +61,7 @@ class Refusal(NamedTuple):
     sentence explaining what `FRONTMATTER_UNPARSEABLE` means is filler here and
     belongs in the tool's docstring, which is read once instead of once per
     failure. `detail` is only what the code cannot carry, and only ever varies
-    per file: a parser's position, or the status a file actually declared.
+    per file: a parser's position, or the state a file actually declared.
     """
 
     code: str
@@ -69,11 +69,11 @@ class Refusal(NamedTuple):
 
 
 def _decision_state(path: Path) -> tuple[str | None, Refusal | None]:
-    """A decision's status, or why it has none.
+    """A decision's state, or why it has none.
 
     Two different faults, and reporting the wrong one sends the reader to the
     wrong fix. A file whose frontmatter is invalid YAML usually states a
-    perfectly good status; it just cannot be read.
+    perfectly good state; it just cannot be read.
     """
     try:
         fields, _ = split_frontmatter(path.read_text(errors="ignore")[:2000], path)
@@ -84,10 +84,10 @@ def _decision_state(path: Path) -> tuple[str | None, Refusal | None]:
         # real fault. Guessing at a cause here would send the reader to the
         # wrong fix whenever the guess was wrong.
         return None, Refusal("FRONTMATTER_UNPARSEABLE", str(e))
-    status = str(fields.get("status") or "").strip()
-    if status in idx.IN_FORCE["decisions"]:
-        return status, None
-    return None, Refusal("STATUS_UNKNOWN", status)
+    state = str(fields.get("state") or "").strip()
+    if state in idx.IN_FORCE["decisions"]:
+        return state, None
+    return None, Refusal("STATE_UNKNOWN", state)
 
 
 def _inside(link: str) -> PurePosixPath | None:
@@ -414,7 +414,7 @@ def retire_todo(thread, todo_id: str, state: str) -> str:
 
 
 def _sync_file_state(thread_dir: Path, entry, kind: str, state: str) -> None:
-    """Rewrite the entry file's `status:` to match the index, so an entry found
+    """Rewrite the entry file's `state:` to match the index, so an entry found
     by grep says what it is. An external link names no file; nothing is
     written."""
     path = _entry_file(thread_dir, entry.link)
@@ -422,8 +422,8 @@ def _sync_file_state(thread_dir: Path, entry, kind: str, state: str) -> None:
         return
     text = path.read_text()
     for live in idx.IN_FORCE[kind]:
-        if f"status: {live}" in text:
-            path.write_text(text.replace(f"status: {live}", f"status: {state}", 1))
+        if f"state: {live}" in text:
+            path.write_text(text.replace(f"state: {live}", f"state: {state}", 1))
             return
 
 
@@ -495,10 +495,10 @@ def order_todos(thread, todo_ids: list[str], place: str = "") -> str:
 
 
 def log_decision(thread, title: str, summary: str, body: str,
-                 status: str = "proposed",
+                 state: str = "proposed",
                  supersedes: list[str] | None = None) -> str:
-    if status not in idx.IN_FORCE["decisions"]:
-        return json.dumps({"error": "STATUS_UNKNOWN", "detail": status,
+    if state not in idx.IN_FORCE["decisions"]:
+        return json.dumps({"error": "STATE_UNKNOWN", "detail": state,
                            "allowed": list(idx.IN_FORCE["decisions"])})
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
@@ -511,7 +511,7 @@ def log_decision(thread, title: str, summary: str, body: str,
     front = [
         "---",
         f"title: {yaml_value(title)}",
-        f"status: {status}",
+        f"state: {state}",
         f"summary: {yaml_value(summary)}",
         f"supersedes: [{', '.join(supersedes)}]",
         "---",

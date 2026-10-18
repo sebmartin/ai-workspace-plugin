@@ -241,8 +241,8 @@ def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
 def retire_todo(workspace_dir: str, thread_name: str, todo_id: str, state: str) -> str:
     """Retire a todo as done or dropped.
 
-    When the todo's link names a file, its `status:` is rewritten to match, so
-    a finished todo found by grep does not still read `status: active`.
+    When the todo's link names a file, its `state:` is rewritten to match, so
+    a finished todo found by grep does not still read `state: active`.
 
     Returns `{"id": ...}`. A refusal returns `{"error": CODE, ...}` and writes
     nothing: `STATE_UNKNOWN` with the `allowed` states, or `NO_SUCH_ENTRY`.
@@ -266,8 +266,8 @@ def set_todo_state(workspace_dir: str, thread_name: str, todo_id: str, state: st
     work on something. Unparking sends it to the end, because parked meant for
     later.
 
-    When the todo's link names a file, its `status:` is rewritten to match, so
-    a parked todo found by grep does not still read `status: active`.
+    When the todo's link names a file, its `state:` is rewritten to match, so
+    a parked todo found by grep does not still read `state: active`.
 
     Returns `{"id": ...}`, with `active` carrying the count when unparking is
     what takes the list past five. A refusal returns
@@ -318,7 +318,7 @@ def order_todos(workspace_dir: str, thread_name: str, todo_ids: list[str],
 
 @mcp.tool()
 def log_decision(workspace_dir: str, thread_name: str, title: str, summary: str,
-                 body: str, status: str = "proposed",
+                 body: str, state: str = "proposed",
                  supersedes: list[str] | None = None) -> str:
     """Write a decision file and index it.
 
@@ -346,17 +346,17 @@ def log_decision(workspace_dir: str, thread_name: str, title: str, summary: str,
         title: Short title for the decision.
         summary: One sentence, one subject. WHAT was decided, no rationale.
         body: Markdown body. Claim first, argument after.
-        status: `proposed`, `partially-locked` or `locked`.
+        state: `proposed`, `partially-locked` or `locked`.
         supersedes: Ids of decisions this replaces; each is retired as superseded.
     """
     return _threads.log_decision(workspace_dir, thread_name, title, summary, body,
-                                 status, supersedes)
+                                 state, supersedes)
 
 
 @mcp.tool()
 def retire_decision(workspace_dir: str, thread_name: str, decision_id: str,
                     state: str) -> str:
-    """Retire a decision, updating both the index and the file's own status.
+    """Retire a decision, updating both the index and the file's own state.
 
     Returns `{"id": ...}`. A refusal returns `{"error": CODE, ...}` and writes
     nothing: `STATE_UNKNOWN` with the `allowed` states, or `NO_SUCH_ENTRY`.
@@ -392,10 +392,10 @@ def index_directory(workspace_dir: str, thread_name: str, link: str) -> str:
 
     `refused` maps a code to the files it applies to. Fix those and run again.
 
-    - `FRONTMATTER_UNPARSEABLE` — not valid YAML, so a decision's status cannot
+    - `FRONTMATTER_UNPARSEABLE` — not valid YAML, so a decision's state cannot
       be read. Usually an unquoted value containing ": ". Call index_file on
       one of them for the parser's own message.
-    - `STATUS_UNKNOWN` — a decision declares a status this schema does not use.
+    - `STATE_UNKNOWN` — a decision declares a state this schema does not use.
       Substitute the vocabulary in the file's frontmatter.
     - `UNREADABLE` — the file could not be opened.
     - `UNREPRESENTABLE` — the filename carries a character an index line cannot
@@ -422,7 +422,7 @@ def index_file(workspace_dir: str, thread_name: str, link: str,
 
     Everything on the index line is derived from the file. The kind comes from
     the directory, the id from a date found in the filename, and a decision's
-    state from its `status:` frontmatter, which must already use this schema's
+    state from its `state:` frontmatter, which must already use this schema's
     vocabulary. A file whose name states no date takes the `date` you pass, and
     is marked unknown if you pass none.
 
