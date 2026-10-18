@@ -336,8 +336,8 @@ def log_decision(workspace_dir: str, thread_name: str, title: str, summary: str,
     Returns `{"id": ...}`, plus `superseded` listing what it retired. The file
     is at ./decisions/<id>.md.
 
-    A refusal returns `{"error": CODE, ...}` and writes nothing: `STATE_UNKNOWN`
-    or `STATUS_UNKNOWN` with the `allowed` values, `NO_SUCH_ENTRY`,
+    A refusal returns `{"error": CODE, ...}` and writes nothing:
+    `STATE_UNKNOWN` with the `allowed` values, `NO_SUCH_ENTRY`,
     `LINK_REQUIRED`.
 
     Args:
@@ -385,7 +385,7 @@ def index_directory(workspace_dir: str, thread_name: str, link: str) -> str:
     including when there were none to do.
 
         {"undated": ["notes"],
-         "refused": {"STATUS_UNKNOWN": ["20260301-old.md"]}}
+         "refused": {"FILE_STATE_UNKNOWN": ["20260301-old.md"]}}
 
     `undated` names anything given the 19700101 date because nothing said when
     it was from. It is indexed and usable; the id just sorts at the epoch.
@@ -395,8 +395,11 @@ def index_directory(workspace_dir: str, thread_name: str, link: str) -> str:
     - `FRONTMATTER_UNPARSEABLE` — not valid YAML, so a decision's state cannot
       be read. Usually an unquoted value containing ": ". Call index_file on
       one of them for the parser's own message.
-    - `STATE_UNKNOWN` — a decision declares a state this schema does not use.
-      Substitute the vocabulary in the file's frontmatter.
+    - `FILE_STATE_UNKNOWN` — a decision file's `state:` is not one this
+      schema uses, and `allowed` lists the ones it does. An empty `detail`
+      means the file has no `state:` line at all, so add one; otherwise
+      `detail` is what it declared, so replace that value. This is the file's
+      fault, where `STATE_UNKNOWN` is the caller's.
     - `UNREADABLE` — the file could not be opened.
     - `UNREPRESENTABLE` — the filename carries a character an index line cannot
       hold, so the entry could not be read back. Rename the file.

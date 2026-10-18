@@ -87,7 +87,7 @@ def _decision_state(path: Path) -> tuple[str | None, Refusal | None]:
     state = str(fields.get("state") or "").strip()
     if state in idx.IN_FORCE["decisions"]:
         return state, None
-    return None, Refusal("STATE_UNKNOWN", state)
+    return None, Refusal("FILE_STATE_UNKNOWN", state)
 
 
 def _inside(link: str) -> PurePosixPath | None:
@@ -407,24 +407,31 @@ def retire_todo(thread, todo_id: str, state: str) -> str:
     entry = idx.find(idx.read(thread.dir, "todos"), todo_id)
     if error := idx.retire(thread.dir, "todos", todo_id, state):
         return json.dumps(error)
-    if entry:
-        _sync_file_state(thread.dir, entry, "todos", state)
+    stale = _sync_file_state(thread.dir, entry, "todos", state) if entry else ""
     render.render(thread.dir)
-    return json.dumps({"id": todo_id})
+    reply: dict = {"id": todo_id}
+    if stale:
+        reply["file_unchanged"] = stale
+    return json.dumps(reply)
 
 
-def _sync_file_state(thread_dir: Path, entry, kind: str, state: str) -> None:
+def _sync_file_state(thread_dir: Path, entry, kind: str, state: str) -> str:
     """Rewrite the entry file's `state:` to match the index, so an entry found
-    by grep says what it is. An external link names no file; nothing is
-    written."""
+    by grep says what it is.
+
+    Returns the link of a file it could not update, or "". A file holding no
+    recognised `state:` line now disagrees with the index, and nothing else
+    would say so. An external link names no file, which is not a failure.
+    """
     path = _entry_file(thread_dir, entry.link)
     if path is None:
-        return
+        return ""
     text = path.read_text()
     for live in idx.IN_FORCE[kind]:
         if f"state: {live}" in text:
             path.write_text(text.replace(f"state: {live}", f"state: {state}", 1))
-            return
+            return ""
+    return entry.link
 
 
 def set_state(thread, kind: str, entry_id: str, state: str) -> str:
@@ -452,9 +459,11 @@ def set_state(thread, kind: str, entry_id: str, state: str) -> str:
         elif state == todos_mod.ACTIVE and was == todos_mod.PARKED:
             todos_mod.to_end(entries, entry_id)
     idx.write(thread.dir, kind, entries)
-    _sync_file_state(thread.dir, entry, kind, state)
+    stale = _sync_file_state(thread.dir, entry, kind, state)
     render.render(thread.dir)
     reply: dict = {"id": entry_id}
+    if stale:
+        reply["file_unchanged"] = stale
     if kind == "todos" and (waiting := todos_mod.just_crowded(before, entries)):
         reply["active"] = waiting
     return json.dumps(reply)
@@ -546,10 +555,12 @@ def retire_decision(thread, decision_id: str, state: str) -> str:
     entry = idx.find(entries, decision_id)
     if error := idx.retire(thread.dir, "decisions", decision_id, state):
         return json.dumps(error)
-    if entry:
-        _sync_file_state(thread.dir, entry, "decisions", state)
+    stale = _sync_file_state(thread.dir, entry, "decisions", state) if entry else ""
     render.render(thread.dir)
-    return json.dumps({"id": decision_id})
+    reply: dict = {"id": decision_id}
+    if stale:
+        reply["file_unchanged"] = stale
+    return json.dumps(reply)
 
 
 def retire_artifact(thread, artifact_id: str, state: str) -> str:

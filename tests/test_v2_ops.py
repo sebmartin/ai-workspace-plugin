@@ -660,6 +660,30 @@ class TestTodos:
         set_todo_state(str(tmp_path), "t", todo_id, "active")
         assert "state: active" in f.read_text()
 
+    def test_a_file_the_sync_cannot_update_is_named_in_the_reply(self, tmp_path):
+        """A file holding no recognised `state:` line disagrees with the index
+        afterwards, and nothing else would say so. Three outcomes used to be
+        one silent `None`: a write, an external link with no file, and no match
+        at all.
+        """
+        d = _thread(tmp_path)
+        f = d / "todos" / "20260101-x.md"
+        f.write_text("---\ntitle: X\n---\n\n# X\n")
+        todo_id = _reply(add_todo(str(tmp_path), "t", "X", "./todos/20260101-x.md"))["id"]
+        out = _reply(retire_todo(str(tmp_path), "t", todo_id, "done"))
+        assert out["file_unchanged"] == "./todos/20260101-x.md"
+        retired = idx.find(idx.read(d, "todos", retired=True), todo_id)
+        assert retired is not None and retired.state == "done"
+
+    def test_a_file_the_sync_did_update_says_nothing(self, tmp_path):
+        """The key is a deviation, so it is absent on the ordinary path."""
+        d = _thread(tmp_path)
+        f = d / "todos" / "20260101-x.md"
+        f.write_text("---\ntitle: X\nstate: active\n---\n\n# X\n")
+        todo_id = _reply(add_todo(str(tmp_path), "t", "X", "./todos/20260101-x.md"))["id"]
+        assert "file_unchanged" not in _reply(
+            retire_todo(str(tmp_path), "t", todo_id, "done"))
+
     def test_retiring_a_todo_tracked_elsewhere_writes_no_file(self, tmp_path):
         """An external link names no file, so the sync has nothing to open."""
         _thread(tmp_path, stubs=False)
@@ -700,6 +724,18 @@ class TestDecisions:
         log_decision(ws, "t", "X", "Chose X.", "b", "locked"); did = _only_id(d, "decisions")
         retire_decision(ws, "t", did, "withdrawn")
         assert "state: withdrawn" in (d / "decisions" / f"{did}.md").read_text()
+
+    def test_a_decision_file_with_no_state_is_the_file_s_fault(self, tmp_path):
+        """Two faults, two codes. A caller passing a bad state gets
+        `STATE_UNKNOWN` and changes its call; a file declaring one gets
+        `FILE_STATE_UNKNOWN` and has to be edited. An absent key leaves
+        `detail` empty, which is why the code has to carry the difference.
+        """
+        d = _thread(tmp_path)
+        (d / "decisions" / "20260101-x.md").write_text("---\ntitle: X\n---\nx\n")
+        out = _reply(index_file(str(tmp_path), "t", "./decisions/20260101-x.md"))
+        assert out["error"] == "FILE_STATE_UNKNOWN"
+        assert out["detail"] == ""
 
     def test_bad_state_rejected(self, tmp_path):
         _thread(tmp_path)
@@ -913,7 +949,7 @@ class TestIndexDirectory:
                 "---\nstate: decided\n---\nx\n")
         out = index_directory(str(tmp_path), "t", "./decisions")
         assert set(_reply(out)) == {"refused"}
-        assert len(_reply(out)["refused"]["STATE_UNKNOWN"]) == 5
+        assert len(_reply(out)["refused"]["FILE_STATE_UNKNOWN"]) == 5
         assert len(out) < 200, len(out)
         assert len(idx.read(d, "decisions")) == 95
 
@@ -928,7 +964,7 @@ class TestIndexDirectory:
         d = self._thread_with(tmp_path, "decisions", ["20260101-good.md"])
         (d / "decisions" / "20260102-old.md").write_text("---\nstate: decided\n---\nx\n")
         r = _reply(index_directory(str(tmp_path), "t", "./decisions"))
-        assert r == {"refused": {"STATE_UNKNOWN": ["20260102-old.md"]}}
+        assert r == {"refused": {"FILE_STATE_UNKNOWN": ["20260102-old.md"]}}
         assert [e.id for e in idx.read(d, "decisions")] == ["20260101-good"]
 
         (d / "decisions" / "20260102-old.md").write_text("---\nstate: locked\n---\nx\n")
@@ -952,7 +988,7 @@ class TestIndexDirectory:
         r = _reply(out)
         assert set(r) == {"refused"}
         assert len(r["refused"]["FRONTMATTER_UNPARSEABLE"]) == 24
-        assert len(r["refused"]["STATE_UNKNOWN"]) == 3
+        assert len(r["refused"]["FILE_STATE_UNKNOWN"]) == 3
         assert len(out) < 900, len(out)
 
     def test_one_file_still_gets_the_whole_message(self, tmp_path):
