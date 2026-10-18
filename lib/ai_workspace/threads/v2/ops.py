@@ -103,11 +103,8 @@ def _inside(link: str) -> PurePosixPath | None:
 
 
 def _entry_file(thread_dir: Path, link: str) -> Path | None:
-    """The file an index link names, or None when it names anything else.
-
-    An external URL names no file, and neither does a path that escapes the
-    thread, so both answer None rather than a path that cannot be read.
-    """
+    """The file an index link names. None for an external URL, for a path that
+    escapes the thread, and for a path with nothing at it."""
     if idx.external(link):
         return None
     relative = _inside(link)
@@ -371,9 +368,8 @@ def add_todo(thread, title: str, link: str, state: str = "active",
     relative = _inside(link) if link.startswith("./") else None
     if not (external or relative is not None):
         return json.dumps({"error": "OUTSIDE_THREAD", "detail": link})
-    # Write the file, then add the todo. An entry pointing at nothing renders
-    # into Next steps and the migration audit reports it as dangling, and
-    # `index_file` already refuses the same situation.
+    # Write the file, then add the todo: an entry pointing at nothing renders
+    # into Next steps and the audit reports it as dangling.
     if relative is not None and not (thread.dir / relative).exists():
         return json.dumps({"error": "MISSING", "detail": link})
     if (unwritable := render.blocked(thread.dir)) is not None:
@@ -417,32 +413,17 @@ def retire_todo(thread, todo_id: str, state: str) -> str:
     return json.dumps({"id": todo_id})
 
 
-# The frontmatter field each kind states its own state in. An artifact has
-# neither the field nor a template that would put one there, so it is absent
-# rather than guessed at.
-_STATE_FIELD = {"todos": "state", "decisions": "status"}
-
-
 def _sync_file_state(thread_dir: Path, entry, kind: str, state: str) -> None:
-    """Rewrite the entry file's own state field to match the index.
-
-    So that an entry found by grep or in a file browser says what it is
-    without depending on which index led there. A retired todo whose file
-    still reads `state: active` is the failure this prevents.
-
-    Called from every operation that changes a state, not only retirement:
-    parking is the same drift through another door.
-    """
-    field = _STATE_FIELD.get(kind)
-    if field is None:
-        return
+    """Rewrite the entry file's `status:` to match the index, so an entry found
+    by grep says what it is. An external link names no file; nothing is
+    written."""
     path = _entry_file(thread_dir, entry.link)
     if path is None:
         return
     text = path.read_text()
     for live in idx.IN_FORCE[kind]:
-        if f"{field}: {live}" in text:
-            path.write_text(text.replace(f"{field}: {live}", f"{field}: {state}", 1))
+        if f"status: {live}" in text:
+            path.write_text(text.replace(f"status: {live}", f"status: {state}", 1))
             return
 
 

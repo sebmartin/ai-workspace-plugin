@@ -241,8 +241,8 @@ def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
 def retire_todo(workspace_dir: str, thread_name: str, todo_id: str, state: str) -> str:
     """Retire a todo as done or dropped.
 
-    When the todo's link names a file, its `state:` is rewritten to match, so
-    a finished todo found by grep does not still read `state: active`.
+    When the todo's link names a file, its `status:` is rewritten to match, so
+    a finished todo found by grep does not still read `status: active`.
 
     Returns `{"id": ...}`. A refusal returns `{"error": CODE, ...}` and writes
     nothing: `STATE_UNKNOWN` with the `allowed` states, or `NO_SUCH_ENTRY`.
@@ -266,8 +266,8 @@ def set_todo_state(workspace_dir: str, thread_name: str, todo_id: str, state: st
     work on something. Unparking sends it to the end, because parked meant for
     later.
 
-    When the todo's link names a file, its `state:` is rewritten to match, so
-    a parked todo found by grep does not still read `state: active`.
+    When the todo's link names a file, its `status:` is rewritten to match, so
+    a parked todo found by grep does not still read `status: active`.
 
     Returns `{"id": ...}`, with `active` carrying the count when unparking is
     what takes the list past five. A refusal returns
