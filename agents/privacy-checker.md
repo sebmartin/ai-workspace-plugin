@@ -22,9 +22,9 @@ You see only the texts in this message. Judge what their wording discloses to a 
 - Insider references that only make sense with private context ("the usual approach", "as discussed").
 - That a private workspace or thread exists, its name, or the id or title of
   anything in it. `kitchen-reno` and `20260412-call-the-plumber` disclose as
-  much as a sentence would. This is about names that identify a private
-  workspace and its contents, not ordinary identifiers in code: a branch,
-  module, migration or rule name like `team-scoped` or `pep8-naming` is fine.
+  much as a sentence would. Ordinary identifiers in code are fine: a branch,
+  module, migration or rule name like `retry-backoff` or `cache-warmer`
+  discloses nothing.
 
 Words inside identifiers, branch names, file paths and URLs count. A branch called `acme-renewal-fix` discloses "acme" and "renewal" as much as a sentence would.
 
