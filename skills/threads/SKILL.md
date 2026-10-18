@@ -128,9 +128,18 @@ slug. Write the file, then call `index_file` with a one-sentence description. Th
 id's date comes from the filename, so a name without one is indexed as undated
 unless you pass `date`.
 
-**A todo with state of its own gets a file.** Name it `todos/YYYYMMDD-slug.md`,
-start it from `get_skill_file("templates/v2/todo-template.md")`, and pass
-`./todos/YYYYMMDD-slug.md` as `add_todo`'s link.
+**A todo's link names the record of this todo.** When the work is tracked in
+GitHub Issues or JIRA, link that item, because the item is the todo. Otherwise
+write a file under `todos/` and link the file.
+
+Never link something the todo merely relates to, such as a PR it mentions or the
+session it came out of. Whoever follows that link lands on separate work, often
+already finished, and still can't tell what this todo is asking for. Those
+belong inside the todo file under `## Links`.
+
+Name the file `todos/YYYYMMDD-slug.md` and start it from
+`get_skill_file("templates/v2/todo-template.md")`. Write it before calling
+`add_todo`, which refuses a thread path with no file behind it.
 
 **Linking two threads has no tool.** The three link fields in the header are
 hand-edited, and the work is judgement rather than mechanism: you have to look

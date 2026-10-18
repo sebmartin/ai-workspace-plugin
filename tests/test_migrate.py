@@ -168,10 +168,11 @@ class TestAudit:
         assert "dangling" in json.loads(migrate.audit(v1, conv))
 
     def test_an_external_todo_link_is_not_dangling(self, tmp_path):
-        """A todo may link an issue or a PR, which `add_todo` accepts, so the
-        audit cannot resolve it as a path and call it lost. The audit is what
-        says whether the original is safe to delete, so a false `clean: false`
-        either stalls a correct migration or teaches the user to ignore it."""
+        """A todo tracked in an external system links its item there, which
+        `add_todo` accepts, so the audit cannot resolve it as a path and call it
+        lost. The audit is what says whether the original is safe to delete, so
+        a false `clean: false` either stalls a correct migration or teaches the
+        user to ignore it."""
         v1 = _v1(tmp_path)
         conv = _converted_from(v1, tmp_path)
         idx.add(conv, "todos", idx.Entry(

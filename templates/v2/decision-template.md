@@ -1,6 +1,6 @@
 ---
 title: [Decision Title]
-status: proposed # proposed | partially-locked | locked | superseded | withdrawn
+state: proposed # proposed | partially-locked | locked | superseded | withdrawn
 summary: [One sentence — WHAT was decided. No rationale. One subject: if this needs "and" twice, it is several decisions.]
 supersedes: []  # ids of decisions this replaces, if any
 ---

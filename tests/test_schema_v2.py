@@ -492,7 +492,7 @@ class TestCompose:
     def test_payload_has_every_section(self, tmp_path):
         d = _v2_thread(tmp_path)
         (d / "decisions" / "20260101-x.md").write_text(
-            "---\ntitle: X\nstatus: locked\nsummary: Chose X because it is simplest.\n---\n")
+            "---\ntitle: X\nstate: locked\nsummary: Chose X because it is simplest.\n---\n")
         idx.add(d, "decisions", idx.Entry("20260101-x", "locked", "X", "./decisions/20260101-x.md"))
         idx.add(d, "todos", idx.Entry("20260101-a", "active", "A", "./todos/a.md"))
         out = v2.compose(d, "t")
@@ -563,7 +563,7 @@ class TestCompose:
     def test_decision_summaries_come_from_the_files(self, tmp_path):
         d = _v2_thread(tmp_path)
         (d / "decisions" / "20260101-x.md").write_text(
-            "---\ntitle: X\nstatus: locked\nsummary: Chose X because it is simplest.\n---\n")
+            "---\ntitle: X\nstate: locked\nsummary: Chose X because it is simplest.\n---\n")
         idx.add(d, "decisions", idx.Entry("20260101-x", "locked", "X", "./decisions/20260101-x.md"))
         assert "Chose X because it is simplest." in v2.compose(d, "t")
 
@@ -575,7 +575,7 @@ class TestCompose:
         """
         d = _v2_thread(tmp_path)
         (d / "decisions" / "20260619-lot.md").write_text(
-            "---\ntitle: Lot\nstatus: locked\n"
+            "---\ntitle: Lot\nstate: locked\n"
             "summary: Lot 4 579 257 subdivides per NF plan: 6 736 633 and 6 736 634.\n"
             "---\nbody\n")
         idx.add(d, "decisions", idx.Entry(

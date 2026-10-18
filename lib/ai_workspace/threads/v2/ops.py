@@ -14,7 +14,7 @@ from datetime import date
 from pathlib import Path, PurePosixPath
 from typing import NamedTuple
 
-from ai_workspace.text import split_frontmatter, yaml_value
+from ai_workspace.text import set_frontmatter_field, split_frontmatter, yaml_value
 from ai_workspace.threads.v2 import ids as ids_mod
 from ai_workspace.threads.v2 import index as idx
 from ai_workspace.threads.v2 import render, session
@@ -61,7 +61,7 @@ class Refusal(NamedTuple):
     sentence explaining what `FRONTMATTER_UNPARSEABLE` means is filler here and
     belongs in the tool's docstring, which is read once instead of once per
     failure. `detail` is only what the code cannot carry, and only ever varies
-    per file: a parser's position, or the status a file actually declared.
+    per file: a parser's position, or the state a file actually declared.
     """
 
     code: str
@@ -69,11 +69,11 @@ class Refusal(NamedTuple):
 
 
 def _decision_state(path: Path) -> tuple[str | None, Refusal | None]:
-    """A decision's status, or why it has none.
+    """A decision's state, or why it has none.
 
     Two different faults, and reporting the wrong one sends the reader to the
     wrong fix. A file whose frontmatter is invalid YAML usually states a
-    perfectly good status; it just cannot be read.
+    perfectly good state; it just cannot be read.
     """
     try:
         fields, _ = split_frontmatter(path.read_text(errors="ignore")[:2000], path)
@@ -84,10 +84,10 @@ def _decision_state(path: Path) -> tuple[str | None, Refusal | None]:
         # real fault. Guessing at a cause here would send the reader to the
         # wrong fix whenever the guess was wrong.
         return None, Refusal("FRONTMATTER_UNPARSEABLE", str(e))
-    status = str(fields.get("status") or "").strip()
-    if status in idx.IN_FORCE["decisions"]:
-        return status, None
-    return None, Refusal("STATUS_UNKNOWN", status)
+    state = str(fields.get("state") or "").strip()
+    if state in idx.IN_FORCE["decisions"]:
+        return state, None
+    return None, Refusal("FILE_STATE_UNKNOWN", state)
 
 
 def _inside(link: str) -> PurePosixPath | None:
@@ -100,6 +100,18 @@ def _inside(link: str) -> PurePosixPath | None:
     if relative.is_absolute() or ".." in relative.parts or not relative.parts:
         return None
     return relative
+
+
+def _entry_file(thread_dir: Path, link: str) -> Path | None:
+    """The file an index link names. None for an external URL, for a path that
+    escapes the thread, and for a path with nothing at it."""
+    if idx.external(link):
+        return None
+    relative = _inside(link)
+    if relative is None:
+        return None
+    path = thread_dir / relative
+    return path if path.is_file() else None
 
 
 def _already_indexed(thread_dir: Path, kind: str, link: str):
@@ -353,9 +365,13 @@ def add_todo(thread, title: str, link: str, state: str = "active",
     # Three readers resolve a stored link as `thread.dir / link`, so a link
     # that is neither of these two resolves to nothing on the next machine.
     external = idx.external(link)
-    under_the_thread = link.startswith("./") and _inside(link) is not None
-    if not (external or under_the_thread):
+    relative = _inside(link) if link.startswith("./") else None
+    if not (external or relative is not None):
         return json.dumps({"error": "OUTSIDE_THREAD", "detail": link})
+    # Write the file, then add the todo: an entry pointing at nothing renders
+    # into Next steps and the audit reports it as dangling.
+    if relative is not None and not (thread.dir / relative).exists():
+        return json.dumps({"error": "MISSING", "detail": link})
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
 
@@ -388,10 +404,34 @@ def add_todo(thread, title: str, link: str, state: str = "active",
 def retire_todo(thread, todo_id: str, state: str) -> str:
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
+    entry = idx.find(idx.read(thread.dir, "todos"), todo_id)
     if error := idx.retire(thread.dir, "todos", todo_id, state):
         return json.dumps(error)
+    stale = _sync_file_state(thread.dir, entry, state) if entry else ""
     render.render(thread.dir)
-    return json.dumps({"id": todo_id})
+    reply: dict = {"id": todo_id}
+    if stale:
+        reply["file_unchanged"] = stale
+    return json.dumps(reply)
+
+
+def _sync_file_state(thread_dir: Path, entry, state: str) -> str:
+    """Set the entry file's own `state:` to match the index, so an entry found
+    by grep says what it is.
+
+    Returns the link of a file it could not update, or "". A file whose
+    frontmatter has no `state:` field now disagrees with the index, and
+    nothing else would say so, which includes a file written when the field
+    was called `status:`. An external link names no file, which is not a
+    failure.
+    """
+    path = _entry_file(thread_dir, entry.link)
+    if path is None:
+        return ""
+    try:
+        return "" if set_frontmatter_field(path, "state", state) else entry.link
+    except ValueError:
+        return entry.link
 
 
 def set_state(thread, kind: str, entry_id: str, state: str) -> str:
@@ -419,8 +459,11 @@ def set_state(thread, kind: str, entry_id: str, state: str) -> str:
         elif state == todos_mod.ACTIVE and was == todos_mod.PARKED:
             todos_mod.to_end(entries, entry_id)
     idx.write(thread.dir, kind, entries)
+    stale = _sync_file_state(thread.dir, entry, state)
     render.render(thread.dir)
     reply: dict = {"id": entry_id}
+    if stale:
+        reply["file_unchanged"] = stale
     if kind == "todos" and (waiting := todos_mod.just_crowded(before, entries)):
         reply["active"] = waiting
     return json.dumps(reply)
@@ -461,10 +504,10 @@ def order_todos(thread, todo_ids: list[str], place: str = "") -> str:
 
 
 def log_decision(thread, title: str, summary: str, body: str,
-                 status: str = "proposed",
+                 state: str = "proposed",
                  supersedes: list[str] | None = None) -> str:
-    if status not in idx.IN_FORCE["decisions"]:
-        return json.dumps({"error": "STATUS_UNKNOWN", "detail": status,
+    if state not in idx.IN_FORCE["decisions"]:
+        return json.dumps({"error": "STATE_UNKNOWN", "detail": state,
                            "allowed": list(idx.IN_FORCE["decisions"])})
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
@@ -477,7 +520,7 @@ def log_decision(thread, title: str, summary: str, body: str,
     front = [
         "---",
         f"title: {yaml_value(title)}",
-        f"status: {status}",
+        f"state: {state}",
         f"summary: {yaml_value(summary)}",
         f"supersedes: [{', '.join(supersedes)}]",
         "---",
@@ -512,18 +555,12 @@ def retire_decision(thread, decision_id: str, state: str) -> str:
     entry = idx.find(entries, decision_id)
     if error := idx.retire(thread.dir, "decisions", decision_id, state):
         return json.dumps(error)
-    # Keep the file's own status in step, so a decision found by grep or in a
-    # file browser says what it is without depending on which index led there.
-    if entry:
-        path = thread.dir / entry.link.lstrip("./")
-        if path.is_file():
-            text = path.read_text()
-            for live in idx.IN_FORCE["decisions"]:
-                if f"status: {live}" in text:
-                    path.write_text(text.replace(f"status: {live}", f"status: {state}", 1))
-                    break
+    stale = _sync_file_state(thread.dir, entry, state) if entry else ""
     render.render(thread.dir)
-    return json.dumps({"id": decision_id})
+    reply: dict = {"id": decision_id}
+    if stale:
+        reply["file_unchanged"] = stale
+    return json.dumps(reply)
 
 
 def retire_artifact(thread, artifact_id: str, state: str) -> str:

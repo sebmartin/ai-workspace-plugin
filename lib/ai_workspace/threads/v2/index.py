@@ -137,10 +137,13 @@ def unrepresentable(entry: Entry) -> str | None:
 def external(link: str) -> bool:
     """Whether this link names something outside the workspace entirely.
 
-    An issue or a PR is a valid todo link, so a reader that resolves links as
-    `thread_dir / link` has to let these past rather than call them missing.
-    One definition, because a writer that accepts a link and an auditor that
-    calls the same link dangling is worse than either rule on its own.
+    Whether a URL is the right link for a todo is a judgement call, and the
+    skill and `add_todo`'s docstring state that rule. This function answers
+    only whether a link is external at all. A reader that resolves links as
+    `thread_dir / link` needs that, so it can let an external link past instead
+    of calling it missing. One definition, because a writer that accepts a link
+    and an auditor that calls the same link dangling is worse than either rule
+    on its own.
     """
     return link.lower().startswith(("http://", "https://"))
 
