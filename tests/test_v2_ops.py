@@ -49,7 +49,7 @@ def _isolated_config_dir(tmp_path, monkeypatch):
     monkeypatch.setenv("AI_WORKSPACE_CONFIG_DIR", str(tmp_path / "_config"))
 
 
-def _thread(tmp_path, name="t", schema=2):
+def _thread(tmp_path, name="t", schema=2, stubs=True):
     d = tmp_path / "threads" / name
     for sub in ("sessions", "decisions", "artifacts", "attachments", "todos"):
         (d / sub).mkdir(parents=True)
@@ -57,6 +57,15 @@ def _thread(tmp_path, name="t", schema=2):
         "# Thread: t\n\n**Started**: 2026-01-01\n\n## Status\n\nx\n\n"
         "## Next steps\n\n- None\n\n## About\n\ny\n"
     )
+    # A todo's link must name a file that exists, so the throwaway links the
+    # todo tests pass are real files here.
+    # A todo's link has to name a file that exists, so the throwaway links the
+    # todo tests pass are real files. Opt out where a test counts what is in a
+    # directory, since a stub would be one more entry than it expects.
+    if stubs:
+        for stub in ("s.md", "x.md", "sessions/s.md", "sessions/20260101-s.md",
+                     "todos/a.md", "todos/b.md", "todos/x.md"):
+            (d / stub).write_text("stub\n")
     if schema == 2:
         marker.write(d, 2)
     return d
@@ -138,10 +147,11 @@ class TestTodos:
         assert states == [("First", "active"), ("Second", "started")]
 
     def test_an_external_url_is_a_valid_todo_link(self, tmp_path):
-        """A todo for an issue or a PR links to it, which is the documented use.
+        """A todo tracked in an external system links its item there.
 
         The scheme is matched without regard to case, because a capital is what
-        a person pastes and the accepted set is closed either way.
+        a person pastes and the accepted set is closed either way. Whether that
+        URL is the right one is judgement the skill holds; this is the shape.
         """
         d = _thread(tmp_path)
         urls = [
@@ -597,6 +607,152 @@ class TestTodos:
         assert _reply(add_todo(str(tmp_path), "t", "A", "./s.md", "banana"))["error"] == "STATE_UNKNOWN"
 
 
+    def test_a_todo_whose_file_was_never_written_is_refused(self, tmp_path):
+        """Write the file, then add the todo.
+
+        An entry pointing at nothing renders into Next steps and the migration
+        audit reports it as dangling, and `index_file` already refuses the same
+        situation. It was mostly unreachable while the usual link was an
+        existing session; it is the normal path now that the file is.
+        """
+        d = _thread(tmp_path, stubs=False)
+        out = _reply(add_todo(str(tmp_path), "t", "A", "./todos/20260101-nope.md"))
+        assert out["error"] == "MISSING"
+        assert out["detail"] == "./todos/20260101-nope.md"
+        assert idx.read(d, "todos") == []
+
+    def test_an_external_link_is_added_without_a_file_behind_it(self, tmp_path):
+        """A tracker item is the record and there is no local file to check."""
+        d = _thread(tmp_path, stubs=False)
+        out = _reply(add_todo(str(tmp_path), "t", "A",
+                              "https://example.com/owner/repo/issues/1"))
+        assert "error" not in out
+        assert len(idx.read(d, "todos")) == 1
+
+    def test_retiring_a_todo_updates_the_state_in_its_own_file(self, tmp_path):
+        """So a todo found by grep says what it is, as a decision already does.
+
+        Retiring used to touch only the index, so a finished todo's file read
+        `state: active` for good. That was survivable while a todo file was the
+        exception and is not now that it is the normal case.
+        """
+        d = _thread(tmp_path)
+        f = d / "todos" / "20260101-x.md"
+        f.write_text("---\ntitle: X\nstate: active\n---\n\n# X\n")
+        todo_id = _reply(add_todo(str(tmp_path), "t", "X", "./todos/20260101-x.md"))["id"]
+        retire_todo(str(tmp_path), "t", todo_id, "done")
+        assert "state: done" in f.read_text()
+        assert "state: active" not in f.read_text()
+
+    def test_parking_a_todo_updates_the_state_in_its_own_file(self, tmp_path):
+        """Retirement is not the only door.
+
+        The template advertises every state in the file, so a parked todo that
+        reads `state: active` on disk while the index says `parked` is the same
+        drift the sync exists to stop, reached through `set_todo_state`.
+        """
+        d = _thread(tmp_path)
+        f = d / "todos" / "20260101-x.md"
+        f.write_text("---\ntitle: X\nstate: active\n---\n\n# X\n")
+        todo_id = _reply(add_todo(str(tmp_path), "t", "X", "./todos/20260101-x.md"))["id"]
+        set_todo_state(str(tmp_path), "t", todo_id, "parked")
+        assert "state: parked" in f.read_text()
+        set_todo_state(str(tmp_path), "t", todo_id, "active")
+        assert "state: active" in f.read_text()
+
+    def test_a_file_the_sync_cannot_update_is_named_in_the_reply(self, tmp_path):
+        """A file holding no recognised `state:` line disagrees with the index
+        afterwards, and nothing else would say so. Three outcomes used to be
+        one silent `None`: a write, an external link with no file, and no match
+        at all.
+        """
+        d = _thread(tmp_path)
+        f = d / "todos" / "20260101-x.md"
+        f.write_text("---\ntitle: X\n---\n\n# X\n")
+        todo_id = _reply(add_todo(str(tmp_path), "t", "X", "./todos/20260101-x.md"))["id"]
+        out = _reply(retire_todo(str(tmp_path), "t", todo_id, "done"))
+        assert out["file_unchanged"] == "./todos/20260101-x.md"
+        retired = idx.find(idx.read(d, "todos", retired=True), todo_id)
+        assert retired is not None and retired.state == "done"
+
+    def test_a_file_the_sync_did_update_says_nothing(self, tmp_path):
+        """The key is a deviation, so it is absent on the ordinary path."""
+        d = _thread(tmp_path)
+        f = d / "todos" / "20260101-x.md"
+        f.write_text("---\ntitle: X\nstate: active\n---\n\n# X\n")
+        todo_id = _reply(add_todo(str(tmp_path), "t", "X", "./todos/20260101-x.md"))["id"]
+        assert "file_unchanged" not in _reply(
+            retire_todo(str(tmp_path), "t", todo_id, "done"))
+
+    def test_a_body_line_that_looks_like_the_field_is_left_alone(self, tmp_path):
+        """The frontmatter is set as a field, so the body is never searched.
+
+        A whole-file text replace rewrote a line inside a fenced block and
+        reported success, leaving the frontmatter with no state at all.
+        """
+        d = _thread(tmp_path)
+        f = d / "todos" / "20260101-x.md"
+        f.write_text(
+            "---\ntitle: Document the template\n---\n\n"
+            "```yaml\nstate: active\n```\n")
+        todo_id = _reply(add_todo(str(tmp_path), "t", "X", "./todos/20260101-x.md"))["id"]
+        out = _reply(retire_todo(str(tmp_path), "t", todo_id, "done"))
+        assert out["file_unchanged"] == "./todos/20260101-x.md"
+        assert "state: active" in f.read_text()
+
+    def test_the_rest_of_the_frontmatter_survives_the_write(self, tmp_path):
+        """Key order and quoting are kept, so a state change is a one-line
+        diff rather than a reordered block."""
+        d = _thread(tmp_path)
+        f = d / "todos" / "20260101-x.md"
+        f.write_text('---\ntitle: Pick X\nstate: active\n'
+                     'summary: "Chose X: it is simplest."\n---\n\n# Pick X\n')
+        todo_id = _reply(add_todo(str(tmp_path), "t", "X", "./todos/20260101-x.md"))["id"]
+        retire_todo(str(tmp_path), "t", todo_id, "done")
+        got = f.read_text()
+        assert "state: done" in got
+        assert got.index("title:") < got.index("state:") < got.index("summary:")
+        assert '"Chose X: it is simplest."' in got
+        assert got.rstrip().endswith("# Pick X")
+
+    def test_an_unrecognised_value_in_the_file_is_still_replaced(self, tmp_path):
+        """The old code matched the field *and* a known value, so a file
+        holding anything else was skipped."""
+        d = _thread(tmp_path)
+        f = d / "todos" / "20260101-x.md"
+        f.write_text("---\ntitle: X\nstate: whatever\n---\n\n# X\n")
+        todo_id = _reply(add_todo(str(tmp_path), "t", "X", "./todos/20260101-x.md"))["id"]
+        assert "file_unchanged" not in _reply(
+            retire_todo(str(tmp_path), "t", todo_id, "done"))
+        assert "state: done" in f.read_text()
+
+    def test_frontmatter_that_does_not_parse_is_reported_not_raised(self, tmp_path):
+        """The two YAML parsers raise from unrelated hierarchies.
+
+        This reads through ruamel while `split_frontmatter` reads through
+        PyYAML, so catching only PyYAML's let a `ScannerError` out of the tool
+        instead of a reply. An unquoted value containing ": " is the fault the
+        skill already calls the common one.
+        """
+        d = _thread(tmp_path)
+        f = d / "todos" / "20260101-x.md"
+        f.write_text("---\ntitle: X\nstate: active\n"
+                     "summary: Chose X: it is simplest\n---\n\n# X\n")
+        todo_id = _reply(add_todo(str(tmp_path), "t", "X", "./todos/20260101-x.md"))["id"]
+        out = _reply(retire_todo(str(tmp_path), "t", todo_id, "done"))
+        assert out["file_unchanged"] == "./todos/20260101-x.md"
+        assert "state: active" in f.read_text()
+        retired = idx.find(idx.read(d, "todos", retired=True), todo_id)
+        assert retired is not None and retired.state == "done"
+
+    def test_retiring_a_todo_tracked_elsewhere_writes_no_file(self, tmp_path):
+        """An external link names no file, so the sync has nothing to open."""
+        _thread(tmp_path, stubs=False)
+        todo_id = _reply(add_todo(str(tmp_path), "t", "X",
+                                  "https://example.com/i/1"))["id"]
+        assert "error" not in _reply(retire_todo(str(tmp_path), "t", todo_id, "done"))
+
+
 class TestDecisions:
     def test_file_and_index_entry_are_written(self, tmp_path):
         d = _thread(tmp_path)
@@ -623,17 +779,29 @@ class TestDecisions:
         assert [e.id for e in live] == [e.id for e in live if e.id != old]
         assert gone[0].id == old and gone[0].state == "superseded"
 
-    def test_retire_updates_the_file_status_too(self, tmp_path):
+    def test_retire_updates_the_file_state_too(self, tmp_path):
         d = _thread(tmp_path)
         ws = str(tmp_path)
         log_decision(ws, "t", "X", "Chose X.", "b", "locked"); did = _only_id(d, "decisions")
         retire_decision(ws, "t", did, "withdrawn")
-        assert "status: withdrawn" in (d / "decisions" / f"{did}.md").read_text()
+        assert "state: withdrawn" in (d / "decisions" / f"{did}.md").read_text()
 
-    def test_bad_status_rejected(self, tmp_path):
+    def test_a_decision_file_with_no_state_is_the_file_s_fault(self, tmp_path):
+        """Two faults, two codes. A caller passing a bad state gets
+        `STATE_UNKNOWN` and changes its call; a file declaring one gets
+        `FILE_STATE_UNKNOWN` and has to be edited. An absent key leaves
+        `detail` empty, which is why the code has to carry the difference.
+        """
+        d = _thread(tmp_path)
+        (d / "decisions" / "20260101-x.md").write_text("---\ntitle: X\n---\nx\n")
+        out = _reply(index_file(str(tmp_path), "t", "./decisions/20260101-x.md"))
+        assert out["error"] == "FILE_STATE_UNKNOWN"
+        assert out["detail"] == ""
+
+    def test_bad_state_rejected(self, tmp_path):
         _thread(tmp_path)
         assert _reply(log_decision(
-            str(tmp_path), "t", "T", "s", "b", "locked-ish"))["error"] == "STATUS_UNKNOWN"
+            str(tmp_path), "t", "T", "s", "b", "locked-ish"))["error"] == "STATE_UNKNOWN"
 
 
     @pytest.mark.parametrize("summary", [
@@ -646,7 +814,7 @@ class TestDecisions:
         """The reader refuses invalid frontmatter, so the writer must emit none.
 
         Every one of these was written unquoted once and came back as an
-        unparseable file, which cost the decision its title and status too.
+        unparseable file, which cost the decision its title and state too.
         """
         from ai_workspace.text import split_frontmatter
 
@@ -804,10 +972,10 @@ class TestIndexDirectory:
         assert "20260101-Screenshot (1).md" in json.dumps(out)
 
     def _thread_with(self, tmp_path, kind, names):
-        d = _thread(tmp_path)
+        d = _thread(tmp_path, stubs=False)
         (d / kind).mkdir(parents=True, exist_ok=True)
         for n in names:
-            (d / kind / n).write_text("---\nstatus: locked\n---\nx\n")
+            (d / kind / n).write_text("---\nstate: locked\n---\nx\n")
         return d
 
     def test_indexes_a_whole_directory_in_one_call(self, tmp_path):
@@ -839,10 +1007,10 @@ class TestIndexDirectory:
                               [f"202608{(i % 28) + 1:02d}-ok-{i}.md" for i in range(95)])
         for i in range(5):
             (d / "decisions" / f"202607{i + 1:02d}-bad-{i}.md").write_text(
-                "---\nstatus: decided\n---\nx\n")
+                "---\nstate: decided\n---\nx\n")
         out = index_directory(str(tmp_path), "t", "./decisions")
         assert set(_reply(out)) == {"refused"}
-        assert len(_reply(out)["refused"]["STATUS_UNKNOWN"]) == 5
+        assert len(_reply(out)["refused"]["FILE_STATE_UNKNOWN"]) == 5
         assert len(out) < 200, len(out)
         assert len(idx.read(d, "decisions")) == 95
 
@@ -853,43 +1021,43 @@ class TestIndexDirectory:
         assert len(idx.read(d, "sessions")) == 1
 
     def test_a_refusal_reports_and_does_not_stop_the_rest(self, tmp_path):
-        """A migrated thread full of v1 statuses is the reason this matters."""
+        """A migrated thread full of v1 states is the reason this matters."""
         d = self._thread_with(tmp_path, "decisions", ["20260101-good.md"])
-        (d / "decisions" / "20260102-old.md").write_text("---\nstatus: decided\n---\nx\n")
+        (d / "decisions" / "20260102-old.md").write_text("---\nstate: decided\n---\nx\n")
         r = _reply(index_directory(str(tmp_path), "t", "./decisions"))
-        assert r == {"refused": {"STATUS_UNKNOWN": ["20260102-old.md"]}}
+        assert r == {"refused": {"FILE_STATE_UNKNOWN": ["20260102-old.md"]}}
         assert [e.id for e in idx.read(d, "decisions")] == ["20260101-good"]
 
-        (d / "decisions" / "20260102-old.md").write_text("---\nstatus: locked\n---\nx\n")
+        (d / "decisions" / "20260102-old.md").write_text("---\nstate: locked\n---\nx\n")
         index_directory(str(tmp_path), "t", "./decisions")
         assert len(idx.read(d, "decisions")) == 2
 
     def test_refusals_are_grouped_by_cause(self, tmp_path):
         """Per-file detail made a report of twenty-four broken decisions
         10,463 characters, nine tenths of it one sentence repeated."""
-        d = _thread(tmp_path)
+        d = _thread(tmp_path, stubs=False)
         (d / "decisions").mkdir(parents=True, exist_ok=True)
         for i in range(24):
             (d / "decisions" / f"202602{i + 1:02d}-broken-{i}.md").write_text(
-                f"---\nstatus: locked\nsummary: Lot {i}: subdivides.\n---\nx\n")
+                f"---\nstate: locked\nsummary: Lot {i}: subdivides.\n---\nx\n")
         for i in range(3):
             (d / "decisions" / f"202603{i + 1:02d}-old-{i}.md").write_text(
-                "---\nstatus: decided\n---\nx\n")
+                "---\nstate: decided\n---\nx\n")
         out = index_directory(str(tmp_path), "t", "./decisions")
 
         # one key per cause however many files share it, and every file named
         r = _reply(out)
         assert set(r) == {"refused"}
         assert len(r["refused"]["FRONTMATTER_UNPARSEABLE"]) == 24
-        assert len(r["refused"]["STATUS_UNKNOWN"]) == 3
+        assert len(r["refused"]["FILE_STATE_UNKNOWN"]) == 3
         assert len(out) < 900, len(out)
 
     def test_one_file_still_gets_the_whole_message(self, tmp_path):
         """The batch names the files; index_file is where the detail lives."""
-        d = _thread(tmp_path)
+        d = _thread(tmp_path, stubs=False)
         (d / "decisions").mkdir(parents=True, exist_ok=True)
         (d / "decisions" / "20260201-x.md").write_text(
-            "---\nstatus: locked\nsummary: Lot: subdivides.\n---\nx\n")
+            "---\nstate: locked\nsummary: Lot: subdivides.\n---\nx\n")
         out = index_file(str(tmp_path), "t", "./decisions/20260201-x.md")
         assert _reply(out)["error"] == "FRONTMATTER_UNPARSEABLE" and "line 3" in _reply(out)["detail"]
 
@@ -898,7 +1066,7 @@ class TestIndexDirectory:
         assert _reply(index_directory(str(tmp_path), "t", "./artifacts"))["undated"] == ["orphan"]
 
     def test_a_path_outside_the_thread_is_refused(self, tmp_path):
-        _thread(tmp_path)
+        _thread(tmp_path, stubs=False)
         for link in ("../../etc", "/etc", "./sessions/nested", "./"):
             assert "error" in _reply(index_directory(str(tmp_path), "t", link)), link
 
@@ -908,7 +1076,7 @@ class TestIndexDirectory:
         `._20260125-x.md` sorts before `20260125-x.md`, so the AppleDouble file
         claimed that session's id and the real file was demoted to `-2`.
         """
-        d = _thread(tmp_path)
+        d = _thread(tmp_path, stubs=False)
         (d / "sessions").mkdir(parents=True, exist_ok=True)
         for n in ("20260125-real.md", ".DS_Store", "._20260125-real.md", "._.DS_Store"):
             (d / "sessions" / n).write_text("x\n")
@@ -918,33 +1086,33 @@ class TestIndexDirectory:
             ("20260125-real", "./sessions/20260125-real.md")]
 
     def test_a_decision_with_invalid_yaml_is_told_what_is_wrong(self, tmp_path):
-        """Blaming a missing status sends the reader to the wrong fix: the
-        status is fine, the file just cannot be parsed."""
-        d = _thread(tmp_path)
+        """Blaming a missing state sends the reader to the wrong fix: the
+        state is fine, the file just cannot be parsed."""
+        d = _thread(tmp_path, stubs=False)
         (d / "decisions").mkdir(parents=True, exist_ok=True)
         (d / "decisions" / "20260619-lot.md").write_text(
-            "---\nstatus: locked\nsummary: Lot 4 579 subdivides: 6 736 633.\n---\nx\n")
+            "---\nstate: locked\nsummary: Lot 4 579 subdivides: 6 736 633.\n---\nx\n")
         r = _reply(index_file(str(tmp_path), "t", "./decisions/20260619-lot.md"))
         assert r["error"] == "FRONTMATTER_UNPARSEABLE"
         # the parser's own complaint, with a position, rather than a guess
         assert "line 3" in r["detail"]
 
     def test_metadata_is_refused_even_when_named_explicitly(self, tmp_path):
-        d = _thread(tmp_path)
+        d = _thread(tmp_path, stubs=False)
         (d / "sessions").mkdir(parents=True, exist_ok=True)
         (d / "sessions" / ".DS_Store").write_text("x\n")
         assert _reply(index_file(str(tmp_path), "t", "./sessions/.DS_Store"))["error"] == "METADATA"
 
     def test_a_missing_directory_is_an_error_not_silence(self, tmp_path):
         """create lays all three down, so a missing one means something is wrong."""
-        d = _thread(tmp_path)
+        d = _thread(tmp_path, stubs=False)
         import shutil
         shutil.rmtree(d / "artifacts", ignore_errors=True)
         r = _reply(index_directory(str(tmp_path), "t", "./artifacts"))
         assert r["error"] == "NO_SUCH_DIRECTORY" and r["detail"] == "artifacts"
 
     def test_a_bad_kind_is_refused(self, tmp_path):
-        _thread(tmp_path)
+        _thread(tmp_path, stubs=False)
         assert _reply(index_directory(str(tmp_path), "t", "./todos"))["error"] == "NOT_INDEXABLE"
 
 

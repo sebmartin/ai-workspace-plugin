@@ -206,13 +206,13 @@ def order_todos(workspace_dir: str, thread_name: str, todo_ids: list[str],
 
 
 def log_decision(workspace_dir: str, thread_name: str, title: str, summary: str,
-                 body: str, status: str = "proposed",
+                 body: str, state: str = "proposed",
                  supersedes: list[str] | None = None) -> str:
     """Write a decision file and index it."""
     call = _for(workspace_dir, thread_name, "log_decision")
     if isinstance(call, str):
         return call
-    return call.fn(call.thread, title, summary, body, status, supersedes)
+    return call.fn(call.thread, title, summary, body, state, supersedes)
 
 
 def retire_decision(workspace_dir: str, thread_name: str, decision_id: str,

@@ -85,9 +85,11 @@ where you will read the dates for everything else that has none.
 
 `index_directory` with `./decisions`, then artifacts.
 
-Decisions need their status vocabulary substituted first, in each file's own
-frontmatter, because `index_file` reads `status:` off the file and refuses
-anything this schema does not know. `index_directory` reports each refusal with
+Decisions need the key renamed and its vocabulary substituted first, in each
+file's own frontmatter, because `index_file` reads `state:` off the file and
+refuses anything this schema does not know. A v1 file says `status:`, and some
+state it only in a `> Status:` or `**Status**:` line in the body with nothing
+in the frontmatter at all, so this is reading rather than a replace. `index_directory` reports each refusal with
 its filename and indexes the rest, so running it, fixing what it names, and
 running it again is the expected loop; it never double-indexes what already
 went in.
@@ -139,22 +141,34 @@ index line links to it. Renaming would break links from session logs into
 decisions, from decision bodies into artifacts, from the README and from other
 threads, none of which anything rewrites and none of which error when dangling.
 
-**Substitute the status vocabulary before indexing a decision**, in the file's
-own frontmatter: `decided`, `active`, `confirmed`, `adopted` and `Accepted`
-become `locked`; `mostly-locked` becomes `partially-locked`; `open` becomes
-`proposed`. `index_file` reads `status:` off the file and refuses anything
-outside that vocabulary, so a decision you have not converted will say so.
+**Rename the key and substitute its vocabulary before indexing a decision**,
+in the file's own frontmatter. The key is `status:` in v1 and `state:` here.
+The values: `decided`, `active`, `confirmed`, `adopted` and `Accepted` become
+`locked`; `mostly-locked` becomes `partially-locked`; `open` becomes
+`proposed`. `index_file` reads `state:` and refuses anything outside that
+vocabulary, so a decision you have not converted will say so, with
+`FILE_STATE_UNKNOWN` and an empty `detail` when the key is still the old one.
 
-Decisions with no status need reading. So do any whose prose describes
+Decisions with no state in their frontmatter need reading, and so do the ones
+that state it in a `> Status:` or `**Status**:` body line, where the value is
+often prose rather than a word from any vocabulary. So do any whose prose describes
 supersession, to tell which superseded which — the live one declares
 `supersedes`.
 
 ### 5. The rest
 
-**Extract todos** from Next steps, Parked and Open Questions. Each needs a link:
-the session it came from when it has nothing of its own. A todo goes on the end
-of the list and Next steps shows the top five, so add the Next steps items
-first, in the order the README listed them, and the rest after. Only carry
+**Extract todos** from Next steps, Parked and Open Questions. Write a file for
+each one, `todos/YYYYMMDD-slug.md` from the todo template, and copy the v1 line
+verbatim into **What**. That file is the record of this todo, which is what a
+todo's link has to name. Do not summarise it and do not go hunting for what it
+meant; that digging belongs to whoever picks the todo up. Say in the file that it
+came from the v1 README on this date and that its context has not been reviewed,
+so a later reader knows the one line is all anyone knows. Put the session it came
+from, or an issue it names, under **## Links**, and leave that heading out when
+there is nothing to put there.
+
+A todo goes on the end of the list and Next steps shows the top five, so add the
+Next steps items first, in the order the README listed them, and the rest after. Only carry
 something over as parked if the v1 README had it parked, and retire a parked
 entry that is already resolved rather than carrying it.
 
