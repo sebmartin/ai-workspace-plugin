@@ -73,6 +73,10 @@ slot here:
 When something fits none of these, say so and ask. Filing it where nothing reads it is the
 failure this table exists to prevent.
 
+**Check the thread before the web.** Its sessions, artifacts and decisions are the
+record of what was already worked out here, and they answer a question about this
+thread better than a search does.
+
 ### Shape
 
 ```
@@ -88,6 +92,12 @@ threads/{name}/
 ```
 
 An artifact carries a one-line description on its index line. Nothing else does: a decision and a session keep their `summary:` in their own frontmatter.
+
+These directories are the whole of a thread's layout. **Never add a top-level folder
+inside a thread.** Anything you produce, an analysis, a spec, a model, a collection of
+methods, is derived work and belongs in `artifacts/`, as `artifacts/<name>/` when it
+needs a folder of its own. This constrains you rather than the plugin: folders the
+plugin introduces or retires are its call.
 
 ### Reading another thread
 
