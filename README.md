@@ -42,7 +42,7 @@ cd ~/my-workspace
 > initialize the ai-workspace
 ```
 
-`init` creates `threads/`, `AGENTS.md` (read by both), `CLAUDE.md` (a one-line `@AGENTS.md` import for Claude), and `.claude/settings.json` (Claude-only permission allowlist; Codex ignores). All files are vendor-safe.
+`init` creates `threads/` and `AGENTS.md` (read by both), then offers to allow the plugin's tools in your global CLI settings. It writes nothing else into the workspace: the rules for working with threads live in the plugin's skills, which load wherever you resume a thread from, rather than in a file that only loads when a session starts in the workspace directory.
 
 ## Examples
 
@@ -57,7 +57,6 @@ Threads work for anything you'd want to revisit across sessions, not just code.
 ```
 my-workspace/
 ├── AGENTS.md                # Workspace instructions (read by Claude and Codex)
-├── CLAUDE.md                # One-line "@AGENTS.md" import (Claude only)
 ├── threads/
 │   └── {thread-name}/
 │       ├── README.md        # Status, next steps, written for you, not the assistant

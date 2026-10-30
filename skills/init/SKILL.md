@@ -1,6 +1,6 @@
 ---
 name: init
-description: Initialize the ai-workspace plugin in the current directory. Creates threads/, AGENTS.md, CLAUDE.md, and .claude/settings.json. Safe to re-run, skips files that already exist.
+description: Initialize the ai-workspace plugin in the current directory. Creates threads/ and AGENTS.md, then offers to allow the plugin's tools in the user's global settings. Safe to re-run, skips files that already exist.
 ---
 
 # Init Skill
@@ -11,12 +11,16 @@ Initialize the ai-workspace plugin in the current working directory.
 
 1. `threads/` — directory where conversation threads will be stored
 2. `AGENTS.md` — workspace instructions read by both Claude Code and Codex CLI
-3. `CLAUDE.md` — one-line pointer to `AGENTS.md` (Claude Code reads this natively)
-4. `.claude/settings.json` — permission allowlist for plugin operations on Claude Code
 
 All steps are skipped if the file or directory already exists. Safe to re-run.
 
-The same files work for both Claude Code and Codex CLI. Codex ignores `CLAUDE.md` and `.claude/`; Claude ignores files it doesn't recognize. No vendor detection needed.
+**Nothing the plugin needs is written to a file in the workspace.** The rules for working
+with threads are in the threads skill, which loads wherever a thread is resumed from, and
+the permissions go in the user's global settings, which apply from any directory. A
+workspace file only loads when a session happens to start in that directory, so anything
+that lived in one was missing from most sessions.
+
+Both files work for Claude Code and Codex CLI. No vendor detection needed.
 
 ## Steps
 
@@ -32,23 +36,18 @@ Skip if `threads/` already exists.
 
 Check if `AGENTS.md` exists. If not, call `mcp__plugin_ai-workspace_threads__get_skill_file("templates/AGENTS.md.template")` and write the result to `AGENTS.md`.
 
-### 3. Create `CLAUDE.md`
+### 3. Offer the permissions
 
-Check if `CLAUDE.md` exists. If not, call `mcp__plugin_ai-workspace_threads__get_skill_file("templates/CLAUDE.md.template")` and write the result to `CLAUDE.md`. The template is a single `@AGENTS.md` line so Claude imports the AGENTS.md content without content duplication.
+Offer to allow the plugin's tools in the user's **global** CLI settings, so they are not
+prompted again and the allowance holds from any directory. Allow all
+`mcp__plugin_ai-workspace_threads__*` tools and Read/Edit/Write on `{workspace}/**`, using
+the absolute path of the workspace. Tell the user what was written and that a restart may
+be needed.
 
-### 4. Create `.claude/settings.json`
+Don't write a settings file inside the workspace. It would only apply to sessions that
+start there.
 
-Check if `.claude/settings.json` exists. If not:
-
-```bash
-mkdir -p .claude
-```
-
-Then call `mcp__plugin_ai-workspace_threads__get_skill_file("templates/settings.json.template")` and write the result to `.claude/settings.json`.
-
-This file is Claude-Code-specific. It is harmless on Codex; Codex ignores it.
-
-### 5. Codex subagent install (Codex CLI only)
+### 4. Codex subagent install (Codex CLI only)
 
 This step only applies on Codex CLI. **Detect the CLI before doing anything**: you know which CLI you are. If you are Claude Code, skip this entire step — Claude loads the `proponent` and `skeptic` agents directly from the plugin's `agents/` directory; nothing to copy.
 
@@ -71,8 +70,6 @@ Initialized ai-workspace in /path/to/workspace
 Created:
   threads/
   AGENTS.md
-  CLAUDE.md
-  .claude/settings.json
 
 Skipped (already exists):
   (none)
@@ -86,4 +83,4 @@ On Claude Code, restart the CLI for the new permissions to take effect.
 
 Use the actual absolute path of the current working directory, not a placeholder.
 
-If `.claude/settings.json` was newly created, remind the user to restart Claude Code so the permission allowlist takes effect. This restart is not needed on Codex.
+If the permissions were added, remind the user to restart Claude Code so they take effect. This restart is not needed on Codex.
