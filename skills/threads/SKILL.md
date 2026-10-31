@@ -73,6 +73,10 @@ slot here:
 When something fits none of these, say so and ask. Filing it where nothing reads it is the
 failure this table exists to prevent.
 
+**Check the thread before the web.** Its sessions, artifacts and decisions are the
+record of what was already worked out here, and they answer a question about this
+thread better than a search does.
+
 ### Shape
 
 ```
@@ -88,6 +92,12 @@ threads/{name}/
 ```
 
 An artifact carries a one-line description on its index line. Nothing else does: a decision and a session keep their `summary:` in their own frontmatter.
+
+These directories are the whole of a thread's layout. **Never add a top-level folder
+inside a thread.** Anything you produce, an analysis, a spec, a model, a collection of
+methods, is derived work and belongs in `artifacts/`, as `artifacts/<name>/` when it
+needs a folder of its own. This constrains you rather than the plugin: folders the
+plugin introduces or retires are its call.
 
 ### Reading another thread
 
@@ -117,6 +127,10 @@ A schema 1 thread keeps all of that inline in its README, so one read covers it.
 ### Writing
 
 **Adding to the record is the user's call.** Every index entry (a todo, a decision, an artifact) and every `memory.md` entry is read on every resume from then on, so add one only when the user asked for it. The ask can be implicit: "write up your research" means write an artifact and index it, without checking first. When nobody asked and you think something belongs on the record, suggest it in your reply and add it once the user agrees.
+
+**Declaring something settled is the user's call.** Don't call a draft, a decision or a section locked, final or done, and don't ask whether to lock it. Present the work and the reasoning, then wait. A tentative "maybe X" is not a decision.
+
+**Say "saved", not "archived", when you have written a file.** Archiving is a different operation in this plugin: it retires a whole thread from the active list. Calling a save an archive tells the user their work was put away.
 
 Never hand-edit an index or the README's Next steps section; both are rendered from what the tools write, and a hand edit will be overwritten. Status is written by `save_session`'s `status` argument, or edited directly between saves. About, the header fields and `memory.md` have no tool; edit them directly.
 

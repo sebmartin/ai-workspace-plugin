@@ -42,7 +42,7 @@ cd ~/my-workspace
 > initialize the ai-workspace
 ```
 
-`init` creates `threads/`, `AGENTS.md` (read by both), `CLAUDE.md` (a one-line `@AGENTS.md` import for Claude), and `.claude/settings.json` (Claude-only permission allowlist; Codex ignores). All files are vendor-safe.
+`init` creates `threads/`, `AGENTS.md` (read by both), `CLAUDE.md` (a one-line `@AGENTS.md` import, which is how Claude Code reads `AGENTS.md`) and `.claude/settings.json` (a Claude-only permission allowlist; Codex ignores it). It writes no rules into the workspace: those live in the plugin's skills, which load wherever you resume a thread from, rather than in a file that only loads when a session starts in the workspace directory.
 
 ## Examples
 
@@ -132,6 +132,42 @@ To check several texts at once, start each with a `--- <label>` line. Results co
 It is advisory and blocks nothing. It runs on Claude Code only. A clean result means nothing was flagged in the wording, not that the text is safe to publish: it does not check code or documents, and it cannot recognise a private fact written as an ordinary statement.
 
 Concepts that are fine to say publicly can be listed in `skills/privacy-check/allow-list.md`, one per line as `- concept`. The checker treats them as context, not a bypass. Only you add entries; an agent never does.
+
+## Permissions (Claude Code)
+
+`init` writes `.claude/settings.json` into your workspace. It allows the threads tools and a few file and search commands, so sessions you start in the workspace don't prompt for routine thread work. Codex ignores this file.
+
+Those settings only apply to sessions started in the workspace directory. If you often resume threads from somewhere else, such as a code repository, copy them into your user settings: `~/.claude/settings.json`, or `$CLAUDE_CONFIG_DIR/settings.json` if you set that variable.
+
+### Turning the workspace settings into user settings
+
+Use the workspace's `.claude/settings.json` as the starting point.
+
+- **Tool rules copy across unchanged:** `mcp__plugin_ai-workspace_threads__*`, `WebSearch`, `Glob(*)` and the `Bash(...)` rules.
+- **Path rules need absolute paths.** In the workspace file, `Edit(threads/**)` is relative to the workspace. In user settings, write it with a double slash and the full path: `Edit(//Users/you/my-workspace/threads/**)`. A single leading slash would be read relative to the settings file's own directory.
+
+For a workspace at `/Users/you/my-workspace`:
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "mcp__plugin_ai-workspace_threads__*",
+      "Edit(//Users/you/my-workspace/threads/**)",
+      "Write(//Users/you/my-workspace/threads/**)",
+      "WebSearch",
+      "Glob(*)"
+    ]
+  }
+}
+```
+
+### Things to know
+
+- **Global rules apply to subagents.** Every agent in every session inherits them. An allow rule for editing threads lets any agent write to them without asking, including coding agents that have no business there. Copy only the rules you want everywhere. The threads tools alone are a safe minimum.
+- **Global Bash rules apply in every repository.** `mv` and `mkdir` are convenient in a workspace and less so everywhere else. Leave them in the workspace file unless you want them globally.
+- **Deny rules protect files in every permission mode.** Use one for anything that must never change, for example `"deny": ["Edit(//Users/you/my-workspace/threads/my-thread/artifacts/frozen/**)"]`.
+- **Auto mode makes most allow rules optional.** Actions that would prompt go to a classifier instead. Allow rules still skip that check, which is faster and avoids the occasional refusal.
 
 ## Custom Skills
 

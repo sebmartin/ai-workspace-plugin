@@ -216,7 +216,7 @@ Merging to `main` ships the plugin, so this is the pre-merge checklist for every
 - [ ] Plugin loads with `claude --plugin-dir .`
 - [ ] Plugin loads on Codex (via local marketplace install)
 - [ ] Init works in a clean directory:
-  - [ ] Creates `threads/`, `AGENTS.md`, `CLAUDE.md` (one-liner), and `.claude/settings.json`
+  - [ ] Creates `threads/`, `AGENTS.md`, `CLAUDE.md` (one-liner) and `.claude/settings.json`
   - [ ] On Codex, also copies `.codex-plugin/agents/*.toml` into `~/.codex/agents/`
   - [ ] Re-running skips existing files safely
 - [ ] Thread management works (both CLIs):

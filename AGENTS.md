@@ -384,6 +384,6 @@ The full list is whatever `mcp_server.py` declares.
 ## Notes
 
 **Init skill output:**
-- Creates `threads/`, `AGENTS.md` (vendor-neutral), `CLAUDE.md` (one-liner `@AGENTS.md`), `.claude/settings.json` (Claude allowlist)
+- Creates `threads/`, `AGENTS.md` (vendor-neutral), `CLAUDE.md` (one-liner `@AGENTS.md`) and `.claude/settings.json` (Claude allowlist). None of them carries rules: a workspace file only loads when a session starts in that directory, so the thread rules live in the threads skill instead
 - On Codex, additionally copies `.codex-plugin/agents/*.toml` to `~/.codex/agents/` so the debate skill's subagents work
 - Safe to re-run; skips files that already exist
