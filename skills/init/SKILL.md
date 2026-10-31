@@ -10,15 +10,18 @@ Initialize the ai-workspace plugin in the current working directory.
 ## What It Creates
 
 1. `threads/` — directory where conversation threads will be stored
-2. `AGENTS.md` — workspace instructions read by both Claude Code and Codex CLI
+2. `AGENTS.md` — a pointer to the plugin, read by both Claude Code and Codex CLI
 
 All steps are skipped if the file or directory already exists. Safe to re-run.
 
-**Nothing the plugin needs is written to a file in the workspace.** The rules for working
-with threads are in the threads skill, which loads wherever a thread is resumed from, and
-the permissions go in the user's global settings, which apply from any directory. A
-workspace file only loads when a session happens to start in that directory, so anything
-that lived in one was missing from most sessions.
+**No rules and no permissions go into the workspace.** How to work with threads is in the
+threads skill, which loads wherever a thread is resumed from, and the permissions go in
+the user's global settings, which apply from any directory. A file in the workspace loads
+only when a session starts in that directory, which most sessions do not, so a rule kept
+there was missing exactly when a thread was resumed from somewhere else.
+
+`AGENTS.md` carries no rules. It tells a reader, and Codex, that this directory is an
+ai-workspace and which commands reach the plugin.
 
 Both files work for Claude Code and Codex CLI. No vendor detection needed.
 
