@@ -50,6 +50,7 @@ ai-workspace-plugin/
 │       └── v1/                      # schema 1: the README is the thread
 ├── templates/
 │   ├── AGENTS.md.template           # Workspace instructions (vendor-neutral)
+│   ├── settings.json.template       # Claude-only permission allowlist
 │   └── ...
 ├── scripts/
 │   ├── sync-codex-agents.py         # Regenerates .codex-plugin/agents/*.toml
@@ -93,7 +94,7 @@ claude --plugin-dir ~/ai-workspace-plugin
 
 # Initialize the workspace
 /ai-workspace:init
-# Verify: ls threads/ AGENTS.md
+# Verify: ls threads/ AGENTS.md .claude/settings.json
 
 # Create a thread
 /ai-workspace:threads create test-thread
@@ -214,8 +215,7 @@ Merging to `main` ships the plugin, so this is the pre-merge checklist for every
 - [ ] Plugin loads with `claude --plugin-dir .`
 - [ ] Plugin loads on Codex (via local marketplace install)
 - [ ] Init works in a clean directory:
-  - [ ] Creates `threads/` and `AGENTS.md`, and writes nothing else into the workspace
-  - [ ] Offers to add the plugin's permissions to the user's global settings
+  - [ ] Creates `threads/`, `AGENTS.md` and `.claude/settings.json`, and no `CLAUDE.md`
   - [ ] On Codex, also copies `.codex-plugin/agents/*.toml` into `~/.codex/agents/`
   - [ ] Re-running skips existing files safely
 - [ ] Thread management works (both CLIs):

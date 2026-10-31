@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cp:*)",
+      "Bash(find:*)",
+      "Bash(ls:*)",
+      "Bash(mkdir:*)",
+      "Bash(mv:*)",
+      "Edit(threads/**)",
+      "Glob(*)",
+      "Read(archive/**)",
+      "WebSearch",
+      "Write(threads/**)",
+      "mcp__plugin_ai-workspace_threads__*"
+    ]
+  }
+}

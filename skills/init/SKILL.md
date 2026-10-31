@@ -1,6 +1,6 @@
 ---
 name: init
-description: Initialize the ai-workspace plugin in the current directory. Creates threads/ and AGENTS.md, then offers to allow the plugin's tools in the user's global settings. Safe to re-run, skips files that already exist.
+description: Initialize the ai-workspace plugin in the current directory. Creates threads/, AGENTS.md and .claude/settings.json. Safe to re-run, skips files that already exist.
 ---
 
 # Init Skill
@@ -11,19 +11,24 @@ Initialize the ai-workspace plugin in the current working directory.
 
 1. `threads/` — directory where conversation threads will be stored
 2. `AGENTS.md` — a pointer to the plugin, read by both Claude Code and Codex CLI
+3. `.claude/settings.json` — permission allowlist for plugin operations on Claude Code
 
 All steps are skipped if the file or directory already exists. Safe to re-run.
 
-**No rules and no permissions go into the workspace.** How to work with threads is in the
-threads skill, which loads wherever a thread is resumed from, and the permissions go in
-the user's global settings, which apply from any directory. A file in the workspace loads
-only when a session starts in that directory, which most sessions do not, so a rule kept
-there was missing exactly when a thread was resumed from somewhere else.
+**No rules go into the workspace.** How to work with threads is in the threads skill,
+which loads wherever a thread is resumed from. A file in the workspace loads only when a
+session starts in that directory, which most sessions do not, so a rule kept there was
+missing exactly when a thread was resumed from somewhere else. `AGENTS.md` carries no
+rules: it tells a reader, and Codex, that this directory is an ai-workspace and which
+commands reach the plugin.
 
-`AGENTS.md` carries no rules. It tells a reader, and Codex, that this directory is an
-ai-workspace and which commands reach the plugin.
+The settings file has the same reach and that is fine, because it is permissions rather
+than instructions: it covers sessions started in the workspace, and a user who resumes
+threads from elsewhere copies what they want into their user settings. The README has a
+section on doing that.
 
-Both files work for Claude Code and Codex CLI. No vendor detection needed.
+The same files work for both Claude Code and Codex CLI. Codex ignores `.claude/`; Claude
+ignores files it doesn't recognize. No vendor detection needed.
 
 ## Steps
 
@@ -39,16 +44,17 @@ Skip if `threads/` already exists.
 
 Check if `AGENTS.md` exists. If not, call `mcp__plugin_ai-workspace_threads__get_skill_file("templates/AGENTS.md.template")` and write the result to `AGENTS.md`.
 
-### 3. Offer the permissions
+### 3. Create `.claude/settings.json`
 
-Offer to allow the plugin's tools in the user's **global** CLI settings, so they are not
-prompted again and the allowance holds from any directory. Allow all
-`mcp__plugin_ai-workspace_threads__*` tools and Read/Edit/Write on `{workspace}/**`, using
-the absolute path of the workspace. Tell the user what was written and that a restart may
-be needed.
+Check if `.claude/settings.json` exists. If not:
 
-Don't write a settings file inside the workspace. It would only apply to sessions that
-start there.
+```bash
+mkdir -p .claude
+```
+
+Then call `mcp__plugin_ai-workspace_threads__get_skill_file("templates/settings.json.template")` and write the result to `.claude/settings.json`.
+
+This file is Claude-Code-specific. It is harmless on Codex; Codex ignores it.
 
 ### 4. Codex subagent install (Codex CLI only)
 
@@ -73,6 +79,7 @@ Initialized ai-workspace in /path/to/workspace
 Created:
   threads/
   AGENTS.md
+  .claude/settings.json
 
 Skipped (already exists):
   (none)
@@ -86,4 +93,4 @@ On Claude Code, restart the CLI for the new permissions to take effect.
 
 Use the actual absolute path of the current working directory, not a placeholder.
 
-If the permissions were added, remind the user to restart Claude Code so they take effect. This restart is not needed on Codex.
+If `.claude/settings.json` was newly created, remind the user to restart Claude Code so the permission allowlist takes effect. This restart is not needed on Codex.
