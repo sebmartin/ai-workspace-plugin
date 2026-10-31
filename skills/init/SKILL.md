@@ -1,6 +1,6 @@
 ---
 name: init
-description: Initialize the ai-workspace plugin in the current directory. Creates threads/, AGENTS.md and .claude/settings.json. Safe to re-run, skips files that already exist.
+description: Initialize the ai-workspace plugin in the current directory. Creates threads/, AGENTS.md, CLAUDE.md and .claude/settings.json. Safe to re-run, skips files that already exist.
 ---
 
 # Init Skill
@@ -11,7 +11,8 @@ Initialize the ai-workspace plugin in the current working directory.
 
 1. `threads/` — directory where conversation threads will be stored
 2. `AGENTS.md` — a pointer to the plugin, read by both Claude Code and Codex CLI
-3. `.claude/settings.json` — permission allowlist for plugin operations on Claude Code
+3. `CLAUDE.md` — a one-line `@AGENTS.md` import, which is how Claude Code reads `AGENTS.md`
+4. `.claude/settings.json` — permission allowlist for plugin operations on Claude Code
 
 All steps are skipped if the file or directory already exists. Safe to re-run.
 
@@ -20,15 +21,16 @@ which loads wherever a thread is resumed from. A file in the workspace loads onl
 session starts in that directory, which most sessions do not, so a rule kept there was
 missing exactly when a thread was resumed from somewhere else. `AGENTS.md` carries no
 rules: it tells a reader, and Codex, that this directory is an ai-workspace and which
-commands reach the plugin.
+commands reach the plugin. `CLAUDE.md` is one line, `@AGENTS.md`, so Claude Code reads the
+same file Codex does. Neither carries rules; what goes in them is the same for both CLIs.
 
 The settings file has the same reach and that is fine, because it is permissions rather
 than instructions: it covers sessions started in the workspace, and a user who resumes
 threads from elsewhere copies what they want into their user settings. The README has a
 section on doing that.
 
-The same files work for both Claude Code and Codex CLI. Codex ignores `.claude/`; Claude
-ignores files it doesn't recognize. No vendor detection needed.
+The same files work for both Claude Code and Codex CLI. Codex ignores `CLAUDE.md` and
+`.claude/`; Claude ignores files it doesn't recognize. No vendor detection needed.
 
 ## Steps
 
@@ -44,7 +46,11 @@ Skip if `threads/` already exists.
 
 Check if `AGENTS.md` exists. If not, call `mcp__plugin_ai-workspace_threads__get_skill_file("templates/AGENTS.md.template")` and write the result to `AGENTS.md`.
 
-### 3. Create `.claude/settings.json`
+### 3. Create `CLAUDE.md`
+
+Check if `CLAUDE.md` exists. If not, call `mcp__plugin_ai-workspace_threads__get_skill_file("templates/CLAUDE.md.template")` and write the result to `CLAUDE.md`. The template is a single `@AGENTS.md` line so Claude imports the AGENTS.md content without duplicating it.
+
+### 4. Create `.claude/settings.json`
 
 Check if `.claude/settings.json` exists. If not:
 
@@ -56,7 +62,7 @@ Then call `mcp__plugin_ai-workspace_threads__get_skill_file("templates/settings.
 
 This file is Claude-Code-specific. It is harmless on Codex; Codex ignores it.
 
-### 4. Codex subagent install (Codex CLI only)
+### 5. Codex subagent install (Codex CLI only)
 
 This step only applies on Codex CLI. **Detect the CLI before doing anything**: you know which CLI you are. If you are Claude Code, skip this entire step — Claude loads the `proponent` and `skeptic` agents directly from the plugin's `agents/` directory; nothing to copy.
 
@@ -79,6 +85,7 @@ Initialized ai-workspace in /path/to/workspace
 Created:
   threads/
   AGENTS.md
+  CLAUDE.md
   .claude/settings.json
 
 Skipped (already exists):

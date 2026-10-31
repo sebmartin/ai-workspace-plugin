@@ -60,6 +60,7 @@ ai-workspace-plugin/                # Plugin repository
 │       └── v1/                     # schema 1: the README is the thread
 ├── templates/
 │   ├── AGENTS.md.template          # Workspace instructions, read by both CLIs
+│   ├── CLAUDE.md.template          # One-line "@AGENTS.md" import for Claude
 │   ├── settings.json.template      # Claude-only permission allowlist
 │   ├── thread-template.md
 │   ├── thread-session-template.md
@@ -383,6 +384,6 @@ The full list is whatever `mcp_server.py` declares.
 ## Notes
 
 **Init skill output:**
-- Creates `threads/`, `AGENTS.md` (vendor-neutral) and `.claude/settings.json` (Claude allowlist). No `CLAUDE.md`: a workspace file only loads when a session starts in that directory, so the thread rules live in the threads skill instead
+- Creates `threads/`, `AGENTS.md` (vendor-neutral), `CLAUDE.md` (one-liner `@AGENTS.md`) and `.claude/settings.json` (Claude allowlist). None of them carries rules: a workspace file only loads when a session starts in that directory, so the thread rules live in the threads skill instead
 - On Codex, additionally copies `.codex-plugin/agents/*.toml` to `~/.codex/agents/` so the debate skill's subagents work
 - Safe to re-run; skips files that already exist
