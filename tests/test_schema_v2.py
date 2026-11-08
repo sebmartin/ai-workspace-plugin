@@ -124,9 +124,15 @@ class TestRecentSessions:
         assert "20260101-s" in out and "not valid YAML" not in out
 
     def test_undated_sessions_do_not_break_resume(self, tmp_path):
+        """20260231-x matches the id pattern but is not a real date, so
+        _session_date takes its ValueError branch. It sorts mid-index, and it
+        stops the window walk after 3 newer sessions, so the floor of 5 decides."""
         d = _v2_thread(tmp_path)
-        _sessions(d, "19700101-a", "19700101-b", "20260301-s")
-        assert "(3 of 3)" in v2.compose(d, "t")
+        _sessions(d, "20260210-a", "20260211-b", "20260212-c", "20260231-x",
+                  "20260301-d", "20260302-e", "20260303-f")
+        out = v2.compose(d, "t")
+        assert "(5 of 7)" in out
+        assert "20260231-x" in out and "20260211-b" not in out
 
     def test_an_undated_newest_session_falls_back_to_the_floor(self, tmp_path):
         d = _v2_thread(tmp_path)
