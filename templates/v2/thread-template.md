@@ -9,7 +9,11 @@
 
 ## Status
 
-One or two sentences on what changed. Next steps already lists what's next. A save rewrites it when it passes `status`.
+**Recently**
+- What was worked on recently, newest first. One to three items. `save_session` rewrites this section on every save.
+
+**Up next**
+- None
 
 ## Todos
 

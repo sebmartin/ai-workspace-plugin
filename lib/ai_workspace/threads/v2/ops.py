@@ -572,25 +572,63 @@ def retire_artifact(thread, artifact_id: str, state: str) -> str:
     return json.dumps({"id": artifact_id})
 
 
+MAX_STATUS_ITEMS = 3
+
+
+def _status_items(thread_dir: Path, field: str, items: list[str]) -> list[str] | dict:
+    """The bullet text for each item, or a refusal dict. A todo id becomes its link."""
+    out: list[str] = []
+    for raw in items:
+        item = raw.strip()
+        if not item:
+            return {"error": "ITEM_EMPTY", "detail": field}
+        if "\n" in item or "\r" in item:
+            return {"error": "ITEM_HAS_LINE_BREAK", "detail": field}
+        if ids_mod.ID_RE.fullmatch(item):
+            found = next(
+                (e for retired in (False, True)
+                 for e in idx.read(thread_dir, "todos", retired=retired)
+                 if e.id == item),
+                None,
+            )
+            if found is None:
+                return {"error": "NO_SUCH_ENTRY", "detail": item}
+            out.append(f"[{found.title}]({found.link})")
+        else:
+            out.append(item)
+    return out
+
+
 def save_session(thread, slug: str, summary: str, keywords: str, body: str,
-                 status: str | None = None) -> str:
+                 recently: list[str], up_next: list[str]) -> str:
     """Everything a save does that is not synthesis.
 
     The incremental tools have already written todos, decisions and artifacts as
-    they happened, so a save is down to the session log and the Status
-    paragraph. The log is written before the index points at it, so a save
-    that dies in between leaves a file the audit calls unindexed rather than
-    an entry that names nothing.
+    they happened, so a save is down to the session log and the Status lists.
+    Every refusal is decided before anything is written. The log is written
+    before the index points at it, so a save that dies in between leaves a file
+    the audit calls unindexed rather than an entry that names nothing.
     """
     from ai_workspace.threads.v2 import readme as readme_mod
 
     if not body.strip():
         return json.dumps({"error": "BODY_EMPTY"})
+    if not recently:
+        return json.dumps({"error": "RECENTLY_EMPTY"})
+    for field, items in (("recently", recently), ("up_next", up_next)):
+        if len(items) > MAX_STATUS_ITEMS:
+            return json.dumps({"error": "TOO_MANY_ITEMS", "detail": field,
+                               "limit": MAX_STATUS_ITEMS})
+    resolved: dict[str, list[str]] = {}
+    for field, items in (("recently", recently), ("up_next", up_next)):
+        got = _status_items(thread.dir, field, items)
+        if isinstance(got, dict):
+            return json.dumps(got)
+        resolved[field] = got
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
     session_id, _ = session.save(thread.dir, slug, summary, keywords, body)
-    if status:
-        readme_mod.set_status(thread.dir, status)
+    readme_mod.write_status(thread.dir, resolved["recently"], resolved["up_next"])
     readme_mod.touch_dates(thread.dir)
     render.render(thread.dir)
-    return json.dumps({"id": session_id, "status_written": bool(status)})
+    return json.dumps({"id": session_id})

@@ -252,12 +252,12 @@ def retire_artifact(workspace_dir: str, thread_name: str, artifact_id: str,
 
 def save_session(workspace_dir: str, thread_name: str, slug: str, summary: str,
                  keywords: str, body: str,
-                 status: str | None = None) -> str:
-    """Write the session log and the Status paragraph in one call."""
+                 recently: list[str], up_next: list[str]) -> str:
+    """Write the session log and the Status lists in one call."""
     call = _for(workspace_dir, thread_name, "save_session")
     if isinstance(call, str):
         return call
-    return call.fn(call.thread, slug, summary, keywords, body, status)
+    return call.fn(call.thread, slug, summary, keywords, body, recently, up_next)
 
 
 def migration_safety_check(workspace_dir: str, thread_name: str) -> str:

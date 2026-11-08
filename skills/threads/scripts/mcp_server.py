@@ -505,16 +505,30 @@ def retire_artifact(workspace_dir: str, thread_name: str, artifact_id: str,
 @mcp.tool()
 def save_session(workspace_dir: str, thread_name: str, slug: str, summary: str,
                  keywords: str, body: str,
-                 status: str = "") -> str:
-    """Save the session log and the thread's Status paragraph.
+                 recently: list[str], up_next: list[str]) -> str:
+    """Save the session log and rewrite the thread's Status as two lists.
 
     One call writes the whole log. The body replaces everything the session
     file holds, including anything written to it earlier, so it must be the
     complete log.
 
-    Returns `{"id": ..., "status_written": ...}`. A refusal returns
-    `{"error": CODE, ...}` and writes nothing. `BODY_EMPTY` means the body was
-    blank; nothing was saved, and the call needs the full log.
+    The README's Status section is rewritten on every save as two lists,
+    **Recently** and **Up next**. Both lists are passed every time. Decide each
+    time whether they changed; passing the same items as last time is a valid
+    answer.
+
+    An item is either a todo id, taken from the todo list or the retired todos,
+    which is written as that todo's linked title, or a sentence, which is
+    written as given. Pass the bare id, not its title.
+
+    Returns `{"id": ...}`. A refusal returns `{"error": CODE, ...}` and writes
+    nothing. `BODY_EMPTY` means the body was blank and the call needs the full
+    log. `RECENTLY_EMPTY` means `recently` had no items. `TOO_MANY_ITEMS` means
+    a list held more than 3 items, with `detail` naming the list and `limit` the
+    maximum. `ITEM_EMPTY` means an item was blank and `ITEM_HAS_LINE_BREAK` that
+    it spanned lines, with `detail` naming the list. `NO_SUCH_ENTRY` means an
+    item shaped like a todo id named no todo, live or retired, with `detail`
+    giving the item.
 
     Args:
         workspace_dir: The tracked workspace path from session context.
@@ -525,10 +539,14 @@ def save_session(workspace_dir: str, thread_name: str, slug: str, summary: str,
         summary: Up to 150 words on what was discussed and settled.
         keywords: Comma-separated terms to search for later.
         body: Full markdown body of the session log.
-        status: The thread's Status paragraph. Omit to leave it unchanged.
+        recently: One to three items, newest first, describing the thread's
+            recent work rather than only this session. Keep items from earlier
+            sessions that are still live.
+        up_next: Zero to three items, what should happen next. An empty list
+            renders `- None`.
     """
     return _threads.save_session(workspace_dir, thread_name, slug, summary,
-                                 keywords, body, status or None)
+                                 keywords, body, recently, up_next)
 
 
 

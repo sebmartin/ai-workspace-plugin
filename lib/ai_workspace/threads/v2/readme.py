@@ -1,7 +1,7 @@
 """Editing the README's hand-written parts from a tool.
 
-The renderer owns Todos; these are the fields a save has to touch that are
-not derived from any index — the Status prose and the header dates.
+The renderer owns Todos; these are the fields a save or `set_about` writes that
+are not derived from any index: Status, About and the header dates.
 """
 
 import re
@@ -11,13 +11,16 @@ from pathlib import Path
 _STATUS_RE = re.compile(r"(?m)^##[ \t]+Status[ \t]*$\n.*?(?=^##[ \t]|\Z)", re.DOTALL)
 
 
-def set_status(thread_dir: Path, status: str) -> None:
+def write_status(thread_dir: Path, recently: list[str], up_next: list[str]) -> None:
+    """Replace the Status section with the two lists. Items are final bullet text."""
     readme = thread_dir / "README.md"
     text = readme.read_text() if readme.exists() else ""
-    block = f"## Status\n\n{status.strip()}\n\n"
+    recent = "".join(f"- {item}\n" for item in recently)
+    upcoming = "".join(f"- {item}\n" for item in up_next) or "- None\n"
+    block = f"## Status\n\n**Recently**\n{recent}\n**Up next**\n{upcoming}\n"
     if _STATUS_RE.search(text):
-        # A function replacement. A string one reads the Status paragraph the
-        # user wrote for `\1` and `\d` escapes.
+        # A function replacement. A string one reads the items for `\1` and
+        # `\d` escapes.
         text = _STATUS_RE.sub(lambda _: block, text, count=1)
     else:
         text = text.rstrip() + "\n\n" + block

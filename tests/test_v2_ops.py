@@ -22,6 +22,7 @@ from mcp_server import (
     retire_artifact,
     retire_decision,
     retire_todo,
+    save_session,
     set_todo_state,
 )
 
@@ -84,6 +85,7 @@ class TestRefusalOnSchema1:
             retire_decision(ws, "old", "i", "superseded"),
             index_file(ws, "old", "./artifacts/x.md"),
             retire_artifact(ws, "old", "i", "stale"),
+            save_session(ws, "old", "s", "s", "k", "# S\n", ["a"], []),
         ]
         assert all("NEEDS_MIGRATION" in c for c in calls), calls
 
@@ -1149,8 +1151,8 @@ class TestRoundTrip:
     def test_a_session_slug_cannot_corrupt_its_line(self, tmp_path):
         """The slug reached the title raw, so one bracket lost the entry."""
         d = _thread(tmp_path)
-        from mcp_server import save_session
-        save_session(str(tmp_path), "t", "my [topic]", "s", "k", body="# x\n")
+        save_session(str(tmp_path), "t", "my [topic]", "s", "k", body="# x\n",
+                     recently=["x"], up_next=[])
         assert len(idx.read(d, "sessions")) == 1
 
     def test_the_check_follows_the_line_format(self, tmp_path):
@@ -1201,10 +1203,9 @@ class TestRenderedText:
         """The Status paragraph is substituted the same way, and a save has
         already written the log and its index entry by the time it runs."""
         d = _thread(tmp_path)
-        from mcp_server import save_session
         status = r"Chasing the \d{4} parser bug"
         out = _reply(save_session(str(tmp_path), "t", "s", "A summary.", "k",
-                                  body="# x\n", status=status))
+                                  body="# x\n", recently=[status], up_next=[]))
         assert "error" not in out
         assert status in (d / "README.md").read_text()
 
@@ -1295,28 +1296,28 @@ class TestInvariant:
 class TestSaveSession:
     def test_writes_session_status_and_dates(self, tmp_path):
         d = _thread(tmp_path)
-        from mcp_server import save_session
         out = save_session(str(tmp_path), "t", "growcer-prep", "Prepped the round.",
                            "growcer, interview",
                            body="# Session\n\nWhat happened.\n",
-                           status="Round 3 booked for Friday.")
-        assert _reply(out)["status_written"] is True
+                           recently=["Round 3 booked for Friday."],
+                           up_next=["Prep the case study."])
         sid = _only_id(d, "sessions")
-        assert _reply(out)["id"] == sid
+        assert _reply(out) == {"id": sid}
         text = (d / "sessions" / f"{sid}.md").read_text()
         fields, _ = split_frontmatter(text)
         assert fields["summary"] == "Prepped the round."
         assert "What happened." in text
         readme = (d / "README.md").read_text()
         assert "Round 3 booked for Friday." in readme
+        assert "Prep the case study." in readme
         assert "**Last Session**:" in readme
 
     def test_the_body_replaces_whatever_the_file_held(self, tmp_path):
         """A save is one write rather than an append, so the body is the log."""
         d = _thread(tmp_path)
         from ai_workspace.threads.v2 import session
-        from mcp_server import save_session
-        save_session(str(tmp_path), "t", "topic", "s", "k", "# Session\n\nWhat happened.\n")
+        save_session(str(tmp_path), "t", "topic", "s", "k", "# Session\n\nWhat happened.\n",
+                     ["x"], [])
         p = session.session_path(d, _only_id(d, "sessions"))
         text = p.read_text()
         assert "What happened." in text
@@ -1329,12 +1330,11 @@ class TestSaveSession:
         from datetime import date
 
         from ai_workspace.threads.v2 import ids, session
-        from mcp_server import save_session
         sid = ids.make_id(date.today(), "topic")
         p = session.session_path(d, sid)
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text("# Session: topic\n\nWritten directly.\n")
-        save_session(str(tmp_path), "t", "topic", "s", "k", "# Session\n")
+        save_session(str(tmp_path), "t", "topic", "s", "k", "# Session\n", ["x"], [])
         assert [e.id for e in idx.read(d, "sessions")] == [sid]
 
     def test_a_blank_body_is_refused_and_the_file_kept(self, tmp_path):
@@ -1344,44 +1344,39 @@ class TestSaveSession:
         from datetime import date
 
         from ai_workspace.threads.v2 import ids, session
-        from mcp_server import save_session
         p = session.session_path(d, ids.make_id(date.today(), "topic"))
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text("# Session: topic\n\nWritten directly.\n")
         for blank in ("", " \n"):
-            reply = save_session(str(tmp_path), "t", "topic", "s", "k", blank)
+            reply = save_session(str(tmp_path), "t", "topic", "s", "k", blank, ["x"], [])
             assert json.loads(reply) == {"error": "BODY_EMPTY"}
         assert p.read_text() == "# Session: topic\n\nWritten directly.\n"
 
     def test_saving_twice_indexes_once(self, tmp_path):
         d = _thread(tmp_path)
-        from mcp_server import save_session
-        save_session(str(tmp_path), "t", "topic", "s", "k", "# Session\n")
-        save_session(str(tmp_path), "t", "topic", "s", "k", "# Session\n")
+        save_session(str(tmp_path), "t", "topic", "s", "k", "# Session\n", ["x"], [])
+        save_session(str(tmp_path), "t", "topic", "s", "k", "# Session\n", ["x"], [])
         assert len(idx.read(d, "sessions")) == 1
 
     def test_saving_twice_writes_one_session(self, tmp_path):
         d = _thread(tmp_path)
-        from mcp_server import save_session
-        save_session(str(tmp_path), "t", "topic", "s", "k", "# Session\n")
-        save_session(str(tmp_path), "t", "topic", "s2", "k", "# Again\n")
+        save_session(str(tmp_path), "t", "topic", "s", "k", "# Session\n", ["x"], [])
+        save_session(str(tmp_path), "t", "topic", "s2", "k", "# Again\n", ["x"], [])
         assert len(idx.read(d, "sessions")) == 1
         assert "Again" in (d / "sessions" / f"{_only_id(d, 'sessions')}.md").read_text()
 
     def test_last_session_survives_for_archive(self, tmp_path):
         """archive_thread greps this line; a render must never drop it."""
         d = _thread(tmp_path)
-        from mcp_server import save_session
-        save_session(str(tmp_path), "t", "topic", "s", "k", "# Session\n", status="x")
+        save_session(str(tmp_path), "t", "topic", "s", "k", "# Session\n", ["x"], [])
         import re
         assert re.search(r"(?m)^\*\*Last Session\*\*: \d{4}-\d{2}-\d{2}$",
                          (d / "README.md").read_text())
 
     def test_refused_on_schema_1(self, tmp_path):
         _thread(tmp_path, "old", schema=1)
-        from mcp_server import save_session
         assert "NEEDS_MIGRATION" in save_session(
-            str(tmp_path), "old", "s", "s", "k", "# Session\n")
+            str(tmp_path), "old", "s", "s", "k", "# Session\n", ["a"], [])
 
 
 class TestDating:
@@ -1454,3 +1449,89 @@ class TestDating:
         reply = _reply(index_file(
             str(tmp_path), "t", "./artifacts/orphan.md", date="2026-07-27"))
         assert reply == {"id": "20260727-orphan"}
+
+
+def test_save_session_has_no_status_and_requires_both_lists():
+    import inspect
+    params = inspect.signature(save_session).parameters
+    assert "status" not in params
+    for name in ("recently", "up_next"):
+        assert params[name].default is inspect.Parameter.empty
+
+
+class TestStatusLists:
+    @staticmethod
+    def _save(tmp_path, **kw):
+        return _reply(save_session(str(tmp_path), "t", "s", "Sum.", "k", "# Session\n", **kw))
+
+    @staticmethod
+    def _status(d):
+        return (d / "README.md").read_text().split("## Status\n\n")[1].split("## ")[0]
+
+    def test_status_is_written_in_the_fixed_layout(self, tmp_path):
+        d = _thread(tmp_path)
+        self._save(tmp_path, recently=["One.", "Two."], up_next=[])
+        assert self._status(d) == "**Recently**\n- One.\n- Two.\n\n**Up next**\n- None\n\n"
+
+    def test_a_todo_id_becomes_its_index_link(self, tmp_path):
+        d = _thread(tmp_path)
+        (d / "todos" / "a.md").write_text("x\n")
+        tid = _reply(add_todo(str(tmp_path), "t", "Add CSV export", "./todos/a.md"))["id"]
+        self._save(tmp_path, recently=[tid], up_next=[f"  {tid} "])
+        assert self._status(d).count("- [Add CSV export](./todos/a.md)") == 2
+
+    def test_a_retired_todo_id_still_resolves(self, tmp_path):
+        d = _thread(tmp_path)
+        (d / "todos" / "a.md").write_text("x\n")
+        tid = _reply(add_todo(str(tmp_path), "t", "Add CSV export", "./todos/a.md"))["id"]
+        retire_todo(str(tmp_path), "t", tid, "done")
+        self._save(tmp_path, recently=[tid], up_next=[])
+        assert "- [Add CSV export](./todos/a.md)" in self._status(d)
+
+    def test_a_sentence_that_mentions_an_id_is_written_as_given(self, tmp_path):
+        d = _thread(tmp_path)
+        self._save(tmp_path, recently=["Finished 20260101-nothing today."], up_next=[])
+        assert "- Finished 20260101-nothing today." in self._status(d)
+
+    @pytest.mark.parametrize("kw,code", [
+        ({"recently": [], "up_next": []}, "RECENTLY_EMPTY"),
+        ({"recently": ["a", "b", "c", "d"], "up_next": []}, "TOO_MANY_ITEMS"),
+        ({"recently": ["a"], "up_next": ["a", "b", "c", "d"]}, "TOO_MANY_ITEMS"),
+        ({"recently": ["20260101-no-such-todo"], "up_next": []}, "NO_SUCH_ENTRY"),
+        ({"recently": ["a"], "up_next": ["   "]}, "ITEM_EMPTY"),
+        ({"recently": ["two\nlines"], "up_next": []}, "ITEM_HAS_LINE_BREAK"),
+    ])
+    def test_a_refusal_writes_nothing_at_all(self, tmp_path, kw, code):
+        d = _thread(tmp_path)
+        before = (d / "README.md").read_text()
+        sessions_before = sorted(p.name for p in (d / "sessions").iterdir())
+        out = self._save(tmp_path, **kw)
+        assert out["error"] == code
+        assert (d / "README.md").read_text() == before
+        assert sorted(p.name for p in (d / "sessions").iterdir()) == sessions_before
+        assert idx.read(d, "sessions") == []
+
+    def test_too_many_names_the_list_and_the_limit(self, tmp_path):
+        _thread(tmp_path)
+        out = self._save(tmp_path, recently=["a"], up_next=["a", "b", "c", "d"])
+        assert out == {"error": "TOO_MANY_ITEMS", "detail": "up_next", "limit": 3}
+
+    def test_three_items_each_is_accepted(self, tmp_path):
+        _thread(tmp_path)
+        out = self._save(tmp_path, recently=["a", "b", "c"], up_next=["d", "e", "f"])
+        assert "error" not in out
+
+    def test_a_paragraph_status_is_replaced_by_the_lists(self, tmp_path):
+        d = _thread(tmp_path)
+        self._save(tmp_path, recently=["New."], up_next=[])
+        status = self._status(d)
+        assert status.startswith("**Recently**\n- New.")
+        assert "\nx\n" not in status
+
+    def test_a_legacy_readme_is_converted_by_a_save(self, tmp_path):
+        d = _thread(tmp_path)
+        readme = d / "README.md"
+        readme.write_text(readme.read_text().replace("## Todos", "## Next steps"))
+        self._save(tmp_path, recently=["a"], up_next=[])
+        text = readme.read_text()
+        assert "## Todos" in text and "## Next steps" not in text
