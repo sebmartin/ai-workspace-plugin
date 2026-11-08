@@ -12,8 +12,8 @@ Each entry is `[Title](../thread-name/README.md)`, several separated by
 `, `, and the literal `None` when there are none. The title is the other
 thread's README heading, falling back to its directory name.
 
-No tool writes these. Edit the README directly, as you would Status or About.
-The renderer owns `## Next steps` and nothing else, so a header edit is safe.
+No tool writes these. Edit the README directly, as you would Status between saves.
+The renderer owns `## Todos` and nothing else, so a header edit is safe.
 
 ## What each link means
 

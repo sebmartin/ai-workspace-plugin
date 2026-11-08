@@ -118,9 +118,11 @@ A schema 1 thread keeps all of that inline in its README, so one read covers it.
 
 `resume_thread` returns the whole thread in one call; its docstring lists what.
 
-**Print only Status and Next steps**, with the counts from its heading. Everything else is context you hold, not output. A list of thirty-five decisions is for you, not for the screen. Counts are not stored anywhere, so say them from what you read.
+**Print About, Status and Todos**, in that order, with the counts from the Todos heading. Everything else is context you hold, not output. A list of thirty-five decisions is for you, not for the screen. Counts are not stored anywhere, so say them from what you read.
 
 **Print each todo as a markdown link on its title**, so the user can open what it points at rather than asking you for it. An external URL goes as it is. Drop the id, which is for your calls rather than the screen, and name a state only when it is not `active`.
+
+The payload carries the recent sessions with their summaries, and older ones are not listed. Before answering a question about earlier work from memory, search `sessions/`, whose files carry `summary:` and `keywords:` frontmatter.
 
 **Decision bodies are never opened on resume.** Open one when a constraint is challenged, or when you are about to extend or reverse it.
 
@@ -132,9 +134,9 @@ A schema 1 thread keeps all of that inline in its README, so one read covers it.
 
 **Say "saved", not "archived", when you have written a file.** Archiving is a different operation in this plugin: it retires a whole thread from the active list. Calling a save an archive tells the user their work was put away.
 
-Never hand-edit an index or the README's Next steps section; both are rendered from what the tools write, and a hand edit will be overwritten. Status is written by `save_session`'s `status` argument, or edited directly between saves. About, the header fields and `memory.md` have no tool; edit them directly.
+Never hand-edit an index or the README's Todos section; both are rendered from what the tools write, and a hand edit will be overwritten. Status is written by `save_session` on every save and may be edited directly between saves. About is written by `set_about`, never by hand. The header fields and `memory.md` have no tool; edit them directly.
 
-A render replaces `## Next steps` down to the next `##`, so never leave it as the last section of a README. Anything below it is swallowed without a word.
+A render replaces `## Todos` down to the next `##`, so never leave it as the last section of a README. Anything below it is swallowed without a word.
 
 **Writing an artifact.** Put it in `artifacts/`, named `YYYYMMDD-kind-slug.md`: the
 date it was written, a kind such as `spec`, `notes`, `report` or `bug`, and a short
@@ -163,9 +165,11 @@ can be written to at all. Fetch
 
 **A decision is a choice that was made.** Its summary loads on every resume, so do not even propose one whose rejected alternative you cannot name, or that dies with this task; that is a session log entry.
 
-**Next steps is the top of the todo list, bounded to five.** Parking takes a todo off the list, so it is the top five of what is active. The rest of the list is in `todos-index.md`, and resume counts it for you. Nothing promotes anything: retire the first todo and the sixth becomes fifth by itself.
+**The README's Todos section is the top of the todo list, bounded to five.** Parking takes a todo off the list, so it is the top five of what is active. The rest of the list is in `todos-index.md`, and resume counts it for you. Nothing promotes anything: retire the first todo and the sixth becomes fifth by itself.
 
-**The order is the user's.** Propose one and apply it once they agree, and say where you put a new todo so they can move it. When the user says to work on something, set its state to `started`.
+**The order is the user's.** Propose one and apply it once they agree, and say where you put a new todo so they can move it.
+
+**Starting on a todo marks it started.** Any request to start on a todo, in whatever words, first sets it to `started` with `set_todo_state`, before anything else happens, and you tell the user you did. Picking one from a list, naming it, and handing it to another skill to design or build all count.
 
 ### Memory
 
@@ -180,7 +184,13 @@ Add or change an entry only when the user asks you to remember something or agre
 
 ### Saving
 
-A save writes the session log and the Status paragraph, because todos, decisions and artifacts were written when they happened. It is also the moment to read `memory.md` through, if the thread has one, and propose dropping anything that no longer applies. A session that ends without a save leaves no log, and what it produced is still in the indexes.
+A save writes the session log and the Status section, because todos, decisions and artifacts were written when they happened.
+
+- At each save, look at the Recently and Up next you were shown on resume and pass what is now true as `recently` and `up_next`. Both are passed every time; passing the same items is a valid answer. Recently is the thread's recent work, newest first, not only this session: keep an earlier item that is still live. Pass a todo's id, not its title, when an item is a todo.
+- When an Up next sentence was already there when you resumed and is still not done, suggest making it a todo, and add one only if the user agrees. Nothing stores past lists; what you saw on resume is the only history.
+- Look at About too, and call `set_about` if it no longer fits the thread, is still the template's placeholder, or runs past 50 words.
+
+It is also the moment to read `memory.md` through, if the thread has one, and propose dropping anything that no longer applies. A session that ends without a save leaves no log, and what it produced is still in the indexes.
 
 Everything from here on applies whatever the schema, except where a schema's own file says otherwise.
 

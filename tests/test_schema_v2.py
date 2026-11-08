@@ -424,7 +424,7 @@ class TestRender:
 
     def test_todos_lists_the_active_todos(self, tmp_path):
         """Nothing to be promoted into: being near the top of the list is what
-        puts a todo in Next steps."""
+        puts a todo in the Todos section."""
         d = _v2_thread(tmp_path)
         _todos(d, ("a", "active"), ("b", "active"))
         render.render(d)

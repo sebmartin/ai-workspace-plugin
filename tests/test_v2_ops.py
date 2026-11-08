@@ -614,7 +614,7 @@ class TestTodos:
     def test_a_todo_whose_file_was_never_written_is_refused(self, tmp_path):
         """Write the file, then add the todo.
 
-        An entry pointing at nothing renders into Next steps and the migration
+        An entry pointing at nothing renders into Todos and the migration
         audit reports it as dangling, and `index_file` already refuses the same
         situation. It was mostly unreachable while the usual link was an
         existing session; it is the normal path now that the file is.

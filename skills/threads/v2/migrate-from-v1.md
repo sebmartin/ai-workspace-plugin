@@ -63,13 +63,12 @@ overwrite.
 ### 1. Replace the README first, before any write tool
 
 Overwrite the copy's `README.md` from `templates/v2/thread-template.md`. Not the
-finished README; the skeleton. Every write tool re-renders `## Next steps` into
-whatever README is there, and a schema 1 README has next steps as bold text
-inside `## Quick Resume` rather than as a heading. Writing first and replacing
+finished README; the skeleton. Every write tool re-renders `## Todos` into
+whatever README is there, and a schema 1 README has its next steps as a bold `**Next steps**:` list inside `## Quick Resume` rather than as a heading. Writing first and replacing
 after produces one document with two diverging next-step lists.
 
 The tools refuse rather than let that happen, so this is the step that unblocks
-the rest. Status and About can be filled any time after.
+the rest. Status can be filled any time after, by hand, and About through `set_about`.
 
 ### 2. Index the sessions
 
@@ -157,7 +156,7 @@ supersession, to tell which superseded which — the live one declares
 
 ### 5. The rest
 
-**Extract todos** from Next steps, Parked and Open Questions. Write a file for
+**Extract todos** from the v1 README's **Next steps**, Parked and Open Questions. Write a file for
 each one, `todos/YYYYMMDD-slug.md` from the todo template, and copy the v1 line
 verbatim into **What**. That file is the record of this todo, which is what a
 todo's link has to name. Do not summarise it and do not go hunting for what it
@@ -167,13 +166,31 @@ so a later reader knows the one line is all anyone knows. Put the session it cam
 from, or an issue it names, under **## Links**, and leave that heading out when
 there is nothing to put there.
 
-A todo goes on the end of the list and Next steps shows the top five, so add the
-Next steps items first, in the order the README listed them, and the rest after. Only carry
+A todo goes on the end of the list and the README's Todos section shows the top five, so add the
+v1 Next steps items first, in the order the README listed them, and the rest after. Only carry
 something over as parked if the v1 README had it parked, and retire a parked
 entry that is already resolved rather than carrying it.
 
-**Collapse Quick Resume into Status**: one or two sentences on what changed,
-taken from Current focus.
+**Collapse Quick Resume into Status**: write Status by hand in the fixed layout
+`save_session` writes, taken from Current focus and Recent progress:
+
+```
+## Status
+
+**Recently**
+- One to three items, newest first.
+
+**Up next**
+- Zero to three items, or `- None`.
+```
+
+An item that is one of the todos just added is written as that todo's
+`[title](link)` from `todos-index.md`. The next save rewrites the section in the
+same layout.
+
+**Write About through `set_about`**, from the v1 About, in 50 words or fewer. If
+the v1 About holds more than a summary, carry the rest into an artifact as the
+floor rule below says, rather than looking for a way past the limit.
 
 **A section the template does not define is the part most likely to be lost.**
 Schema 1 said the README is the thread and to read it in full, so anyone could
@@ -188,10 +205,10 @@ loaded before you can act?
 | | you have to be holding it | you only have to know it exists |
 |---|---|---|
 | **for you** | `memory.md` | a decision or an artifact: its index line loads, its body does not |
-| **for the user** | Status, and Next steps | About, a session log, an artifact |
+| **for the user** | Status, and the Todos section | About, a session log, an artifact |
 
 Anything still to do is a todo whichever row it came from. Where it sits in the
-list decides whether the user meets it on resume, since Next steps shows the
+list decides whether the user meets it on resume, since the Todos section shows the
 top five.
 
 `memory.md` is the cell schema 1 had no file for, and that is why these sections
@@ -216,11 +233,11 @@ a section that exists only in `{name}-v1/README.md` once the swap is done.
 mistake: the user carries on expecting you to be holding something, you are not,
 and nothing announces the gap.
 
-**Recent progress is the part that can be lost.** Next steps and Parked become
+**Recent progress is the part that can be lost.** The v1 Next steps and Parked become
 todos and Open Questions fold into them, but Recent progress is a log, and it
 maps onto the sessions index only if every entry had a session behind it. Older
 threads have entries that never did. Read them against the sessions you have
-just indexed, and for anything with no session: put it in Status if it still
+just indexed, and for anything with no session: put it in Status's Recently list if it still
 describes where things stand, and otherwise say plainly that you are dropping
 it and what it said. It survives in `{name}-v1` either way, but only if someone
 knows to look.

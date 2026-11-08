@@ -307,10 +307,10 @@ are erased by the next render without a word.
   behaviour for every user. When refactoring underneath, compare them against
   the previous revision programmatically rather than by eye.
 - **An optional argument is a decision the caller can get wrong.** Make one
-  optional only when leaving it out and passing it are both correct. `status`
-  on `save_session` qualifies, since a save that leaves the Status paragraph
-  alone is a valid save. `body` does not, since a session log without one is
-  not a log.
+  optional only when leaving it out and passing it are both correct. `about`
+  on `create_thread` qualifies, since a thread whose purpose is not clear yet
+  is correctly created without one and `set_about` fills it in later. `body`
+  on `save_session` does not, since a session log without one is not a log.
 
 ### Thread Structure
 
