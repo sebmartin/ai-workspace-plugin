@@ -24,8 +24,30 @@ LEGACY_TODOS = "Next steps"
 _SECTION_RE_TEMPLATE = r"(?m)^##[ \t]+{name}[ \t]*$.*?(?=^##[ \t]|\Z)"
 
 
-def _pattern() -> re.Pattern[str]:
-    return re.compile(_SECTION_RE_TEMPLATE.format(name="(?:" + "|".join(re.escape(n) for n in (TODOS, LEGACY_TODOS)) + ")"), re.DOTALL)
+def _heading_re(name: str) -> re.Pattern[str]:
+    return re.compile(rf"(?m)^##[ \t]+{re.escape(name)}[ \t]*$")
+
+
+def _find(text: str) -> tuple[re.Pattern[str] | None, str | None]:
+    """The pattern for the section to render, or why there is none.
+
+    `## Todos` wins. The legacy heading counts only when `## Todos` is absent,
+    and a README carrying both is refused, since replacing one would leave the
+    other as a second list that no longer updates.
+    """
+    has_new = _heading_re(TODOS).search(text) is not None
+    has_old = _heading_re(LEGACY_TODOS).search(text) is not None
+    if has_new and has_old:
+        return None, (
+            f"Error: the README has both `## {TODOS}` and `## {LEGACY_TODOS}`, "
+            f"so it is unclear which one is the list.\n"
+            f"Remove the one that is not the todo list, then retry. Nothing was "
+            f"written."
+        )
+    name = TODOS if has_new else LEGACY_TODOS if has_old else None
+    if name is None:
+        return None, None
+    return re.compile(_SECTION_RE_TEMPLATE.format(name=re.escape(name)), re.DOTALL), None
 
 
 def _links_line(thread_dir: Path) -> str:
@@ -70,7 +92,10 @@ def blocked(thread_dir: Path) -> str | None:
     """
     readme = thread_dir / "README.md"
     text = readme.read_text() if readme.exists() else ""
-    if _pattern().search(text):
+    pattern, ambiguous = _find(text)
+    if ambiguous:
+        return ambiguous
+    if pattern:
         return None
     return (
         f"Error: {readme} has no `## {TODOS}` heading, so it is not a "
@@ -92,9 +117,9 @@ def render(thread_dir: Path) -> str | None:
     """
     readme = thread_dir / "README.md"
     text = readme.read_text() if readme.exists() else ""
-    pattern = _pattern()
-    if not pattern.search(text):
-        return blocked(thread_dir)
+    pattern, ambiguous = _find(text)
+    if pattern is None:
+        return ambiguous or blocked(thread_dir)
     section = f"## {TODOS}\n\n{todos_body(thread_dir)}\n"
     # A function replacement, because a string one is read for `\1` and `\d`
     # escapes, and the section carries titles the user wrote.

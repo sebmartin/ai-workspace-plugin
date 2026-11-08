@@ -92,8 +92,9 @@ def create_thread(workspace_dir: str, thread_name: str, about: str = "") -> str:
             falls back to the configured default, and returns a status question
             (AMBIGUOUS_WORKSPACE or NEEDS_INIT) if neither works.
         thread_name: Name of the thread (kebab-case: lowercase letters, numbers, hyphens).
-        about: What the thread is about and what it is for, 50 words or fewer. It is
-            refused like `set_about`'s, and then nothing is created. Leave it out when
+        about: What the thread is about and what it is for, 50 words or fewer. A blank
+            `about` counts as left out. Otherwise it is checked as `set_about` checks it,
+            and a refusal creates nothing. Leave it out when
             the thread's purpose is not clear yet; the placeholder stays until
             `set_about` replaces it.
     """
@@ -523,18 +524,16 @@ def save_session(workspace_dir: str, thread_name: str, slug: str, summary: str,
     time whether they changed; passing the same items as last time is a valid
     answer.
 
-    An item is either a todo id, taken from the todo list or the retired todos,
-    which is written as that todo's linked title, or a sentence, which is
-    written as given. Pass the bare id, not its title.
+    Each item is written as given, as one bullet. Nothing is looked up, so an id
+    stays an id. To mention a todo, write it in your own words, such as "Tackle
+    todo: <name>".
 
     Returns `{"id": ...}`. A refusal returns `{"error": CODE, ...}` and writes
     nothing. `BODY_EMPTY` means the body was blank and the call needs the full
     log. `RECENTLY_EMPTY` means `recently` had no items. `TOO_MANY_ITEMS` means
     a list held more than 3 items, with `detail` naming the list and `limit` the
     maximum. `ITEM_EMPTY` means an item was blank and `ITEM_HAS_LINE_BREAK` that
-    it spanned lines, with `detail` naming the list. `NO_SUCH_ENTRY` means an
-    item shaped like a todo id named no todo, live or retired, with `detail`
-    giving the item.
+    it spanned lines, with `detail` naming the list.
 
     Args:
         workspace_dir: The tracked workspace path from session context.

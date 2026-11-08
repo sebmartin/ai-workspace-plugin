@@ -778,3 +778,8 @@ class TestCompose:
         for i in range(35):
             idx.add(d, "decisions", idx.Entry(f"202601{i:02d}-d", "locked", f"D{i}", f"./decisions/d{i}.md"))
         assert len(v2.compose(d, "t").split()) < 700
+
+
+def test_schema_1_is_readable_but_has_no_create():
+    from ai_workspace.threads import v1
+    assert "create" not in v1.__all__ and not hasattr(v1, "create")

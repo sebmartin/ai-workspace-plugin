@@ -1257,6 +1257,35 @@ class TestReadmeShape:
         text = p.read_text()
         assert "## Todos" in text and "## Next steps" not in text
 
+    def test_a_readme_with_both_todo_headings_is_refused_and_untouched(self, tmp_path):
+        d = _thread(tmp_path)
+        p = d / "README.md"
+        p.write_text(p.read_text().replace(
+            "## About", "## Next steps\n\n- old list\n\n## About"))
+        before = p.read_text()
+        out = add_todo(str(tmp_path), "t", "New", "./todos/a.md")
+        assert "both `## Todos` and `## Next steps`" in out
+        assert p.read_text() == before
+        assert idx.read(d, "todos") == []
+
+    def test_a_missing_status_is_added_above_the_footer(self, tmp_path):
+        d = _thread(tmp_path)
+        p = d / "README.md"
+        p.write_text("# t\n\n## Todos\n\n- None\n\n---\n\n**Indexes**: x\n")
+        save_session(str(tmp_path), "t", "s", "Sum.", "k", "# S\n",
+                     recently=["One."], up_next=[])
+        text = p.read_text()
+        assert text.index("## Status") < text.index("**Indexes**")
+
+    def test_a_status_section_at_the_end_does_not_swallow_the_footer(self, tmp_path):
+        d = _thread(tmp_path)
+        p = d / "README.md"
+        p.write_text("# t\n\n## Todos\n\n- None\n\n## Status\n\nold\n\n---\n\n**Indexes**: x\n")
+        save_session(str(tmp_path), "t", "s", "Sum.", "k", "# S\n",
+                     recently=["One."], up_next=[])
+        text = p.read_text()
+        assert "**Indexes**: x" in text and "old" not in text
+
     def test_a_refusal_writes_nothing_at_all(self, tmp_path):
         """Checked before anything mutates, so retrying is clean.
 
@@ -1475,20 +1504,16 @@ class TestStatusLists:
         self._save(tmp_path, recently=["One.", "Two."], up_next=[])
         assert self._status(d) == "**Recently**\n- One.\n- Two.\n\n**Up next**\n- None\n\n"
 
-    def test_a_todo_id_becomes_its_index_link(self, tmp_path):
-        d = _thread(tmp_path)
-        (d / "todos" / "a.md").write_text("x\n")
-        tid = _reply(add_todo(str(tmp_path), "t", "Add CSV export", "./todos/a.md"))["id"]
-        self._save(tmp_path, recently=[tid], up_next=[f"  {tid} "])
-        assert self._status(d).count("- [Add CSV export](./todos/a.md)") == 2
-
-    def test_a_retired_todo_id_still_resolves(self, tmp_path):
+    def test_an_id_shaped_item_is_written_as_given_and_never_resolved(self, tmp_path):
         d = _thread(tmp_path)
         (d / "todos" / "a.md").write_text("x\n")
         tid = _reply(add_todo(str(tmp_path), "t", "Add CSV export", "./todos/a.md"))["id"]
         retire_todo(str(tmp_path), "t", tid, "done")
-        self._save(tmp_path, recently=[tid], up_next=[])
-        assert "- [Add CSV export](./todos/a.md)" in self._status(d)
+        out = self._save(tmp_path, recently=[tid, "20260101-some-decision"], up_next=[tid])
+        assert "error" not in out
+        status = self._status(d)
+        assert f"- {tid}\n" in status and "- 20260101-some-decision\n" in status
+        assert "](" not in status
 
     def test_a_sentence_that_mentions_an_id_is_written_as_given(self, tmp_path):
         d = _thread(tmp_path)
@@ -1499,7 +1524,6 @@ class TestStatusLists:
         ({"recently": [], "up_next": []}, "RECENTLY_EMPTY"),
         ({"recently": ["a", "b", "c", "d"], "up_next": []}, "TOO_MANY_ITEMS"),
         ({"recently": ["a"], "up_next": ["a", "b", "c", "d"]}, "TOO_MANY_ITEMS"),
-        ({"recently": ["20260101-no-such-todo"], "up_next": []}, "NO_SUCH_ENTRY"),
         ({"recently": ["a"], "up_next": ["   "]}, "ITEM_EMPTY"),
         ({"recently": ["two\nlines"], "up_next": []}, "ITEM_HAS_LINE_BREAK"),
     ])

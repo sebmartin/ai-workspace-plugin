@@ -575,8 +575,11 @@ def retire_artifact(thread, artifact_id: str, state: str) -> str:
 MAX_STATUS_ITEMS = 3
 
 
-def _status_items(thread_dir: Path, field: str, items: list[str]) -> list[str] | dict:
-    """The bullet text for each item, or a refusal dict. A todo id becomes its link."""
+def _status_items(field: str, items: list[str]) -> list[str] | dict:
+    """The bullet text for each item, as given, or a refusal dict.
+
+    Status is a list for a person to read, so nothing here looks an item up.
+    """
     out: list[str] = []
     for raw in items:
         item = raw.strip()
@@ -584,18 +587,7 @@ def _status_items(thread_dir: Path, field: str, items: list[str]) -> list[str] |
             return {"error": "ITEM_EMPTY", "detail": field}
         if "\n" in item or "\r" in item:
             return {"error": "ITEM_HAS_LINE_BREAK", "detail": field}
-        if ids_mod.ID_RE.fullmatch(item):
-            found = next(
-                (e for retired in (False, True)
-                 for e in idx.read(thread_dir, "todos", retired=retired)
-                 if e.id == item),
-                None,
-            )
-            if found is None:
-                return {"error": "NO_SUCH_ENTRY", "detail": item}
-            out.append(f"[{found.title}]({found.link})")
-        else:
-            out.append(item)
+        out.append(item)
     return out
 
 
@@ -634,7 +626,7 @@ def save_session(thread, slug: str, summary: str, keywords: str, body: str,
                                "limit": MAX_STATUS_ITEMS})
     resolved: dict[str, list[str]] = {}
     for field, items in (("recently", recently), ("up_next", up_next)):
-        got = _status_items(thread.dir, field, items)
+        got = _status_items(field, items)
         if isinstance(got, dict):
             return json.dumps(got)
         resolved[field] = got

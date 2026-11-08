@@ -134,7 +134,7 @@ The payload carries the recent sessions with their summaries, and older ones are
 
 **Say "saved", not "archived", when you have written a file.** Archiving is a different operation in this plugin: it retires a whole thread from the active list. Calling a save an archive tells the user their work was put away.
 
-Never hand-edit an index or the README's Todos section; both are rendered from what the tools write, and a hand edit will be overwritten. Status is written by `save_session` on every save and may be edited directly between saves. About is written by `set_about`, never by hand. The header fields and `memory.md` have no tool; edit them directly.
+Never hand-edit an index or the README's Todos section; both are rendered from what the tools write, and a hand edit will be overwritten. Status is written only by `save_session`, on every save; never edit it by hand, since the next save overwrites it. About is written by `set_about`, never by hand. The header fields and `memory.md` have no tool; edit them directly.
 
 A render replaces `## Todos` down to the next `##`, so never leave it as the last section of a README. Anything below it is swallowed without a word.
 
@@ -186,7 +186,8 @@ Add or change an entry only when the user asks you to remember something or agre
 
 A save writes the session log and the Status section, because todos, decisions and artifacts were written when they happened.
 
-- At each save, look at the Recently and Up next you were shown on resume and pass what is now true as `recently` and `up_next`. Both are passed every time; passing the same items is a valid answer. Recently is the thread's recent work, newest first, not only this session: keep an earlier item that is still live. Pass a todo's id, not its title, when an item is a todo.
+- At each save, look at the Recently and Up next you were shown on resume and pass what is now true as `recently` and `up_next`. Both are passed every time; passing the same items is a valid answer. Recently is the thread's recent work, newest first, not only this session: keep an earlier item that is still live. Items are plain text and nothing is looked up: to mention a todo, write it in your own words, such as "Tackle todo: <name>".
+- On the first save of a thread whose Status is still a paragraph from before, there are no lists to carry forward: turn what is still true in the paragraph into Recently and Up next.
 - When an Up next sentence was already there when you resumed and is still not done, suggest making it a todo, and add one only if the user agrees. Nothing stores past lists; what you saw on resume is the only history.
 - Look at About too, and call `set_about` if it no longer fits the thread, is still the template's placeholder, or runs past 50 words.
 

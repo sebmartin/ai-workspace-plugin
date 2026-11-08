@@ -1,6 +1,5 @@
 """Schema 2 thread operations: the indexes are the record, the README is a view."""
 
-import json
 import re
 from datetime import date
 from pathlib import Path
@@ -61,7 +60,7 @@ SCHEMA = 2
 SUBDIRS = ("sessions", "decisions", "attachments", "artifacts", "todos")
 
 
-def create(thread, about: str = "") -> str:
+def create(thread, about: str = "") -> str | dict:
     """Lay out a new schema 2 thread.
 
     Its own template rather than v1's, because the README is a view here and
@@ -69,11 +68,14 @@ def create(thread, about: str = "") -> str:
     are not pre-created: a missing index is an empty index, and the marker is
     what declares the schema, so there is nothing for their absence to be
     confused with.
+
+    Returns the success message, or a refusal as a dict, decided before
+    anything is created.
     """
     from ai_workspace.threads.v2 import readme as readme_mod
 
     if about.strip() and (refusal := readme_mod.about_refusal(about)) is not None:
-        return json.dumps(refusal)
+        return refusal
     for subdir in SUBDIRS:
         (thread.dir / subdir).mkdir(parents=True, exist_ok=True)
 

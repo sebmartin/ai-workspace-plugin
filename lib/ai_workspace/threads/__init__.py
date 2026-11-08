@@ -14,6 +14,7 @@ Archiving lives in workspace.py, not here. Moving a thread between threads/ and
 archive/ never opens it, so it needs nothing from any schema.
 """
 
+import json
 import re
 from collections.abc import Callable
 from typing import NamedTuple
@@ -170,8 +171,8 @@ def create(workspace_dir: str, thread_name: str, about: str = "") -> str:
     directory = ws.thread_path(workspace, thread_name)
     thread = Thread(workspace, thread_name, directory, CURRENT_SCHEMA)
     result = implementation(thread).create(thread, about)
-    if not (directory / "README.md").exists():
-        return result  # refused before anything was created
+    if isinstance(result, dict):
+        return json.dumps(result)  # refused before anything was created
     return _focus(thread, result)
 
 

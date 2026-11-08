@@ -8,7 +8,7 @@ import re
 from datetime import date
 from pathlib import Path
 
-_STATUS_RE = re.compile(r"(?m)^##[ \t]+Status[ \t]*$\n.*?(?=^##[ \t]|\Z)", re.DOTALL)
+_STATUS_RE = re.compile(r"(?m)^##[ \t]+Status[ \t]*$\n.*?(?=^##[ \t]|^---[ \t]*$|\Z)", re.DOTALL)
 
 
 MAX_ABOUT_WORDS = 50
@@ -61,6 +61,8 @@ def write_status(thread_dir: Path, recently: list[str], up_next: list[str]) -> N
         # A function replacement. A string one reads the items for `\1` and
         # `\d` escapes.
         text = _STATUS_RE.sub(lambda _: block, text, count=1)
+    elif footer := _FOOTER_RE.search(text):
+        text = text[: footer.start()] + block + text[footer.start():]
     else:
         text = text.rstrip() + "\n\n" + block
     readme.write_text(text)

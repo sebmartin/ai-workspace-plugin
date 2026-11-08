@@ -184,9 +184,9 @@ entry that is already resolved rather than carrying it.
 - Zero to three items, or `- None`.
 ```
 
-An item that is one of the todos just added is written as that todo's
-`[title](link)` from `todos-index.md`. The next save rewrites the section in the
-same layout.
+Items are plain text. To mention a todo just added, name it in your own words,
+such as "Tackle todo: <name>"; the tool resolves no ids. The next save rewrites
+the section in the same layout.
 
 **Write About through `set_about`**, from the v1 About, in 50 words or fewer. If
 the v1 About holds more than a summary, carry the rest into an artifact as the
@@ -205,7 +205,7 @@ loaded before you can act?
 | | you have to be holding it | you only have to know it exists |
 |---|---|---|
 | **for you** | `memory.md` | a decision or an artifact: its index line loads, its body does not |
-| **for the user** | Status, and the Todos section | About, a session log, an artifact |
+| **for the user** | Status, About and the Todos section | a session log, an artifact |
 
 Anything still to do is a todo whichever row it came from. Where it sits in the
 list decides whether the user meets it on resume, since the Todos section shows the
