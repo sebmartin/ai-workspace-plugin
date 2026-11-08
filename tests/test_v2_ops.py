@@ -23,6 +23,7 @@ from mcp_server import (
     retire_decision,
     retire_todo,
     save_session,
+    set_about,
     set_todo_state,
 )
 
@@ -86,6 +87,7 @@ class TestRefusalOnSchema1:
             index_file(ws, "old", "./artifacts/x.md"),
             retire_artifact(ws, "old", "i", "stale"),
             save_session(ws, "old", "s", "s", "k", "# S\n", ["a"], []),
+            set_about(ws, "old", "x"),
         ]
         assert all("NEEDS_MIGRATION" in c for c in calls), calls
 
@@ -1534,4 +1536,81 @@ class TestStatusLists:
         readme.write_text(readme.read_text().replace("## Todos", "## Next steps"))
         self._save(tmp_path, recently=["a"], up_next=[])
         text = readme.read_text()
+        assert "## Todos" in text and "## Next steps" not in text
+
+
+def about_of(d):
+    text = (d / "README.md").read_text()
+    m = re.search(r"## About\n\n(.*?)(?=\n## |\n---|\Z)", text, re.DOTALL)
+    return m.group(1).strip() if m else ""
+
+
+class TestAbout:
+    def test_replaces_about_and_leaves_the_rest(self, tmp_path):
+        from ai_workspace.threads.v2 import render
+        d = _thread(tmp_path)
+        render.render(d)
+        out = _reply(set_about(str(tmp_path), "t", "Planning the kitchen renovation."))
+        assert out == {"words": 4}
+        text = (d / "README.md").read_text()
+        assert about_of(d) == "Planning the kitchen renovation."
+        assert "## Status\n\nx" in text and text.count("**Indexes**:") == 1
+        assert text.index("## About") < text.index("**Indexes**:")
+
+    def test_fifty_words_are_accepted_across_lines(self, tmp_path):
+        _thread(tmp_path)
+        words = " ".join(["w"] * 25) + "\n\n" + " ".join(["w"] * 25)
+        assert "error" not in _reply(set_about(str(tmp_path), "t", words))
+
+    @pytest.mark.parametrize("text,code", [
+        ("", "ABOUT_EMPTY"), ("  \n ", "ABOUT_EMPTY"),
+        (" ".join(["w"] * 51), "ABOUT_TOO_LONG"),
+        ("Intro.\n## Not a heading here", "ABOUT_UNREPRESENTABLE"),
+        ("Intro.\n---\nmore", "ABOUT_UNREPRESENTABLE"),
+    ])
+    def test_a_refusal_writes_nothing(self, tmp_path, text, code):
+        d = _thread(tmp_path)
+        before = (d / "README.md").read_text()
+        assert _reply(set_about(str(tmp_path), "t", text))["error"] == code
+        assert (d / "README.md").read_text() == before
+
+    def test_too_long_reports_the_count_and_limit(self, tmp_path):
+        _thread(tmp_path)
+        out = _reply(set_about(str(tmp_path), "t", " ".join(["w"] * 51)))
+        assert out == {"error": "ABOUT_TOO_LONG", "limit": 50, "words": 51}
+
+    def test_unrepresentable_names_the_line(self, tmp_path):
+        _thread(tmp_path)
+        out = _reply(set_about(str(tmp_path), "t", "Intro.\n## Heading"))
+        assert out["detail"] == "## Heading"
+
+    def test_a_backslash_survives(self, tmp_path):
+        _thread(tmp_path)
+        set_about(str(tmp_path), "t", r"Parsing \d{4} and \1 groups.")
+        assert r"Parsing \d{4} and \1 groups." in (tmp_path / "threads/t/README.md").read_text()
+
+    def test_a_missing_about_is_added_above_the_footer(self, tmp_path):
+        from ai_workspace.threads.v2 import render
+        d = _thread(tmp_path)
+        (d / "README.md").write_text(
+            "# Thread: t\n\n## Status\n\nx\n\n## Todos\n\n- None\n"
+        )
+        render.render(d)
+        set_about(str(tmp_path), "t", "New.")
+        text = (d / "README.md").read_text()
+        assert text.index("## About\n\nNew.") < text.index("**Indexes**:")
+
+    def test_a_missing_about_is_appended_without_a_footer(self, tmp_path):
+        d = _thread(tmp_path)
+        (d / "README.md").write_text("# Thread: t\n\n## Todos\n\n- None\n")
+        set_about(str(tmp_path), "t", "New.")
+        assert about_of(d) == "New."
+
+    def test_a_legacy_readme_is_converted(self, tmp_path):
+        d = _thread(tmp_path)
+        (d / "README.md").write_text(
+            "# Thread: t\n\n## Status\n\nx\n\n## Next steps\n\n- None\n\n## About\n\ny\n"
+        )
+        set_about(str(tmp_path), "t", "New.")
+        text = (d / "README.md").read_text()
         assert "## Todos" in text and "## Next steps" not in text

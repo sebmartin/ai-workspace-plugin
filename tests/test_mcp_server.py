@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+REPO = Path(__file__).resolve().parent.parent
+
 # Add mcp_server's parent to path so we can import its functions
 sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
 sys.path.insert(0, str(Path(__file__).parent.parent / "skills" / "threads" / "scripts"))
@@ -194,6 +196,26 @@ class TestResumeThread:
 
 
 class TestCreateThread:
+    def test_about_is_written_when_given(self, tmp_path):
+        (tmp_path / "threads").mkdir()
+        create_thread(str(tmp_path), "with-about", about="Choosing a heat pump.")
+        text = (tmp_path / "threads/with-about/README.md").read_text()
+        assert "## About\n\nChoosing a heat pump.\n" in text
+
+    def test_without_about_the_placeholder_stays(self, tmp_path):
+        (tmp_path / "threads").mkdir()
+        create_thread(str(tmp_path), "plain")
+        template = (REPO / "templates/v2/thread-template.md").read_text()
+        placeholder = template.split("## About\n\n")[1].strip()
+        assert placeholder in (tmp_path / "threads/plain/README.md").read_text()
+
+    def test_an_over_long_about_creates_nothing(self, tmp_path):
+        (tmp_path / "threads").mkdir()
+        result = create_thread(str(tmp_path), "too-long", about=" ".join(["w"] * 51))
+        assert json.loads(result)["error"] == "ABOUT_TOO_LONG"
+        assert not result.startswith("Workspace:")
+        assert not (tmp_path / "threads" / "too-long").exists()
+
     def test_creates_thread_in_local_workspace(self, tmp_path):
         (tmp_path / "threads").mkdir()
         result = create_thread(str(tmp_path), "my-feature")

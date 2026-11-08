@@ -71,7 +71,7 @@ def resume_thread(workspace_dir: str, thread_name: str) -> str:
 
 
 @mcp.tool()
-def create_thread(workspace_dir: str, thread_name: str) -> str:
+def create_thread(workspace_dir: str, thread_name: str, about: str = "") -> str:
     """Create a new discussion thread with the standard directory structure.
 
     Resolves the workspace from `workspace_dir`. If `workspace_dir` has a threads/ dir, the thread
@@ -90,8 +90,12 @@ def create_thread(workspace_dir: str, thread_name: str) -> str:
             falls back to the configured default, and returns a status question
             (AMBIGUOUS_WORKSPACE or NEEDS_INIT) if neither works.
         thread_name: Name of the thread (kebab-case: lowercase letters, numbers, hyphens).
+        about: What the thread is about and what it is for, 50 words or fewer. It is
+            refused like `set_about`'s, and then nothing is created. Leave it out when
+            the thread's purpose is not clear yet; the placeholder stays until
+            `set_about` replaces it.
     """
-    return _threads.create(workspace_dir, thread_name)
+    return _threads.create(workspace_dir, thread_name, about)
 
 
 @mcp.tool()
@@ -548,6 +552,27 @@ def save_session(workspace_dir: str, thread_name: str, slug: str, summary: str,
     return _threads.save_session(workspace_dir, thread_name, slug, summary,
                                  keywords, body, recently, up_next)
 
+
+
+@mcp.tool()
+def set_about(workspace_dir: str, thread_name: str, about: str) -> str:
+    """Replace the README's About section.
+
+    About is printed to the user on every resume, so it says what the thread is
+    about and what it is for, in 50 words or fewer. Call this when About is still
+    the placeholder, has grown past 50 words, or no longer fits the thread. Never
+    edit About by hand.
+
+    Returns `{"words": n}`. A refusal writes nothing and returns one of
+    `ABOUT_EMPTY`, `ABOUT_TOO_LONG` (with `limit` and `words`) or
+    `ABOUT_UNREPRESENTABLE` (a heading or `---` line, which is the `detail`).
+
+    Args:
+        workspace_dir: The tracked workspace path from session context.
+        thread_name: Name of the thread.
+        about: The full new text of the About section.
+    """
+    return _threads.set_about(workspace_dir, thread_name, about)
 
 
 @mcp.tool()

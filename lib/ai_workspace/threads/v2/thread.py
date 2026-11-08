@@ -1,5 +1,6 @@
 """Schema 2 thread operations: the indexes are the record, the README is a view."""
 
+import json
 import re
 from datetime import date
 from pathlib import Path
@@ -53,7 +54,7 @@ SCHEMA = 2
 SUBDIRS = ("sessions", "decisions", "attachments", "artifacts", "todos")
 
 
-def create(thread) -> str:
+def create(thread, about: str = "") -> str:
     """Lay out a new schema 2 thread.
 
     Its own template rather than v1's, because the README is a view here and
@@ -62,6 +63,10 @@ def create(thread) -> str:
     what declares the schema, so there is nothing for their absence to be
     confused with.
     """
+    from ai_workspace.threads.v2 import readme as readme_mod
+
+    if about.strip() and (refusal := readme_mod.about_refusal(about)) is not None:
+        return json.dumps(refusal)
     for subdir in SUBDIRS:
         (thread.dir / subdir).mkdir(parents=True, exist_ok=True)
 
@@ -70,6 +75,8 @@ def create(thread) -> str:
     readme = re.sub(r"\[Thread Name\]", thread.name, template)
     readme = re.sub(r"\[YYYY-MM-DD\]", today, readme)
     (thread.dir / "README.md").write_text(readme)
+    if about.strip():
+        readme_mod.write_about(thread.dir, about)
 
     marker.write(thread.dir, SCHEMA)
     return f"Created thread '{thread.name}' at {thread.dir}"

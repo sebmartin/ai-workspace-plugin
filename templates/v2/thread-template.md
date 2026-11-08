@@ -21,4 +21,4 @@
 
 ## About
 
-What this thread is about, and what it is for.
+What this thread is about and what it is for, in 50 words or fewer. Write it with `set_about`.

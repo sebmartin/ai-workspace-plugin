@@ -12,6 +12,7 @@ from ai_workspace.threads.v2.ops import (
     retire_decision,
     retire_todo,
     save_session,
+    set_about,
     set_state,
 )
 from ai_workspace.threads.v2.thread import create, resume
@@ -28,5 +29,6 @@ __all__ = [
     "retire_decision",
     "retire_todo",
     "save_session",
+    "set_about",
     "set_state",
 ]

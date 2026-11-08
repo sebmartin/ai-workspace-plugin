@@ -599,6 +599,19 @@ def _status_items(thread_dir: Path, field: str, items: list[str]) -> list[str] |
     return out
 
 
+def set_about(thread, text: str) -> str:
+    """Replace the README's About section, held to 50 words."""
+    from ai_workspace.threads.v2 import readme as readme_mod
+
+    if (refusal := readme_mod.about_refusal(text)) is not None:
+        return json.dumps(refusal)
+    if (unwritable := render.blocked(thread.dir)) is not None:
+        return unwritable
+    readme_mod.write_about(thread.dir, text)
+    render.render(thread.dir)
+    return json.dumps({"words": len(text.split())})
+
+
 def save_session(thread, slug: str, summary: str, keywords: str, body: str,
                  recently: list[str], up_next: list[str]) -> str:
     """Everything a save does that is not synthesis.

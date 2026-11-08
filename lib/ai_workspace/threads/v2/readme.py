@@ -11,6 +11,45 @@ from pathlib import Path
 _STATUS_RE = re.compile(r"(?m)^##[ \t]+Status[ \t]*$\n.*?(?=^##[ \t]|\Z)", re.DOTALL)
 
 
+MAX_ABOUT_WORDS = 50
+
+# Same lookahead as thread._SECTION_RE: the section ends at the next heading, a
+# horizontal rule or the end of the file.
+_ABOUT_RE = re.compile(r"(?m)^##[ \t]+About[ \t]*$\n.*?(?=^##[ \t]|^---[ \t]*$|\Z)", re.DOTALL)
+_FOOTER_RE = re.compile(r"(?m)^---[ \t]*\n+\*\*Indexes\*\*:")
+_ENDS_SECTION_RE = re.compile(r"^(#{1,6}[ \t]|---[ \t]*$)")
+
+
+def about_refusal(text: str) -> dict | None:
+    """Why this text cannot be the About section, or None."""
+    text = text.strip()
+    if not text:
+        return {"error": "ABOUT_EMPTY"}
+    words = len(text.split())
+    if words > MAX_ABOUT_WORDS:
+        return {"error": "ABOUT_TOO_LONG", "limit": MAX_ABOUT_WORDS, "words": words}
+    for line in text.splitlines():
+        # A heading or a rule would end the section early for every reader.
+        if _ENDS_SECTION_RE.match(line):
+            return {"error": "ABOUT_UNREPRESENTABLE", "detail": line}
+    return None
+
+
+def write_about(thread_dir: Path, text: str) -> None:
+    """Replace the About section, or add one above the Indexes footer."""
+    readme = thread_dir / "README.md"
+    current = readme.read_text() if readme.exists() else ""
+    block = f"## About\n\n{text.strip()}\n\n"
+    if _ABOUT_RE.search(current):
+        # A function replacement, so a backslash in the text is not an escape.
+        current = _ABOUT_RE.sub(lambda _: block, current, count=1)
+    elif footer := _FOOTER_RE.search(current):
+        current = current[: footer.start()] + block + current[footer.start():]
+    else:
+        current = current.rstrip() + "\n\n" + block
+    readme.write_text(current)
+
+
 def write_status(thread_dir: Path, recently: list[str], up_next: list[str]) -> None:
     """Replace the Status section with the two lists. Items are final bullet text."""
     readme = thread_dir / "README.md"
