@@ -194,7 +194,7 @@ def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
     refused.
 
     The list is in priority order and the new todo goes at the end unless you
-    place it. Say where you put it, so the user can move it. Next steps shows
+    place it. Say where you put it, so the user can move it. The README's Todos section shows
     the top five, so a todo added at the end is in the list without being on
     the README.
 
@@ -304,7 +304,7 @@ def order_todos(workspace_dir: str, thread_name: str, todo_ids: list[str],
     leaves the rest alone. The order is the user's, so propose one and call
     this once they agree.
 
-    This is also how what Next steps shows changes, because what it shows is
+    This is also how what the README's Todos section shows changes, because what it shows is
     the top of the list. Nothing has to be promoted when a todo is retired:
     the sixth becomes the fifth by itself.
 

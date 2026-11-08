@@ -157,7 +157,7 @@ def audit(original: Path, converted: Path) -> str:
         if kind in idx.ORDERED:
             # Its order is the priority the user set, so date order says
             # nothing about it. Checked here it would fire on a migration that
-            # carried Next steps across correctly, which is how a gate stops
+            # carried the todo list across correctly, which is how a gate stops
             # being read.
             continue
         ordering = [e.id.split("-")[0] for e in entries]

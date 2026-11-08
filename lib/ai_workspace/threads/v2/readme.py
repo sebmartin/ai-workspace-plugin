@@ -1,6 +1,6 @@
 """Editing the README's hand-written parts from a tool.
 
-The renderer owns Next steps; these are the fields a save has to touch that are
+The renderer owns Todos; these are the fields a save has to touch that are
 not derived from any index — the Status prose and the header dates.
 """
 

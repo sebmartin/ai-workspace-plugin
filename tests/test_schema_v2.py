@@ -39,7 +39,7 @@ def _v2_thread(tmp_path, name="t"):
         "# Thread: t\n\n**Started**: 2026-01-01\n**Status**: Active\n"
         "**Last Session**: 2026-01-01\n**Related Threads**: None\n\n"
         "## Status\n\nWhere things stand.\n\n"
-        "## Next steps\n\n- None\n\n"
+        "## Todos\n\n- None\n\n"
         "## About\n\nWhat this is.\n"
     )
     marker.write(d, 2)
@@ -289,7 +289,24 @@ class TestIndex:
 
 
 class TestRender:
-    def test_only_next_steps_is_replaced(self, tmp_path):
+    def test_a_legacy_heading_is_rendered_as_todos(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        p = d / "README.md"
+        p.write_text(p.read_text().replace("## Todos", "## Next steps"))
+        assert render.blocked(d) is None
+        idx.add(d, "todos", idx.Entry("20260101-a", "active", "A", "./todos/a.md"))
+        render.render(d)
+        text = p.read_text()
+        assert "## Todos\n\n- 20260101-a" in text
+        assert "## Next steps" not in text
+        assert text.count("20260101-a") == 1
+
+    def test_the_refusal_names_the_todos_heading(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        (d / "README.md").write_text("# t\n\n## About\n\nx\n")
+        assert "`## Todos`" in (render.blocked(d) or "")
+
+    def test_only_todos_is_replaced(self, tmp_path):
         d = _v2_thread(tmp_path)
         idx.add(d, "todos", idx.Entry("20260101-a", "active", "Do a thing", "./todos/a.md"))
         render.render(d)
@@ -300,7 +317,7 @@ class TestRender:
         assert "Where things stand." in text
         assert "What this is." in text
 
-    def test_hand_edits_outside_next_steps_survive(self, tmp_path):
+    def test_hand_edits_outside_todos_survive(self, tmp_path):
         d = _v2_thread(tmp_path)
         p = d / "README.md"
         p.write_text(p.read_text().replace("Where things stand.", "HAND EDITED"))
@@ -316,7 +333,7 @@ class TestRender:
         render.render(d)
         assert (d / "README.md").read_text() == once
 
-    def test_next_steps_lists_the_active_todos(self, tmp_path):
+    def test_todos_lists_the_active_todos(self, tmp_path):
         """Nothing to be promoted into: being near the top of the list is what
         puts a todo in Next steps."""
         d = _v2_thread(tmp_path)
@@ -325,7 +342,7 @@ class TestRender:
         text = (d / "README.md").read_text()
         assert "20260101-a" in text and "20260101-b" in text
 
-    def test_next_steps_shows_at_most_a_window(self, tmp_path):
+    def test_todos_shows_at_most_a_window(self, tmp_path):
         """The README is a landing page, so this section cannot grow with the
         thread the way an index does."""
         d = _v2_thread(tmp_path)
@@ -381,7 +398,7 @@ class TestRender:
     def test_no_active_todos_renders_a_placeholder(self, tmp_path):
         d = _v2_thread(tmp_path)
         render.render(d)
-        assert "## Next steps\n\n- None" in (d / "README.md").read_text()
+        assert "## Todos\n\n- None" in (d / "README.md").read_text()
 
     def test_index_links_are_added_once(self, tmp_path):
         d = _v2_thread(tmp_path)
@@ -496,7 +513,7 @@ class TestCompose:
         idx.add(d, "decisions", idx.Entry("20260101-x", "locked", "X", "./decisions/20260101-x.md"))
         idx.add(d, "todos", idx.Entry("20260101-a", "active", "A", "./todos/a.md"))
         out = v2.compose(d, "t")
-        for section in ("## Status", "## About", "## Next steps",
+        for section in ("## Status", "## About", "## Todos",
                         "## Decisions in force", "## Artifacts", "## Recent sessions"):
             assert section in out
 
@@ -504,24 +521,24 @@ class TestCompose:
         """A bounded section conceals nothing if the heading does the counting."""
         d = _v2_thread(tmp_path)
         _todos(d, *([(f"t{n}", "active") for n in range(7)] + [("p", "parked")]))
-        assert "## Next steps (5 of 7 active, 1 parked)" in v2.compose(d, "t")
+        assert "## Todos (5 of 7 active, 1 parked)" in v2.compose(d, "t")
 
     def test_the_heading_counts_a_short_list_too(self, tmp_path):
         d = _v2_thread(tmp_path)
         _todos(d, ("a", "active"), ("b", "active"), ("c", "parked"))
-        assert "## Next steps (2 of 2 active, 1 parked)" in v2.compose(d, "t")
+        assert "## Todos (2 of 2 active, 1 parked)" in v2.compose(d, "t")
 
     def test_an_empty_list_does_not_read_as_an_empty_thread(self, tmp_path):
         """Nothing active while three sit parked is a choice, not a lost index."""
         d = _v2_thread(tmp_path)
         _todos(d, ("a", "parked"), ("b", "parked"), ("c", "parked"))
-        assert "## Next steps (0 of 0 active, 3 parked)\n\n- None" in v2.compose(d, "t")
+        assert "## Todos (0 of 0 active, 3 parked)\n\n- None" in v2.compose(d, "t")
 
     def test_parked_todos_are_listed_after_the_active_ones(self, tmp_path):
         d = _v2_thread(tmp_path)
         _todos(d, ("a", "active"), ("b", "parked"))
         out = v2.compose(d, "t")
-        assert out.index("## Next steps") < out.index("## Parked")
+        assert out.index("## Todos") < out.index("## Parked")
         assert out.index("20260101-a") < out.index("20260101-b")
 
     def test_the_heading_is_the_only_thing_that_counts(self, tmp_path):
@@ -531,7 +548,7 @@ class TestCompose:
         d = _v2_thread(tmp_path)
         _todos(d, *((f"t{n}", "active") for n in range(6)))
         out = v2.compose(d, "t")
-        assert "## Next steps (5 of 6 active, 0 parked)" in out
+        assert "## Todos (5 of 6 active, 0 parked)" in out
         assert "ask the user which to park" not in out
 
     def test_nothing_parked_means_no_parked_section(self, tmp_path):

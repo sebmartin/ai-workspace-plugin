@@ -114,7 +114,7 @@ def compose(thread_dir: Path, thread_name: str) -> str:
     # how much was set aside. Without the last two an empty list cannot be told
     # from a thread that is finished with.
     out.append(
-        f"\n## Next steps ({len(shown)} of {len(active)} active, "
+        f"\n## Todos ({len(shown)} of {len(active)} active, "
         f"{len(parked)} parked)\n"
     )
     out.extend(e.render() for e in shown)
@@ -122,7 +122,7 @@ def compose(thread_dir: Path, thread_name: str) -> str:
         out.append("- None")
 
     # Its own section rather than a tail on the list above, because the skill
-    # has the agent print Next steps and parked todos are the ones the user
+    # has the agent print the todos and parked todos are the ones the user
     # already said are not next.
     if parked:
         out.append("\n## Parked\n")

@@ -369,7 +369,7 @@ def add_todo(thread, title: str, link: str, state: str = "active",
     if not (external or relative is not None):
         return json.dumps({"error": "OUTSIDE_THREAD", "detail": link})
     # Write the file, then add the todo: an entry pointing at nothing renders
-    # into Next steps and the audit reports it as dangling.
+    # into Todos and the audit reports it as dangling.
     if relative is not None and not (thread.dir / relative).exists():
         return json.dumps({"error": "MISSING", "detail": link})
     if (unwritable := render.blocked(thread.dir)) is not None:

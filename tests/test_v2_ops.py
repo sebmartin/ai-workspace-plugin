@@ -55,7 +55,7 @@ def _thread(tmp_path, name="t", schema=2, stubs=True):
         (d / sub).mkdir(parents=True)
     (d / "README.md").write_text(
         "# Thread: t\n\n**Started**: 2026-01-01\n\n## Status\n\nx\n\n"
-        "## Next steps\n\n- None\n\n## About\n\ny\n"
+        "## Todos\n\n- None\n\n## About\n\ny\n"
     )
     # A todo's link must name a file that exists, so the throwaway links the
     # todo tests pass are real files here.
@@ -182,7 +182,7 @@ class TestTodos:
         _thread(tmp_path)
         assert _reply(add_todo(str(tmp_path), "t", "Email the contractor", ""))["error"] == "LINK_REQUIRED"
 
-    def test_an_added_todo_reaches_next_steps(self, tmp_path):
+    def test_an_added_todo_reaches_todos(self, tmp_path):
         """The window needed a second call nothing told the agent to make, so a
         todo the user asked for never showed up."""
         d = _thread(tmp_path)
@@ -248,7 +248,7 @@ class TestTodos:
         assert [(e.title, e.state) for e in entries] == [
             ("C", "started"), ("B", "active"), ("A", "active"), ("D", "active")]
 
-    def test_retiring_takes_it_out_of_next_steps(self, tmp_path):
+    def test_retiring_takes_it_out_of_todos(self, tmp_path):
         d = _thread(tmp_path)
         ws = str(tmp_path)
         add_todo(ws, "t", "Chase the permit", "./s.md")
@@ -266,7 +266,7 @@ class TestTodos:
         set_todo_state(ws, "t", todo_id, "active")
         assert idx.read(d, "todos")[0].state == "active"
 
-    def test_parking_takes_it_out_of_next_steps(self, tmp_path):
+    def test_parking_takes_it_out_of_todos(self, tmp_path):
         d = _thread(tmp_path)
         ws = str(tmp_path)
         add_todo(ws, "t", "Call the surveyor", "./s.md")
@@ -1194,7 +1194,7 @@ class TestRenderedText:
         d = _thread(tmp_path)
         assert "error" not in _reply(add_todo(str(tmp_path), "t", title, "./todos/x.md"))
         assert idx.read(d, "todos")[0].title == title
-        first = (d / "README.md").read_text().split("## Next steps\n\n")[1].split("\n")[0]
+        first = (d / "README.md").read_text().split("## Todos\n\n")[1].split("\n")[0]
         assert title in first
 
     def test_a_backslash_in_the_status_survives_the_render(self, tmp_path):
@@ -1223,7 +1223,7 @@ class TestReadmeShape:
         for i in range(10):
             add_todo(str(tmp_path), "t", f"P{i}", "./s.md", state="parked")
         from ai_workspace.threads.v2 import render
-        assert "1 more and 10 parked in [todos](./todos-index.md)." in render.next_steps_body(d)
+        assert "1 more and 10 parked in [todos](./todos-index.md)." in render.todos_body(d)
 
     def test_a_v1_readme_is_refused_rather_than_appended_to(self, tmp_path):
         """The Frankenstein case: a real migration hit this and was told it worked.
@@ -1240,9 +1240,19 @@ class TestReadmeShape:
         out = add_todo(str(tmp_path), "t", "New", "./todos/a.md")
         assert "not a schema 2 README" in out
         text = (d / "README.md").read_text()
+        assert "## Todos" not in text
         assert "## Next steps" not in text
         assert "**Indexes**:" not in text
         assert "old format" in text
+
+    def test_a_legacy_readme_stays_writable_and_is_converted(self, tmp_path):
+        d = _thread(tmp_path)
+        p = d / "README.md"
+        p.write_text(p.read_text().replace("## Todos", "## Next steps"))
+        out = _reply(add_todo(str(tmp_path), "t", "New", "./todos/a.md"))
+        assert "id" in out
+        text = p.read_text()
+        assert "## Todos" in text and "## Next steps" not in text
 
     def test_a_refusal_writes_nothing_at_all(self, tmp_path):
         """Checked before anything mutates, so retrying is clean.
@@ -1256,7 +1266,7 @@ class TestReadmeShape:
         add_todo(str(tmp_path), "t", "New", "./todos/a.md")
         assert idx.read(d, "todos") == []
 
-        (d / "README.md").write_text("# t\n\n## Next steps\n\n- None\n\n## About\n\nx\n")
+        (d / "README.md").write_text("# t\n\n## Todos\n\n- None\n\n## About\n\nx\n")
         add_todo(str(tmp_path), "t", "New", "./todos/a.md")
         assert [e.title for e in idx.read(d, "todos")] == ["New"]
 
@@ -1276,8 +1286,8 @@ class TestInvariant:
         for i in range(parked):
             add_todo(ws, "t", f"P{i}", "./s.md", state="parked")
         from ai_workspace.threads.v2 import render
-        expected = render.next_steps_body(d)
-        after = (d / "README.md").read_text().split("## Next steps\n\n")[1]
+        expected = render.todos_body(d)
+        after = (d / "README.md").read_text().split("## Todos\n\n")[1]
         section = re.split(r"(?m)^#{2,} ", after)[0]
         assert section.strip() == expected.strip()
 

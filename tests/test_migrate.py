@@ -44,7 +44,7 @@ def _converted_from(v1_dir, ws, name="t-v2", readme=True):
     if readme:
         (d / "README.md").write_text(
             "# Thread: t\n\n**Started**: 2026-01-01\n\n## Status\n\nx\n\n"
-            "## Next steps\n\n- None\n\n## About\n\nx\n"
+            "## Todos\n\n- None\n\n## About\n\nx\n"
         )
     return d
 
