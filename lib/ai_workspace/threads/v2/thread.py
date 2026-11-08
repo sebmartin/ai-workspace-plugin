@@ -261,7 +261,7 @@ def _summary(thread_dir: Path, entry: idx.Entry) -> str | None:
     if not path.is_file():
         return ""
     try:
-        fields, _ = split_frontmatter(path.read_text(errors="ignore")[:4000], path)
+        fields, _ = split_frontmatter(path.read_text(errors="ignore"), path)
     except OSError:
         return ""
     except ValueError:

@@ -181,7 +181,7 @@ def list_archived_threads(workspace_dir: str) -> str:
 @mcp.tool()
 def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
              state: str = "active", place: str = "") -> str:
-    """Add a todo to the thread's list of next steps.
+    """Add a todo to the thread's Todos list.
 
     Every todo is read on every resume and commits the user to something, so
     add one only when the user asked for it or agreed to your suggestion. If

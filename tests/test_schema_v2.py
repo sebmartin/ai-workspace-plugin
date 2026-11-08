@@ -107,6 +107,15 @@ class TestRecentSessions:
         assert "- 20260101-s [20260101-s](./sessions/20260101-s.md)" in out
         assert "  Summary" not in out
 
+    def test_a_long_frontmatter_block_still_yields_its_summary(self, tmp_path):
+        """A fixed-size read cut the closing fence off and returned no summary."""
+        d = _v2_thread(tmp_path)
+        _sessions(d, "20260101-s")
+        padding = "".join(f"k{n}: {'x' * 40}\n" for n in range(150))
+        (d / "sessions" / "20260101-s.md").write_text(
+            f"---\n{padding}summary: Found at the end.\n---\nbody\n")
+        assert "  Found at the end." in v2.compose(d, "t")
+
     def test_unparseable_frontmatter_is_its_line_alone(self, tmp_path):
         d = _v2_thread(tmp_path)
         _sessions(d, "20260101-s")
