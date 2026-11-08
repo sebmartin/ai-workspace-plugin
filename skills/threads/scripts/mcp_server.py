@@ -47,12 +47,14 @@ def resume_thread(workspace_dir: str, thread_name: str) -> str:
     """Resolve the workspace and thread path, and return the thread's context.
 
     On a schema 2 thread the reply is composed rather than read from a file:
-    `memory.md` in full if there is one, then Status, About, the header, the
-    Next steps, any parked todos, every in-force decision with the
-    `summary:` read from its file, the artifacts index, and the last ten
-    sessions. Next steps is the top of the todo list in priority order, bounded
-    to five, and its heading counts what is shown, what is active and what is
-    parked, so a long list is visible without being printed. A `## Thread size`
+    `memory.md` in full if there is one, then the header, About, Status, the
+    Todos window (top five of the todo list in priority order, its heading
+    counting shown, active and parked), any parked todos, every in-force
+    decision with its `summary:`, the artifacts index, and the recent sessions:
+    every session within 14 days of the newest one, at least five and at most
+    twenty, each with its `summary:`, the heading counting shown and total.
+    Older sessions are not listed; their files under `sessions/` carry
+    `summary:` and `keywords:` frontmatter to search. A `## Thread size`
     heading appears only when the thread has grown expensive to open.
 
     A thread this plugin cannot read returns `{"error": CODE, "thread": ...,

@@ -46,6 +46,86 @@ def _v2_thread(tmp_path, name="t"):
     return d
 
 
+def _sessions(d, *sids, summary=True):
+    """Index one session per id given, each with a summary naming it."""
+    for sid in sids:
+        front = f'---\ndate: x\nsummary: "Summary of {sid}."\n---\n' if summary else "---\ndate: x\n---\n"
+        (d / "sessions" / f"{sid}.md").write_text(front + "body\n")
+        idx.add(d, "sessions", idx.Entry(sid, None, sid, f"./sessions/{sid}.md"))
+
+
+def _days(*days):
+    return [f"{day}-s" for day in days]
+
+
+class TestRecentSessions:
+    def test_everything_within_fourteen_days_of_the_newest(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        _sessions(d, *_days(*[f"202601{n:02d}" for n in range(1, 11)],
+                            *[f"202603{n:02d}" for n in range(1, 9)]))
+        out = v2.compose(d, "t")
+        assert "## Recent sessions (8 of 18)" in out
+        assert "20260301-s" in out and "20260110-s" not in out
+
+    def test_the_boundary_day_is_included(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        _sessions(d, *_days("20260101", "20260201", "20260202", "20260203",
+                            "20260204", "20260205", "20260215", "20260216"))
+        out = v2.compose(d, "t")
+        assert "20260202-s" in out and "20260201-s" not in out
+        assert "(6 of 8)" in out
+
+    def test_never_fewer_than_five(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        _sessions(d, *_days("20250101", "20250301", "20250501", "20250701",
+                            "20250901", "20251101", "20260101"))
+        out = v2.compose(d, "t")
+        assert "(5 of 7)" in out
+        assert "20250301-s" not in out and "20250501-s" in out
+
+    def test_never_more_than_twenty(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        _sessions(d, *[f"20260301-s{n:02d}" for n in range(1, 26)])
+        out = v2.compose(d, "t")
+        assert "(20 of 25)" in out
+        assert "20260301-s06" in out and "20260301-s05" not in out
+
+    def test_a_short_thread_shows_everything(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        _sessions(d, *_days("20260101", "20260102"))
+        assert "## Recent sessions (2 of 2)" in v2.compose(d, "t")
+
+    def test_each_session_carries_its_summary(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        _sessions(d, "20260101-s")
+        assert "- 20260101-s [20260101-s](./sessions/20260101-s.md)\n  Summary of 20260101-s." in v2.compose(d, "t")
+
+    def test_a_session_without_a_summary_is_its_line_alone(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        _sessions(d, "20260101-s", summary=False)
+        out = v2.compose(d, "t")
+        assert "- 20260101-s [20260101-s](./sessions/20260101-s.md)" in out
+        assert "  Summary" not in out
+
+    def test_unparseable_frontmatter_is_its_line_alone(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        _sessions(d, "20260101-s")
+        (d / "sessions" / "20260101-s.md").write_text("---\nsummary: a: b: c\n---\n")
+        out = v2.compose(d, "t")
+        assert "20260101-s" in out and "not valid YAML" not in out
+
+    def test_undated_sessions_do_not_break_resume(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        _sessions(d, "19700101-a", "19700101-b", "20260301-s")
+        assert "(3 of 3)" in v2.compose(d, "t")
+
+    def test_an_undated_newest_session_falls_back_to_the_floor(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        _sessions(d, *_days(*[f"202601{n:02d}" for n in range(1, 8)]))
+        idx.add(d, "sessions", idx.Entry("odd-id", None, "odd", "./sessions/odd.md"))
+        assert "(5 of 8)" in v2.compose(d, "t")
+
+
 class TestSchemaDetection:
     def test_absent_marker_is_schema_1(self, tmp_path):
         d = tmp_path / "t"
@@ -601,13 +681,22 @@ class TestCompose:
         assert "20260619-lot" in out
         assert "not valid YAML" in out
 
-    def test_sessions_are_tailed(self, tmp_path):
+    def test_about_then_status_then_todos(self, tmp_path):
         d = _v2_thread(tmp_path)
-        for i in range(15):
-            idx.add(d, "sessions", idx.Entry(f"202601{i:02d}-s", None, f"S{i}", f"./sessions/s{i}.md"))
         out = v2.compose(d, "t")
-        assert "(10 of 15)" in out
-        assert "20260100-s" not in out
+        assert out.index("## About") < out.index("## Status") < out.index("## Todos (")
+
+    def test_about_and_status_pass_through_verbatim(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        p = d / "README.md"
+        p.write_text(p.read_text().replace("Where things stand.", "A paragraph, *as written*.\n\nTwo of them."))
+        assert "## Status\n\nA paragraph, *as written*.\n\nTwo of them." in v2.compose(d, "t")
+
+    def test_an_empty_about_says_so(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        p = d / "README.md"
+        p.write_text(p.read_text().replace("What this is.", ""))
+        assert "## About\n\n(empty)" in v2.compose(d, "t")
 
     def test_memory_is_inlined_whole_and_first(self, tmp_path):
         """The one body the payload carries, ahead of anything it qualifies.

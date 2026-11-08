@@ -8,10 +8,17 @@ from pathlib import Path
 from ai_workspace.plugin import get_template_path
 from ai_workspace.text import split_frontmatter
 from ai_workspace.threads import marker
+from ai_workspace.threads.v2 import ids
 from ai_workspace.threads.v2 import index as idx
 from ai_workspace.threads.v2 import todos as todos_mod
 
-SESSION_WINDOW = 10
+# Sessions shown on resume: everything within RECENT_DAYS of the newest one,
+# never fewer than RECENT_FLOOR and never more than RECENT_CAP. Anchored on the
+# thread's own newest session so a thread left alone for a month still opens
+# with its last stretch of work.
+RECENT_DAYS = 14
+RECENT_FLOOR = 5
+RECENT_CAP = 20
 ATTACHMENT_WINDOW = 12
 
 MEMORY = "memory.md"
@@ -107,11 +114,10 @@ def compose(thread_dir: Path, thread_name: str) -> str:
 
     out.append(_header(text))
 
+    about = _section(text, "About")
+    out.append("\n## About\n\n" + (about or "(empty)"))
     status = _section(text, "Status")
     out.append("\n## Status\n\n" + (status or "(empty)"))
-    about = _section(text, "About")
-    if about:
-        out.append("\n## About\n\n" + about)
 
     todos = idx.read(thread_dir, "todos")
     active, parked = todos_mod.next_up(todos), todos_mod.parked(todos)
@@ -138,7 +144,9 @@ def compose(thread_dir: Path, thread_name: str) -> str:
     decisions = idx.read(thread_dir, "decisions")
     out.append(f"\n## Decisions in force ({len(decisions)})\n")
     for entry in decisions:
-        summary = _decision_summary(thread_dir, entry)
+        summary = _summary(thread_dir, entry)
+        if summary is None:
+            summary = "(frontmatter is not valid YAML, so no summary; worth fixing)"
         out.append(entry.render() + (f"\n  {summary}" if summary else ""))
 
     artifacts = idx.read(thread_dir, "artifacts")
@@ -146,9 +154,11 @@ def compose(thread_dir: Path, thread_name: str) -> str:
     out.extend(e.render() for e in artifacts)
 
     sessions = idx.read(thread_dir, "sessions")
-    tail = sessions[-SESSION_WINDOW:]
-    out.append(f"\n## Recent sessions ({len(tail)} of {len(sessions)})\n")
-    out.extend(e.render() for e in tail)
+    shown_sessions = recent_sessions(sessions)
+    out.append(f"\n## Recent sessions ({len(shown_sessions)} of {len(sessions)})\n")
+    for entry in shown_sessions:
+        summary = _summary(thread_dir, entry)
+        out.append(entry.render() + (f"\n  {summary}" if summary else ""))
 
     # Listed while listing is cheap, counted once it is not. A few filenames
     # save a call; eighty-six of them cost a real thread 15% of every resume.
@@ -217,19 +227,47 @@ def _memory(thread_dir: Path) -> str:
         return ""
 
 
-def _decision_summary(thread_dir: Path, entry: idx.Entry) -> str:
+def _session_date(entry: idx.Entry) -> date | None:
+    """The id's YYYYMMDD as a date, or None when the id has none."""
+    parsed = ids.parse_id(entry.id)
+    if parsed is None:
+        return None
+    try:
+        d = parsed[0]
+        return date(int(d[:4]), int(d[4:6]), int(d[6:8]))
+    except ValueError:
+        return None
+
+
+def recent_sessions(entries: list[idx.Entry]) -> list[idx.Entry]:
+    """Every session within RECENT_DAYS of the newest, bounded by floor and cap."""
+    if not entries:
+        return []
+    anchor = _session_date(entries[-1])
+    within = 0
+    if anchor is not None:
+        for entry in reversed(entries):
+            when = _session_date(entry)
+            if when is None or (anchor - when).days > RECENT_DAYS:
+                break
+            within += 1
+    return entries[-min(max(within, RECENT_FLOOR), RECENT_CAP):]
+
+
+def _summary(thread_dir: Path, entry: idx.Entry) -> str | None:
+    """The file's `summary:`; "" when absent or unreadable; None when the
+    frontmatter does not parse."""
     path = thread_dir / entry.link.lstrip("./")
     if not path.is_file():
         return ""
     try:
-        fields, _ = split_frontmatter(path.read_text(errors="ignore")[:2000], path)
+        fields, _ = split_frontmatter(path.read_text(errors="ignore")[:4000], path)
     except OSError:
         return ""
     except ValueError:
         # Loud but not fatal. Frontmatter written before anything parsed it can
-        # be invalid YAML — an unquoted summary containing ": " is the common
-        # one — and letting that raise here makes a whole thread unresumable
-        # over a single legacy file. Saying so on the line is what gets it
-        # fixed; refusing to open the thread is not.
-        return "(frontmatter is not valid YAML, so no summary; worth fixing)"
+        # be invalid YAML (an unquoted summary containing ": " is the common
+        # one), and raising here makes a whole thread unresumable over a single
+        # legacy file. Callers decide how to say so.
+        return None
     return str(fields.get("summary") or "")
