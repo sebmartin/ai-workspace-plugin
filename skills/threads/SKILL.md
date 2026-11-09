@@ -134,7 +134,7 @@ The payload carries the recent sessions with their summaries, and older ones are
 
 **Say "saved", not "archived", when you have written a file.** Archiving is a different operation in this plugin: it retires a whole thread from the active list. Calling a save an archive tells the user their work was put away.
 
-Never hand-edit an index or the README's Todos section; both are rendered from what the tools write, and a hand edit will be overwritten. Status is written only by `save_session`, on every save; never edit it by hand, since the next save overwrites it. About is written by `set_about`, never by hand. The header fields and `memory.md` have no tool; edit them directly.
+Never hand-edit an index or the README's Todos section; both are rendered from what the tools write, and a hand edit will be overwritten. Status is written only by `save_session`, on every save; never edit it by hand, since the next save overwrites it, except when migrating a thread as `migrate-from-v1.md` describes. About is written by `set_about`, never by hand. The header fields and `memory.md` have no tool; edit them directly.
 
 A render replaces `## Todos` down to the next `##`, so never leave it as the last section of a README. Anything below it is swallowed without a word.
 

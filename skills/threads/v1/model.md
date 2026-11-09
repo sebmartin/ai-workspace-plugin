@@ -83,7 +83,6 @@ See `skills/threads/v2/migrate-from-v1.md` when the user agrees to convert.
 | `save-thread` | `skills/threads/v1/save-thread.md` |
 | `save-artifact` | `skills/threads/v1/save-artifact.md` |
 | `log-decision` | `skills/threads/v1/log-decision.md` |
-| `create-thread` | `skills/threads/v1/create-thread.md` |
 | `park-topic` | `skills/threads/v1/park-topic.md` |
 | `link-thread` | `skills/threads/v1/link-thread.md` |
 | `archive-thread` | `skills/threads/archive-thread.md` |

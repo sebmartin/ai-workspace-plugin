@@ -62,7 +62,6 @@ ai-workspace-plugin/                # Plugin repository
 │   ├── AGENTS.md.template          # Workspace instructions, read by both CLIs
 │   ├── CLAUDE.md.template          # One-line "@AGENTS.md" import for Claude
 │   ├── settings.json.template      # Claude-only permission allowlist
-│   ├── thread-template.md
 │   ├── thread-session-template.md
 │   └── decision-template.md
 ├── scripts/
@@ -145,8 +144,8 @@ See CONTRIBUTING.md for testing procedures and PR guidelines.
 ```python
 from ai_workspace.plugin import get_template_path
 
-template_path = get_template_path("thread-template.md")
-# Returns: plugin_dir / "templates" / "thread-template.md"
+template_path = get_template_path("decision-template.md")
+# Returns: plugin_dir / "templates" / "decision-template.md"
 ```
 
 Never hardcode paths to templates. Always use `get_template_path()`.
@@ -162,8 +161,8 @@ keeps from the schema immediately below it and defines only what it changes:
 
 ```python
 # lib/ai_workspace/threads/v2/__init__.py
-from ai_workspace.threads.v1 import create       # unchanged from v1
-from ai_workspace.threads.v2.thread import resume  # changed in v2
+from ai_workspace.threads.v1 import resume       # unchanged from v1
+from ai_workspace.threads.v2.thread import save_session  # new or changed in v2
 ```
 
 Import only from the schema directly below. v3 names v2, never v1, even for a
@@ -217,13 +216,17 @@ operation simply does not define it, `_for` returns `NEEDS_MIGRATION`, and no
 version number is ever compared. Never paper over that with a default:
 
 ```python
-fn = getattr(implementation(thread), "create", None)   # NO
+fn = getattr(implementation(thread), "add_todo", None)   # NO
 result = fn(thread) if fn else ""                      # silently wrong
 ```
 
 That exact pattern shipped once and sorted every workspace alphabetically
 without complaining. If an operation is on the shared surface, every schema
 declares it in `__all__` and provides it, and a missing one fails loudly.
+
+**`create` is the exception.** A new thread is always created at
+`CURRENT_SCHEMA`, so `create` goes only to the current schema and older schemas
+don't provide it. An older schema is readable but never writable.
 
 **Adding an operation is not the same as adding a schema.** Adding a schema
 must touch no older one. Adding an operation that every schema has to answer
@@ -276,12 +279,11 @@ Assets are per schema too, and getting this wrong is silent:
 
 | | |
 |---|---|
-| templates | `templates/thread-template.md` is v1's; v2 uses `templates/v2/` |
+| templates | `templates/v2/` is schema 2's; a new schema adds its own `templates/vN/` |
 | skill prose | `SKILL.md` holds `CURRENT_SCHEMA`'s model; older ones are `skills/threads/vN/model.md` |
 
 Never repurpose a shared asset for the newest schema. Add one under `vN/`
-instead. Editing `templates/thread-template.md` to suit schema 2 would leave
-v1's `create` quietly writing a schema 2 README, which no test would catch.
+instead, so an older schema that still reads it keeps what it expects.
 
 **Skill prose rotates when `CURRENT_SCHEMA` moves.** SKILL.md is always loaded,
 so the schema the plugin creates is described inline and costs no fetch, while
@@ -316,7 +318,7 @@ are erased by the next render without a word.
 
 ```
 threads/{thread-name}/
-├── README.md           # From templates/thread-template.md
+├── README.md           # From templates/v2/thread-template.md
 ├── sessions/           # Session logs (one per conversation)
 ├── decisions/          # ADRs (YYYYMMDD-kebab-title.md)
 ├── attachments/        # Input files
