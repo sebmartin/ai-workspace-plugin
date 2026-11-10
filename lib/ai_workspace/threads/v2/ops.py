@@ -369,7 +369,7 @@ def add_todo(thread, title: str, link: str, state: str = "active",
     if not (external or relative is not None):
         return json.dumps({"error": "OUTSIDE_THREAD", "detail": link})
     # Write the file, then add the todo: an entry pointing at nothing renders
-    # into Next steps and the audit reports it as dangling.
+    # into Todos and the audit reports it as dangling.
     if relative is not None and not (thread.dir / relative).exists():
         return json.dumps({"error": "MISSING", "detail": link})
     if (unwritable := render.blocked(thread.dir)) is not None:
@@ -572,25 +572,68 @@ def retire_artifact(thread, artifact_id: str, state: str) -> str:
     return json.dumps({"id": artifact_id})
 
 
+MAX_STATUS_ITEMS = 3
+
+
+def _status_items(field: str, items: list[str]) -> list[str] | dict:
+    """The bullet text for each item, as given, or a refusal dict.
+
+    Status is a list for a person to read, so nothing here looks an item up.
+    """
+    out: list[str] = []
+    for raw in items:
+        item = raw.strip()
+        if not item:
+            return {"error": "ITEM_EMPTY", "detail": field}
+        if "\n" in item or "\r" in item:
+            return {"error": "ITEM_HAS_LINE_BREAK", "detail": field}
+        out.append(item)
+    return out
+
+
+def set_about(thread, text: str) -> str:
+    """Replace the README's About section, held to 50 words."""
+    from ai_workspace.threads.v2 import readme as readme_mod
+
+    if (refusal := readme_mod.about_refusal(text)) is not None:
+        return json.dumps(refusal)
+    if (unwritable := render.blocked(thread.dir)) is not None:
+        return unwritable
+    readme_mod.write_about(thread.dir, text)
+    render.render(thread.dir)
+    return json.dumps({"words": len(text.split())})
+
+
 def save_session(thread, slug: str, summary: str, keywords: str, body: str,
-                 status: str | None = None) -> str:
+                 recently: list[str], up_next: list[str]) -> str:
     """Everything a save does that is not synthesis.
 
     The incremental tools have already written todos, decisions and artifacts as
-    they happened, so a save is down to the session log and the Status
-    paragraph. The log is written before the index points at it, so a save
-    that dies in between leaves a file the audit calls unindexed rather than
-    an entry that names nothing.
+    they happened, so a save is down to the session log and the Status lists.
+    Every refusal is decided before anything is written. The log is written
+    before the index points at it, so a save that dies in between leaves a file
+    the audit calls unindexed rather than an entry that names nothing.
     """
     from ai_workspace.threads.v2 import readme as readme_mod
 
     if not body.strip():
         return json.dumps({"error": "BODY_EMPTY"})
+    if not recently:
+        return json.dumps({"error": "RECENTLY_EMPTY"})
+    for field, items in (("recently", recently), ("up_next", up_next)):
+        if len(items) > MAX_STATUS_ITEMS:
+            return json.dumps({"error": "TOO_MANY_ITEMS", "detail": field,
+                               "limit": MAX_STATUS_ITEMS})
+    resolved: dict[str, list[str]] = {}
+    for field, items in (("recently", recently), ("up_next", up_next)):
+        got = _status_items(field, items)
+        if isinstance(got, dict):
+            return json.dumps(got)
+        resolved[field] = got
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
     session_id, _ = session.save(thread.dir, slug, summary, keywords, body)
-    if status:
-        readme_mod.set_status(thread.dir, status)
+    readme_mod.write_status(thread.dir, resolved["recently"], resolved["up_next"])
     readme_mod.touch_dates(thread.dir)
     render.render(thread.dir)
-    return json.dumps({"id": session_id, "status_written": bool(status)})
+    return json.dumps({"id": session_id})

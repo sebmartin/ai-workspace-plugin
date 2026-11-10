@@ -142,7 +142,7 @@ def test_server_lists_its_tools(tools):
     "archive_thread", "restore_thread", "list_archived_threads",
     "add_todo", "retire_todo", "set_todo_state", "order_todos",
     "log_decision", "retire_decision", "index_file", "retire_artifact",
-    "save_session", "migration_safety_check", "audit_migration",
+    "save_session", "set_about", "migration_safety_check", "audit_migration",
 ])
 def test_tool_is_registered(tools, name):
     """A tool declared in the module but not registered is invisible to clients.

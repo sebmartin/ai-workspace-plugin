@@ -1,24 +1,68 @@
 """Editing the README's hand-written parts from a tool.
 
-The renderer owns Next steps; these are the fields a save has to touch that are
-not derived from any index — the Status prose and the header dates.
+The renderer owns Todos; these are the fields a save or `set_about` writes that
+are not derived from any index: Status, About and the header dates.
 """
 
 import re
 from datetime import date
 from pathlib import Path
 
-_STATUS_RE = re.compile(r"(?m)^##[ \t]+Status[ \t]*$\n.*?(?=^##[ \t]|\Z)", re.DOTALL)
+_STATUS_RE = re.compile(r"(?m)^##[ \t]+Status[ \t]*$\n.*?(?=^##[ \t]|^---[ \t]*$|\Z)", re.DOTALL)
 
 
-def set_status(thread_dir: Path, status: str) -> None:
+MAX_ABOUT_WORDS = 50
+
+# Same lookahead as thread._SECTION_RE: the section ends at the next heading, a
+# horizontal rule or the end of the file.
+_ABOUT_RE = re.compile(r"(?m)^##[ \t]+About[ \t]*$\n.*?(?=^##[ \t]|^---[ \t]*$|\Z)", re.DOTALL)
+_FOOTER_RE = re.compile(r"(?m)^---[ \t]*\n+\*\*Indexes\*\*:")
+_ENDS_SECTION_RE = re.compile(r"^(#{1,6}[ \t]|---[ \t]*$)")
+
+
+def about_refusal(text: str) -> dict | None:
+    """Why this text cannot be the About section, or None."""
+    text = text.strip()
+    if not text:
+        return {"error": "ABOUT_EMPTY"}
+    words = len(text.split())
+    if words > MAX_ABOUT_WORDS:
+        return {"error": "ABOUT_TOO_LONG", "limit": MAX_ABOUT_WORDS, "words": words}
+    for line in text.splitlines():
+        # A heading or a rule would end the section early for every reader.
+        if _ENDS_SECTION_RE.match(line):
+            return {"error": "ABOUT_UNREPRESENTABLE", "detail": line}
+    return None
+
+
+def write_about(thread_dir: Path, text: str) -> None:
+    """Replace the About section, or add one above the Indexes footer."""
+    readme = thread_dir / "README.md"
+    current = readme.read_text() if readme.exists() else ""
+    block = f"## About\n\n{text.strip()}\n\n"
+    if _ABOUT_RE.search(current):
+        # A function replacement, so a backslash in the text is not an escape.
+        current = _ABOUT_RE.sub(lambda _: block, current, count=1)
+    elif footer := _FOOTER_RE.search(current):
+        current = current[: footer.start()] + block + current[footer.start():]
+    else:
+        current = current.rstrip() + "\n\n" + block
+    readme.write_text(current)
+
+
+def write_status(thread_dir: Path, recently: list[str], up_next: list[str]) -> None:
+    """Replace the Status section with the two lists. Items are final bullet text."""
     readme = thread_dir / "README.md"
     text = readme.read_text() if readme.exists() else ""
-    block = f"## Status\n\n{status.strip()}\n\n"
+    recent = "".join(f"- {item}\n" for item in recently)
+    upcoming = "".join(f"- {item}\n" for item in up_next) or "- None\n"
+    block = f"## Status\n\n**Recently**\n{recent}\n**Up next**\n{upcoming}\n"
     if _STATUS_RE.search(text):
-        # A function replacement. A string one reads the Status paragraph the
-        # user wrote for `\1` and `\d` escapes.
+        # A function replacement. A string one reads the items for `\1` and
+        # `\d` escapes.
         text = _STATUS_RE.sub(lambda _: block, text, count=1)
+    elif footer := _FOOTER_RE.search(text):
+        text = text[: footer.start()] + block + text[footer.start():]
     else:
         text = text.rstrip() + "\n\n" + block
     readme.write_text(text)

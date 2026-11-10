@@ -39,11 +39,106 @@ def _v2_thread(tmp_path, name="t"):
         "# Thread: t\n\n**Started**: 2026-01-01\n**Status**: Active\n"
         "**Last Session**: 2026-01-01\n**Related Threads**: None\n\n"
         "## Status\n\nWhere things stand.\n\n"
-        "## Next steps\n\n- None\n\n"
+        "## Todos\n\n- None\n\n"
         "## About\n\nWhat this is.\n"
     )
     marker.write(d, 2)
     return d
+
+
+def _sessions(d, *sids, summary=True):
+    """Index one session per id given, each with a summary naming it."""
+    for sid in sids:
+        front = f'---\ndate: x\nsummary: "Summary of {sid}."\n---\n' if summary else "---\ndate: x\n---\n"
+        (d / "sessions" / f"{sid}.md").write_text(front + "body\n")
+        idx.add(d, "sessions", idx.Entry(sid, None, sid, f"./sessions/{sid}.md"))
+
+
+def _days(*days):
+    return [f"{day}-s" for day in days]
+
+
+class TestRecentSessions:
+    def test_everything_within_fourteen_days_of_the_newest(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        _sessions(d, *_days(*[f"202601{n:02d}" for n in range(1, 11)],
+                            *[f"202603{n:02d}" for n in range(1, 9)]))
+        out = v2.compose(d, "t")
+        assert "## Recent sessions (8 of 18)" in out
+        assert "20260301-s" in out and "20260110-s" not in out
+
+    def test_the_boundary_day_is_included(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        _sessions(d, *_days("20260101", "20260201", "20260202", "20260203",
+                            "20260204", "20260205", "20260215", "20260216"))
+        out = v2.compose(d, "t")
+        assert "20260202-s" in out and "20260201-s" not in out
+        assert "(6 of 8)" in out
+
+    def test_never_fewer_than_five(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        _sessions(d, *_days("20250101", "20250301", "20250501", "20250701",
+                            "20250901", "20251101", "20260101"))
+        out = v2.compose(d, "t")
+        assert "(5 of 7)" in out
+        assert "20250301-s" not in out and "20250501-s" in out
+
+    def test_never_more_than_twenty(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        _sessions(d, *[f"20260301-s{n:02d}" for n in range(1, 26)])
+        out = v2.compose(d, "t")
+        assert "(20 of 25)" in out
+        assert "20260301-s06" in out and "20260301-s05" not in out
+
+    def test_a_short_thread_shows_everything(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        _sessions(d, *_days("20260101", "20260102"))
+        assert "## Recent sessions (2 of 2)" in v2.compose(d, "t")
+
+    def test_each_session_carries_its_summary(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        _sessions(d, "20260101-s")
+        assert "- 20260101-s [20260101-s](./sessions/20260101-s.md)\n  Summary of 20260101-s." in v2.compose(d, "t")
+
+    def test_a_session_without_a_summary_is_its_line_alone(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        _sessions(d, "20260101-s", summary=False)
+        out = v2.compose(d, "t")
+        assert "- 20260101-s [20260101-s](./sessions/20260101-s.md)" in out
+        assert "  Summary" not in out
+
+    def test_a_long_frontmatter_block_still_yields_its_summary(self, tmp_path):
+        """A fixed-size read cut the closing fence off and returned no summary."""
+        d = _v2_thread(tmp_path)
+        _sessions(d, "20260101-s")
+        padding = "".join(f"k{n}: {'x' * 40}\n" for n in range(150))
+        (d / "sessions" / "20260101-s.md").write_text(
+            f"---\n{padding}summary: Found at the end.\n---\nbody\n")
+        assert "  Found at the end." in v2.compose(d, "t")
+
+    def test_unparseable_frontmatter_is_its_line_alone(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        _sessions(d, "20260101-s")
+        (d / "sessions" / "20260101-s.md").write_text("---\nsummary: a: b: c\n---\n")
+        out = v2.compose(d, "t")
+        assert "20260101-s" in out and "not valid YAML" not in out
+
+    def test_undated_sessions_do_not_break_resume(self, tmp_path):
+        """20260231-x matches the id pattern but is not a real date, so
+        _session_date takes its ValueError branch. It sorts mid-index, and it
+        stops the window walk after 3 newer sessions, so the floor of 5 decides."""
+        d = _v2_thread(tmp_path)
+        _sessions(d, "20260210-a", "20260211-b", "20260212-c", "20260231-x",
+                  "20260301-d", "20260302-e", "20260303-f")
+        out = v2.compose(d, "t")
+        assert "(5 of 7)" in out
+        assert "20260231-x" in out and "20260211-b" not in out
+
+    def test_an_undated_newest_session_falls_back_to_the_floor(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        _sessions(d, *_days(*[f"202601{n:02d}" for n in range(1, 8)]))
+        idx.add(d, "sessions", idx.Entry("odd-id", None, "odd", "./sessions/odd.md"))
+        assert "(5 of 8)" in v2.compose(d, "t")
 
 
 class TestSchemaDetection:
@@ -289,7 +384,24 @@ class TestIndex:
 
 
 class TestRender:
-    def test_only_next_steps_is_replaced(self, tmp_path):
+    def test_a_legacy_heading_is_rendered_as_todos(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        p = d / "README.md"
+        p.write_text(p.read_text().replace("## Todos", "## Next steps"))
+        assert render.blocked(d) is None
+        idx.add(d, "todos", idx.Entry("20260101-a", "active", "A", "./todos/a.md"))
+        render.render(d)
+        text = p.read_text()
+        assert "## Todos\n\n- 20260101-a" in text
+        assert "## Next steps" not in text
+        assert text.count("20260101-a") == 1
+
+    def test_the_refusal_names_the_todos_heading(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        (d / "README.md").write_text("# t\n\n## About\n\nx\n")
+        assert "`## Todos`" in (render.blocked(d) or "")
+
+    def test_only_todos_is_replaced(self, tmp_path):
         d = _v2_thread(tmp_path)
         idx.add(d, "todos", idx.Entry("20260101-a", "active", "Do a thing", "./todos/a.md"))
         render.render(d)
@@ -300,7 +412,7 @@ class TestRender:
         assert "Where things stand." in text
         assert "What this is." in text
 
-    def test_hand_edits_outside_next_steps_survive(self, tmp_path):
+    def test_hand_edits_outside_todos_survive(self, tmp_path):
         d = _v2_thread(tmp_path)
         p = d / "README.md"
         p.write_text(p.read_text().replace("Where things stand.", "HAND EDITED"))
@@ -316,16 +428,16 @@ class TestRender:
         render.render(d)
         assert (d / "README.md").read_text() == once
 
-    def test_next_steps_lists_the_active_todos(self, tmp_path):
+    def test_todos_lists_the_active_todos(self, tmp_path):
         """Nothing to be promoted into: being near the top of the list is what
-        puts a todo in Next steps."""
+        puts a todo in the Todos section."""
         d = _v2_thread(tmp_path)
         _todos(d, ("a", "active"), ("b", "active"))
         render.render(d)
         text = (d / "README.md").read_text()
         assert "20260101-a" in text and "20260101-b" in text
 
-    def test_next_steps_shows_at_most_a_window(self, tmp_path):
+    def test_todos_shows_at_most_a_window(self, tmp_path):
         """The README is a landing page, so this section cannot grow with the
         thread the way an index does."""
         d = _v2_thread(tmp_path)
@@ -381,7 +493,7 @@ class TestRender:
     def test_no_active_todos_renders_a_placeholder(self, tmp_path):
         d = _v2_thread(tmp_path)
         render.render(d)
-        assert "## Next steps\n\n- None" in (d / "README.md").read_text()
+        assert "## Todos\n\n- None" in (d / "README.md").read_text()
 
     def test_index_links_are_added_once(self, tmp_path):
         d = _v2_thread(tmp_path)
@@ -496,7 +608,7 @@ class TestCompose:
         idx.add(d, "decisions", idx.Entry("20260101-x", "locked", "X", "./decisions/20260101-x.md"))
         idx.add(d, "todos", idx.Entry("20260101-a", "active", "A", "./todos/a.md"))
         out = v2.compose(d, "t")
-        for section in ("## Status", "## About", "## Next steps",
+        for section in ("## Status", "## About", "## Todos",
                         "## Decisions in force", "## Artifacts", "## Recent sessions"):
             assert section in out
 
@@ -504,24 +616,24 @@ class TestCompose:
         """A bounded section conceals nothing if the heading does the counting."""
         d = _v2_thread(tmp_path)
         _todos(d, *([(f"t{n}", "active") for n in range(7)] + [("p", "parked")]))
-        assert "## Next steps (5 of 7 active, 1 parked)" in v2.compose(d, "t")
+        assert "## Todos (5 of 7 active, 1 parked)" in v2.compose(d, "t")
 
     def test_the_heading_counts_a_short_list_too(self, tmp_path):
         d = _v2_thread(tmp_path)
         _todos(d, ("a", "active"), ("b", "active"), ("c", "parked"))
-        assert "## Next steps (2 of 2 active, 1 parked)" in v2.compose(d, "t")
+        assert "## Todos (2 of 2 active, 1 parked)" in v2.compose(d, "t")
 
     def test_an_empty_list_does_not_read_as_an_empty_thread(self, tmp_path):
         """Nothing active while three sit parked is a choice, not a lost index."""
         d = _v2_thread(tmp_path)
         _todos(d, ("a", "parked"), ("b", "parked"), ("c", "parked"))
-        assert "## Next steps (0 of 0 active, 3 parked)\n\n- None" in v2.compose(d, "t")
+        assert "## Todos (0 of 0 active, 3 parked)\n\n- None" in v2.compose(d, "t")
 
     def test_parked_todos_are_listed_after_the_active_ones(self, tmp_path):
         d = _v2_thread(tmp_path)
         _todos(d, ("a", "active"), ("b", "parked"))
         out = v2.compose(d, "t")
-        assert out.index("## Next steps") < out.index("## Parked")
+        assert out.index("## Todos") < out.index("## Parked")
         assert out.index("20260101-a") < out.index("20260101-b")
 
     def test_the_heading_is_the_only_thing_that_counts(self, tmp_path):
@@ -531,7 +643,7 @@ class TestCompose:
         d = _v2_thread(tmp_path)
         _todos(d, *((f"t{n}", "active") for n in range(6)))
         out = v2.compose(d, "t")
-        assert "## Next steps (5 of 6 active, 0 parked)" in out
+        assert "## Todos (5 of 6 active, 0 parked)" in out
         assert "ask the user which to park" not in out
 
     def test_nothing_parked_means_no_parked_section(self, tmp_path):
@@ -584,13 +696,22 @@ class TestCompose:
         assert "20260619-lot" in out
         assert "not valid YAML" in out
 
-    def test_sessions_are_tailed(self, tmp_path):
+    def test_about_then_status_then_todos(self, tmp_path):
         d = _v2_thread(tmp_path)
-        for i in range(15):
-            idx.add(d, "sessions", idx.Entry(f"202601{i:02d}-s", None, f"S{i}", f"./sessions/s{i}.md"))
         out = v2.compose(d, "t")
-        assert "(10 of 15)" in out
-        assert "20260100-s" not in out
+        assert out.index("## About") < out.index("## Status") < out.index("## Todos (")
+
+    def test_about_and_status_pass_through_verbatim(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        p = d / "README.md"
+        p.write_text(p.read_text().replace("Where things stand.", "A paragraph, *as written*.\n\nTwo of them."))
+        assert "## Status\n\nA paragraph, *as written*.\n\nTwo of them." in v2.compose(d, "t")
+
+    def test_an_empty_about_says_so(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        p = d / "README.md"
+        p.write_text(p.read_text().replace("What this is.", ""))
+        assert "## About\n\n(empty)" in v2.compose(d, "t")
 
     def test_memory_is_inlined_whole_and_first(self, tmp_path):
         """The one body the payload carries, ahead of anything it qualifies.
@@ -657,3 +778,8 @@ class TestCompose:
         for i in range(35):
             idx.add(d, "decisions", idx.Entry(f"202601{i:02d}-d", "locked", f"D{i}", f"./decisions/d{i}.md"))
         assert len(v2.compose(d, "t").split()) < 700
+
+
+def test_schema_1_is_readable_but_has_no_create():
+    from ai_workspace.threads import v1
+    assert "create" not in v1.__all__ and not hasattr(v1, "create")

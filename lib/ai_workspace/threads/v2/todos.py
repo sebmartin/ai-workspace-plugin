@@ -4,7 +4,7 @@ Order is the order of the lines in `todos-index.md`. Nothing names a subset, so
 every active todo is a next step and no todo can be in the list but absent from
 the order.
 
-Parked is the only thing that takes a todo out of Next steps. It means "for
+Parked is the only thing that takes a todo out of the Todos section. It means "for
 later", so an unparked todo goes back at the end rather than to wherever it
 used to sit.
 """
@@ -17,7 +17,7 @@ ACTIVE = "active"
 STARTED = "started"
 PARKED = "parked"
 
-# How many todos Next steps shows, and so where the list stops being something
+# How many todos the Todos section shows, and so where the list stops being something
 # a person can hold in their head. The tools report crossing it in their own
 # output, so it does not depend on the skill being read between one call and
 # the next.
@@ -34,7 +34,7 @@ def parked(entries: list[Entry]) -> list[Entry]:
 
 
 def window(entries: list[Entry]) -> list[Entry]:
-    """What Next steps shows: the top of the list, bounded.
+    """What the Todos section shows: the top of the list, bounded.
 
     A slice rather than a stored subset. There is nothing to drift from the
     list it is drawn from, nothing to refill when a todo is retired, since the

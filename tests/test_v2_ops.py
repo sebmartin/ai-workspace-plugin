@@ -22,6 +22,8 @@ from mcp_server import (
     retire_artifact,
     retire_decision,
     retire_todo,
+    save_session,
+    set_about,
     set_todo_state,
 )
 
@@ -55,7 +57,7 @@ def _thread(tmp_path, name="t", schema=2, stubs=True):
         (d / sub).mkdir(parents=True)
     (d / "README.md").write_text(
         "# Thread: t\n\n**Started**: 2026-01-01\n\n## Status\n\nx\n\n"
-        "## Next steps\n\n- None\n\n## About\n\ny\n"
+        "## Todos\n\n- None\n\n## About\n\ny\n"
     )
     # A todo's link must name a file that exists, so the throwaway links the
     # todo tests pass are real files here.
@@ -84,6 +86,8 @@ class TestRefusalOnSchema1:
             retire_decision(ws, "old", "i", "superseded"),
             index_file(ws, "old", "./artifacts/x.md"),
             retire_artifact(ws, "old", "i", "stale"),
+            save_session(ws, "old", "s", "s", "k", "# S\n", ["a"], []),
+            set_about(ws, "old", "x"),
         ]
         assert all("NEEDS_MIGRATION" in c for c in calls), calls
 
@@ -182,7 +186,7 @@ class TestTodos:
         _thread(tmp_path)
         assert _reply(add_todo(str(tmp_path), "t", "Email the contractor", ""))["error"] == "LINK_REQUIRED"
 
-    def test_an_added_todo_reaches_next_steps(self, tmp_path):
+    def test_an_added_todo_reaches_todos(self, tmp_path):
         """The window needed a second call nothing told the agent to make, so a
         todo the user asked for never showed up."""
         d = _thread(tmp_path)
@@ -248,7 +252,7 @@ class TestTodos:
         assert [(e.title, e.state) for e in entries] == [
             ("C", "started"), ("B", "active"), ("A", "active"), ("D", "active")]
 
-    def test_retiring_takes_it_out_of_next_steps(self, tmp_path):
+    def test_retiring_takes_it_out_of_todos(self, tmp_path):
         d = _thread(tmp_path)
         ws = str(tmp_path)
         add_todo(ws, "t", "Chase the permit", "./s.md")
@@ -266,7 +270,7 @@ class TestTodos:
         set_todo_state(ws, "t", todo_id, "active")
         assert idx.read(d, "todos")[0].state == "active"
 
-    def test_parking_takes_it_out_of_next_steps(self, tmp_path):
+    def test_parking_takes_it_out_of_todos(self, tmp_path):
         d = _thread(tmp_path)
         ws = str(tmp_path)
         add_todo(ws, "t", "Call the surveyor", "./s.md")
@@ -610,7 +614,7 @@ class TestTodos:
     def test_a_todo_whose_file_was_never_written_is_refused(self, tmp_path):
         """Write the file, then add the todo.
 
-        An entry pointing at nothing renders into Next steps and the migration
+        An entry pointing at nothing renders into Todos and the migration
         audit reports it as dangling, and `index_file` already refuses the same
         situation. It was mostly unreachable while the usual link was an
         existing session; it is the normal path now that the file is.
@@ -1149,8 +1153,8 @@ class TestRoundTrip:
     def test_a_session_slug_cannot_corrupt_its_line(self, tmp_path):
         """The slug reached the title raw, so one bracket lost the entry."""
         d = _thread(tmp_path)
-        from mcp_server import save_session
-        save_session(str(tmp_path), "t", "my [topic]", "s", "k", body="# x\n")
+        save_session(str(tmp_path), "t", "my [topic]", "s", "k", body="# x\n",
+                     recently=["x"], up_next=[])
         assert len(idx.read(d, "sessions")) == 1
 
     def test_the_check_follows_the_line_format(self, tmp_path):
@@ -1194,17 +1198,16 @@ class TestRenderedText:
         d = _thread(tmp_path)
         assert "error" not in _reply(add_todo(str(tmp_path), "t", title, "./todos/x.md"))
         assert idx.read(d, "todos")[0].title == title
-        first = (d / "README.md").read_text().split("## Next steps\n\n")[1].split("\n")[0]
+        first = (d / "README.md").read_text().split("## Todos\n\n")[1].split("\n")[0]
         assert title in first
 
     def test_a_backslash_in_the_status_survives_the_render(self, tmp_path):
         """The Status paragraph is substituted the same way, and a save has
         already written the log and its index entry by the time it runs."""
         d = _thread(tmp_path)
-        from mcp_server import save_session
         status = r"Chasing the \d{4} parser bug"
         out = _reply(save_session(str(tmp_path), "t", "s", "A summary.", "k",
-                                  body="# x\n", status=status))
+                                  body="# x\n", recently=[status], up_next=[]))
         assert "error" not in out
         assert status in (d / "README.md").read_text()
 
@@ -1223,7 +1226,7 @@ class TestReadmeShape:
         for i in range(10):
             add_todo(str(tmp_path), "t", f"P{i}", "./s.md", state="parked")
         from ai_workspace.threads.v2 import render
-        assert "1 more and 10 parked in [todos](./todos-index.md)." in render.next_steps_body(d)
+        assert "1 more and 10 parked in [todos](./todos-index.md)." in render.todos_body(d)
 
     def test_a_v1_readme_is_refused_rather_than_appended_to(self, tmp_path):
         """The Frankenstein case: a real migration hit this and was told it worked.
@@ -1240,9 +1243,48 @@ class TestReadmeShape:
         out = add_todo(str(tmp_path), "t", "New", "./todos/a.md")
         assert "not a schema 2 README" in out
         text = (d / "README.md").read_text()
+        assert "## Todos" not in text
         assert "## Next steps" not in text
         assert "**Indexes**:" not in text
         assert "old format" in text
+
+    def test_a_legacy_readme_stays_writable_and_is_converted(self, tmp_path):
+        d = _thread(tmp_path)
+        p = d / "README.md"
+        p.write_text(p.read_text().replace("## Todos", "## Next steps"))
+        out = _reply(add_todo(str(tmp_path), "t", "New", "./todos/a.md"))
+        assert "id" in out
+        text = p.read_text()
+        assert "## Todos" in text and "## Next steps" not in text
+
+    def test_a_readme_with_both_todo_headings_is_refused_and_untouched(self, tmp_path):
+        d = _thread(tmp_path)
+        p = d / "README.md"
+        p.write_text(p.read_text().replace(
+            "## About", "## Next steps\n\n- old list\n\n## About"))
+        before = p.read_text()
+        out = add_todo(str(tmp_path), "t", "New", "./todos/a.md")
+        assert "both `## Todos` and `## Next steps`" in out
+        assert p.read_text() == before
+        assert idx.read(d, "todos") == []
+
+    def test_a_missing_status_is_added_above_the_footer(self, tmp_path):
+        d = _thread(tmp_path)
+        p = d / "README.md"
+        p.write_text("# t\n\n## Todos\n\n- None\n\n---\n\n**Indexes**: x\n")
+        save_session(str(tmp_path), "t", "s", "Sum.", "k", "# S\n",
+                     recently=["One."], up_next=[])
+        text = p.read_text()
+        assert text.index("## Status") < text.index("**Indexes**")
+
+    def test_a_status_section_at_the_end_does_not_swallow_the_footer(self, tmp_path):
+        d = _thread(tmp_path)
+        p = d / "README.md"
+        p.write_text("# t\n\n## Todos\n\n- None\n\n## Status\n\nold\n\n---\n\n**Indexes**: x\n")
+        save_session(str(tmp_path), "t", "s", "Sum.", "k", "# S\n",
+                     recently=["One."], up_next=[])
+        text = p.read_text()
+        assert "**Indexes**: x" in text and "old" not in text
 
     def test_a_refusal_writes_nothing_at_all(self, tmp_path):
         """Checked before anything mutates, so retrying is clean.
@@ -1256,7 +1298,7 @@ class TestReadmeShape:
         add_todo(str(tmp_path), "t", "New", "./todos/a.md")
         assert idx.read(d, "todos") == []
 
-        (d / "README.md").write_text("# t\n\n## Next steps\n\n- None\n\n## About\n\nx\n")
+        (d / "README.md").write_text("# t\n\n## Todos\n\n- None\n\n## About\n\nx\n")
         add_todo(str(tmp_path), "t", "New", "./todos/a.md")
         assert [e.title for e in idx.read(d, "todos")] == ["New"]
 
@@ -1276,8 +1318,8 @@ class TestInvariant:
         for i in range(parked):
             add_todo(ws, "t", f"P{i}", "./s.md", state="parked")
         from ai_workspace.threads.v2 import render
-        expected = render.next_steps_body(d)
-        after = (d / "README.md").read_text().split("## Next steps\n\n")[1]
+        expected = render.todos_body(d)
+        after = (d / "README.md").read_text().split("## Todos\n\n")[1]
         section = re.split(r"(?m)^#{2,} ", after)[0]
         assert section.strip() == expected.strip()
 
@@ -1285,28 +1327,28 @@ class TestInvariant:
 class TestSaveSession:
     def test_writes_session_status_and_dates(self, tmp_path):
         d = _thread(tmp_path)
-        from mcp_server import save_session
         out = save_session(str(tmp_path), "t", "growcer-prep", "Prepped the round.",
                            "growcer, interview",
                            body="# Session\n\nWhat happened.\n",
-                           status="Round 3 booked for Friday.")
-        assert _reply(out)["status_written"] is True
+                           recently=["Round 3 booked for Friday."],
+                           up_next=["Prep the case study."])
         sid = _only_id(d, "sessions")
-        assert _reply(out)["id"] == sid
+        assert _reply(out) == {"id": sid}
         text = (d / "sessions" / f"{sid}.md").read_text()
         fields, _ = split_frontmatter(text)
         assert fields["summary"] == "Prepped the round."
         assert "What happened." in text
         readme = (d / "README.md").read_text()
         assert "Round 3 booked for Friday." in readme
+        assert "Prep the case study." in readme
         assert "**Last Session**:" in readme
 
     def test_the_body_replaces_whatever_the_file_held(self, tmp_path):
         """A save is one write rather than an append, so the body is the log."""
         d = _thread(tmp_path)
         from ai_workspace.threads.v2 import session
-        from mcp_server import save_session
-        save_session(str(tmp_path), "t", "topic", "s", "k", "# Session\n\nWhat happened.\n")
+        save_session(str(tmp_path), "t", "topic", "s", "k", "# Session\n\nWhat happened.\n",
+                     ["x"], [])
         p = session.session_path(d, _only_id(d, "sessions"))
         text = p.read_text()
         assert "What happened." in text
@@ -1319,12 +1361,11 @@ class TestSaveSession:
         from datetime import date
 
         from ai_workspace.threads.v2 import ids, session
-        from mcp_server import save_session
         sid = ids.make_id(date.today(), "topic")
         p = session.session_path(d, sid)
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text("# Session: topic\n\nWritten directly.\n")
-        save_session(str(tmp_path), "t", "topic", "s", "k", "# Session\n")
+        save_session(str(tmp_path), "t", "topic", "s", "k", "# Session\n", ["x"], [])
         assert [e.id for e in idx.read(d, "sessions")] == [sid]
 
     def test_a_blank_body_is_refused_and_the_file_kept(self, tmp_path):
@@ -1334,44 +1375,39 @@ class TestSaveSession:
         from datetime import date
 
         from ai_workspace.threads.v2 import ids, session
-        from mcp_server import save_session
         p = session.session_path(d, ids.make_id(date.today(), "topic"))
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text("# Session: topic\n\nWritten directly.\n")
         for blank in ("", " \n"):
-            reply = save_session(str(tmp_path), "t", "topic", "s", "k", blank)
+            reply = save_session(str(tmp_path), "t", "topic", "s", "k", blank, ["x"], [])
             assert json.loads(reply) == {"error": "BODY_EMPTY"}
         assert p.read_text() == "# Session: topic\n\nWritten directly.\n"
 
     def test_saving_twice_indexes_once(self, tmp_path):
         d = _thread(tmp_path)
-        from mcp_server import save_session
-        save_session(str(tmp_path), "t", "topic", "s", "k", "# Session\n")
-        save_session(str(tmp_path), "t", "topic", "s", "k", "# Session\n")
+        save_session(str(tmp_path), "t", "topic", "s", "k", "# Session\n", ["x"], [])
+        save_session(str(tmp_path), "t", "topic", "s", "k", "# Session\n", ["x"], [])
         assert len(idx.read(d, "sessions")) == 1
 
     def test_saving_twice_writes_one_session(self, tmp_path):
         d = _thread(tmp_path)
-        from mcp_server import save_session
-        save_session(str(tmp_path), "t", "topic", "s", "k", "# Session\n")
-        save_session(str(tmp_path), "t", "topic", "s2", "k", "# Again\n")
+        save_session(str(tmp_path), "t", "topic", "s", "k", "# Session\n", ["x"], [])
+        save_session(str(tmp_path), "t", "topic", "s2", "k", "# Again\n", ["x"], [])
         assert len(idx.read(d, "sessions")) == 1
         assert "Again" in (d / "sessions" / f"{_only_id(d, 'sessions')}.md").read_text()
 
     def test_last_session_survives_for_archive(self, tmp_path):
         """archive_thread greps this line; a render must never drop it."""
         d = _thread(tmp_path)
-        from mcp_server import save_session
-        save_session(str(tmp_path), "t", "topic", "s", "k", "# Session\n", status="x")
+        save_session(str(tmp_path), "t", "topic", "s", "k", "# Session\n", ["x"], [])
         import re
         assert re.search(r"(?m)^\*\*Last Session\*\*: \d{4}-\d{2}-\d{2}$",
                          (d / "README.md").read_text())
 
     def test_refused_on_schema_1(self, tmp_path):
         _thread(tmp_path, "old", schema=1)
-        from mcp_server import save_session
         assert "NEEDS_MIGRATION" in save_session(
-            str(tmp_path), "old", "s", "s", "k", "# Session\n")
+            str(tmp_path), "old", "s", "s", "k", "# Session\n", ["a"], [])
 
 
 class TestDating:
@@ -1444,3 +1480,161 @@ class TestDating:
         reply = _reply(index_file(
             str(tmp_path), "t", "./artifacts/orphan.md", date="2026-07-27"))
         assert reply == {"id": "20260727-orphan"}
+
+
+def test_save_session_has_no_status_and_requires_both_lists():
+    import inspect
+    params = inspect.signature(save_session).parameters
+    assert "status" not in params
+    for name in ("recently", "up_next"):
+        assert params[name].default is inspect.Parameter.empty
+
+
+class TestStatusLists:
+    @staticmethod
+    def _save(tmp_path, **kw):
+        return _reply(save_session(str(tmp_path), "t", "s", "Sum.", "k", "# Session\n", **kw))
+
+    @staticmethod
+    def _status(d):
+        return (d / "README.md").read_text().split("## Status\n\n")[1].split("## ")[0]
+
+    def test_status_is_written_in_the_fixed_layout(self, tmp_path):
+        d = _thread(tmp_path)
+        self._save(tmp_path, recently=["One.", "Two."], up_next=[])
+        assert self._status(d) == "**Recently**\n- One.\n- Two.\n\n**Up next**\n- None\n\n"
+
+    def test_an_id_shaped_item_is_written_as_given_and_never_resolved(self, tmp_path):
+        d = _thread(tmp_path)
+        (d / "todos" / "a.md").write_text("x\n")
+        tid = _reply(add_todo(str(tmp_path), "t", "Add CSV export", "./todos/a.md"))["id"]
+        retire_todo(str(tmp_path), "t", tid, "done")
+        out = self._save(tmp_path, recently=[tid, "20260101-some-decision"], up_next=[tid])
+        assert "error" not in out
+        status = self._status(d)
+        assert f"- {tid}\n" in status and "- 20260101-some-decision\n" in status
+        assert "](" not in status
+
+    def test_a_sentence_that_mentions_an_id_is_written_as_given(self, tmp_path):
+        d = _thread(tmp_path)
+        self._save(tmp_path, recently=["Finished 20260101-nothing today."], up_next=[])
+        assert "- Finished 20260101-nothing today." in self._status(d)
+
+    @pytest.mark.parametrize("kw,code", [
+        ({"recently": [], "up_next": []}, "RECENTLY_EMPTY"),
+        ({"recently": ["a", "b", "c", "d"], "up_next": []}, "TOO_MANY_ITEMS"),
+        ({"recently": ["a"], "up_next": ["a", "b", "c", "d"]}, "TOO_MANY_ITEMS"),
+        ({"recently": ["a"], "up_next": ["   "]}, "ITEM_EMPTY"),
+        ({"recently": ["two\nlines"], "up_next": []}, "ITEM_HAS_LINE_BREAK"),
+    ])
+    def test_a_refusal_writes_nothing_at_all(self, tmp_path, kw, code):
+        d = _thread(tmp_path)
+        before = (d / "README.md").read_text()
+        sessions_before = sorted(p.name for p in (d / "sessions").iterdir())
+        out = self._save(tmp_path, **kw)
+        assert out["error"] == code
+        assert (d / "README.md").read_text() == before
+        assert sorted(p.name for p in (d / "sessions").iterdir()) == sessions_before
+        assert idx.read(d, "sessions") == []
+
+    def test_too_many_names_the_list_and_the_limit(self, tmp_path):
+        _thread(tmp_path)
+        out = self._save(tmp_path, recently=["a"], up_next=["a", "b", "c", "d"])
+        assert out == {"error": "TOO_MANY_ITEMS", "detail": "up_next", "limit": 3}
+
+    def test_three_items_each_is_accepted(self, tmp_path):
+        _thread(tmp_path)
+        out = self._save(tmp_path, recently=["a", "b", "c"], up_next=["d", "e", "f"])
+        assert "error" not in out
+
+    def test_a_paragraph_status_is_replaced_by_the_lists(self, tmp_path):
+        d = _thread(tmp_path)
+        self._save(tmp_path, recently=["New."], up_next=[])
+        status = self._status(d)
+        assert status.startswith("**Recently**\n- New.")
+        assert "\nx\n" not in status
+
+    def test_a_legacy_readme_is_converted_by_a_save(self, tmp_path):
+        d = _thread(tmp_path)
+        readme = d / "README.md"
+        readme.write_text(readme.read_text().replace("## Todos", "## Next steps"))
+        self._save(tmp_path, recently=["a"], up_next=[])
+        text = readme.read_text()
+        assert "## Todos" in text and "## Next steps" not in text
+
+
+def about_of(d):
+    text = (d / "README.md").read_text()
+    m = re.search(r"## About\n\n(.*?)(?=\n## |\n---|\Z)", text, re.DOTALL)
+    return m.group(1).strip() if m else ""
+
+
+class TestAbout:
+    def test_replaces_about_and_leaves_the_rest(self, tmp_path):
+        from ai_workspace.threads.v2 import render
+        d = _thread(tmp_path)
+        render.render(d)
+        out = _reply(set_about(str(tmp_path), "t", "Planning the kitchen renovation."))
+        assert out == {"words": 4}
+        text = (d / "README.md").read_text()
+        assert about_of(d) == "Planning the kitchen renovation."
+        assert "## Status\n\nx" in text and text.count("**Indexes**:") == 1
+        assert text.index("## About") < text.index("**Indexes**:")
+
+    def test_fifty_words_are_accepted_across_lines(self, tmp_path):
+        _thread(tmp_path)
+        words = " ".join(["w"] * 25) + "\n\n" + " ".join(["w"] * 25)
+        assert "error" not in _reply(set_about(str(tmp_path), "t", words))
+
+    @pytest.mark.parametrize("text,code", [
+        ("", "ABOUT_EMPTY"), ("  \n ", "ABOUT_EMPTY"),
+        (" ".join(["w"] * 51), "ABOUT_TOO_LONG"),
+        ("Intro.\n## Not a heading here", "ABOUT_UNREPRESENTABLE"),
+        ("Intro.\n---\nmore", "ABOUT_UNREPRESENTABLE"),
+    ])
+    def test_a_refusal_writes_nothing(self, tmp_path, text, code):
+        d = _thread(tmp_path)
+        before = (d / "README.md").read_text()
+        assert _reply(set_about(str(tmp_path), "t", text))["error"] == code
+        assert (d / "README.md").read_text() == before
+
+    def test_too_long_reports_the_count_and_limit(self, tmp_path):
+        _thread(tmp_path)
+        out = _reply(set_about(str(tmp_path), "t", " ".join(["w"] * 51)))
+        assert out == {"error": "ABOUT_TOO_LONG", "limit": 50, "words": 51}
+
+    def test_unrepresentable_names_the_line(self, tmp_path):
+        _thread(tmp_path)
+        out = _reply(set_about(str(tmp_path), "t", "Intro.\n## Heading"))
+        assert out["detail"] == "## Heading"
+
+    def test_a_backslash_survives(self, tmp_path):
+        _thread(tmp_path)
+        set_about(str(tmp_path), "t", r"Parsing \d{4} and \1 groups.")
+        assert r"Parsing \d{4} and \1 groups." in (tmp_path / "threads/t/README.md").read_text()
+
+    def test_a_missing_about_is_added_above_the_footer(self, tmp_path):
+        from ai_workspace.threads.v2 import render
+        d = _thread(tmp_path)
+        (d / "README.md").write_text(
+            "# Thread: t\n\n## Status\n\nx\n\n## Todos\n\n- None\n"
+        )
+        render.render(d)
+        set_about(str(tmp_path), "t", "New.")
+        text = (d / "README.md").read_text()
+        assert text.index("## About\n\nNew.") < text.index("**Indexes**:")
+
+    def test_a_missing_about_is_appended_without_a_footer(self, tmp_path):
+        d = _thread(tmp_path)
+        (d / "README.md").write_text("# Thread: t\n\n## Todos\n\n- None\n")
+        set_about(str(tmp_path), "t", "New.")
+        assert about_of(d) == "New."
+
+    def test_a_legacy_readme_is_converted(self, tmp_path):
+        d = _thread(tmp_path)
+        (d / "README.md").write_text(
+            "# Thread: t\n\n## Status\n\nx\n\n## Next steps\n\n- None\n\n## About\n\ny\n"
+        )
+        set_about(str(tmp_path), "t", "New.")
+        text = (d / "README.md").read_text()
+        assert "## Todos" in text and "## Next steps" not in text

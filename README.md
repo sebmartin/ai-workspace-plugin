@@ -60,7 +60,7 @@ my-workspace/
 ├── CLAUDE.md                # One-line "@AGENTS.md" import (Claude only)
 ├── threads/
 │   └── {thread-name}/
-│       ├── README.md        # Status, next steps, written for you, not the assistant
+│       ├── README.md        # About, Status and todos, written for you, not the assistant
 │       ├── schema-version   # Which on-disk schema this thread uses
 │       ├── todos/           # Todos with room for their own notes
 │       ├── sessions/        # One file per conversation

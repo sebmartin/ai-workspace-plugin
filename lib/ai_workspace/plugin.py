@@ -17,7 +17,7 @@ def get_template_path(template_name: str) -> Path:
     Get path to template file in plugin.
 
     Args:
-        template_name: Name of the template file (e.g., "thread-template.md")
+        template_name: Name of the template file (e.g., "decision-template.md")
 
     Returns:
         Path to the template file in the plugin's templates/ directory

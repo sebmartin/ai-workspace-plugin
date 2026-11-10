@@ -14,6 +14,7 @@ Archiving lives in workspace.py, not here. Moving a thread between threads/ and
 archive/ never opens it, so it needs nothing from any schema.
 """
 
+import json
 import re
 from collections.abc import Callable
 from typing import NamedTuple
@@ -46,6 +47,7 @@ __all__ = [
     "retire_decision",
     "retire_todo",
     "save_session",
+    "set_about",
     "set_todo_state",
     "validate_thread_name",
 ]
@@ -144,7 +146,7 @@ def resume(workspace_dir: str, thread_name: str) -> str:
     return _focus(call.thread, call.fn(call.thread))
 
 
-def create(workspace_dir: str, thread_name: str) -> str:
+def create(workspace_dir: str, thread_name: str, about: str = "") -> str:
     """Create a thread at the schema this plugin currently writes."""
     if not validate_thread_name(thread_name):
         return (
@@ -168,7 +170,10 @@ def create(workspace_dir: str, thread_name: str) -> str:
 
     directory = ws.thread_path(workspace, thread_name)
     thread = Thread(workspace, thread_name, directory, CURRENT_SCHEMA)
-    return _focus(thread, implementation(thread).create(thread))
+    result = implementation(thread).create(thread, about)
+    if isinstance(result, dict):
+        return json.dumps(result)  # refused before anything was created
+    return _focus(thread, result)
 
 
 def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
@@ -252,12 +257,20 @@ def retire_artifact(workspace_dir: str, thread_name: str, artifact_id: str,
 
 def save_session(workspace_dir: str, thread_name: str, slug: str, summary: str,
                  keywords: str, body: str,
-                 status: str | None = None) -> str:
-    """Write the session log and the Status paragraph in one call."""
+                 recently: list[str], up_next: list[str]) -> str:
+    """Write the session log and the Status lists in one call."""
     call = _for(workspace_dir, thread_name, "save_session")
     if isinstance(call, str):
         return call
-    return call.fn(call.thread, slug, summary, keywords, body, status)
+    return call.fn(call.thread, slug, summary, keywords, body, recently, up_next)
+
+
+def set_about(workspace_dir: str, thread_name: str, text: str) -> str:
+    """Replace the thread's About section."""
+    call = _for(workspace_dir, thread_name, "set_about")
+    if isinstance(call, str):
+        return call
+    return call.fn(call.thread, text)
 
 
 def migration_safety_check(workspace_dir: str, thread_name: str) -> str:

@@ -186,7 +186,7 @@ Tune against the tune half only. Use the held-out half to measure, never to tune
 
 ```bash
 # Edit templates in templates/
-vim templates/thread-template.md
+vim templates/v2/thread-template.md
 
 # Test by creating a workspace and using the template
 cd /tmp/test-workspace

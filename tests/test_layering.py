@@ -6,6 +6,7 @@ which reads as harmless in the diff that adds it and is a fork in the road by
 the time there are three schemas.
 """
 
+import json
 import re
 import sys
 from pathlib import Path
@@ -437,3 +438,21 @@ def test_every_tool_that_can_return_file_unchanged_documents_it():
             f"assistant that has not read it will drop the key and the index "
             f"and the file stay silently disagreeing."
         )
+
+
+def test_the_skill_describes_the_resume_this_plugin_returns():
+    skill = (REPO / "skills" / "threads" / "SKILL.md").read_text()
+    assert "## Working with a schema 2 thread" in skill
+    assert "Print only Status and Next steps" not in skill
+    assert "When the user says to work on something, set its state to `started`" not in skill
+    for phrase in ("About, Status and Todos", "set_todo_state", "`started`",
+                   "set_about", "recently", "up_next", "`summary:` and `keywords:`"):
+        assert phrase in skill, phrase
+    assert "## Next steps" not in skill
+
+    migrate = (REPO / "skills" / "threads" / "v2" / "migrate-from-v1.md").read_text()
+    assert "## Todos" in migrate and "set_about" in migrate and "**Recently**" in migrate
+    assert "`## Next steps`" not in migrate
+
+    for manifest in (".claude-plugin/plugin.json", ".codex-plugin/plugin.json"):
+        assert json.loads((REPO / manifest).read_text())["version"] == "3.2.0"

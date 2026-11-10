@@ -47,12 +47,14 @@ def resume_thread(workspace_dir: str, thread_name: str) -> str:
     """Resolve the workspace and thread path, and return the thread's context.
 
     On a schema 2 thread the reply is composed rather than read from a file:
-    `memory.md` in full if there is one, then Status, About, the header, the
-    Next steps, any parked todos, every in-force decision with the
-    `summary:` read from its file, the artifacts index, and the last ten
-    sessions. Next steps is the top of the todo list in priority order, bounded
-    to five, and its heading counts what is shown, what is active and what is
-    parked, so a long list is visible without being printed. A `## Thread size`
+    `memory.md` in full if there is one, then the header, About, Status, the
+    Todos window (top five of the todo list in priority order, its heading
+    counting shown, active and parked), any parked todos, every in-force
+    decision with its `summary:`, the artifacts index, and the recent sessions:
+    every session within 14 days of the newest one, at least five and at most
+    twenty, each with its `summary:`, the heading counting shown and total.
+    Older sessions are not listed; their files under `sessions/` carry
+    `summary:` and `keywords:` frontmatter to search. A `## Thread size`
     heading appears only when the thread has grown expensive to open.
 
     A thread this plugin cannot read returns `{"error": CODE, "thread": ...,
@@ -71,7 +73,7 @@ def resume_thread(workspace_dir: str, thread_name: str) -> str:
 
 
 @mcp.tool()
-def create_thread(workspace_dir: str, thread_name: str) -> str:
+def create_thread(workspace_dir: str, thread_name: str, about: str = "") -> str:
     """Create a new discussion thread with the standard directory structure.
 
     Resolves the workspace from `workspace_dir`. If `workspace_dir` has a threads/ dir, the thread
@@ -90,8 +92,13 @@ def create_thread(workspace_dir: str, thread_name: str) -> str:
             falls back to the configured default, and returns a status question
             (AMBIGUOUS_WORKSPACE or NEEDS_INIT) if neither works.
         thread_name: Name of the thread (kebab-case: lowercase letters, numbers, hyphens).
+        about: What the thread is about and what it is for, 50 words or fewer. A blank
+            `about` counts as left out. Otherwise it is checked as `set_about` checks it,
+            and a refusal creates nothing. Leave it out when
+            the thread's purpose is not clear yet; the placeholder stays until
+            `set_about` replaces it.
     """
-    return _threads.create(workspace_dir, thread_name)
+    return _threads.create(workspace_dir, thread_name, about)
 
 
 @mcp.tool()
@@ -175,7 +182,7 @@ def list_archived_threads(workspace_dir: str) -> str:
 @mcp.tool()
 def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
              state: str = "active", place: str = "") -> str:
-    """Add a todo to the thread's list of next steps.
+    """Add a todo to the thread's Todos list.
 
     Every todo is read on every resume and commits the user to something, so
     add one only when the user asked for it or agreed to your suggestion. If
@@ -194,7 +201,7 @@ def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
     refused.
 
     The list is in priority order and the new todo goes at the end unless you
-    place it. Say where you put it, so the user can move it. Next steps shows
+    place it. Say where you put it, so the user can move it. The README's Todos section shows
     the top five, so a todo added at the end is in the list without being on
     the README.
 
@@ -304,7 +311,7 @@ def order_todos(workspace_dir: str, thread_name: str, todo_ids: list[str],
     leaves the rest alone. The order is the user's, so propose one and call
     this once they agree.
 
-    This is also how what Next steps shows changes, because what it shows is
+    This is also how what the README's Todos section shows changes, because what it shows is
     the top of the list. Nothing has to be promoted when a todo is retired:
     the sixth becomes the fifth by itself.
 
@@ -505,16 +512,28 @@ def retire_artifact(workspace_dir: str, thread_name: str, artifact_id: str,
 @mcp.tool()
 def save_session(workspace_dir: str, thread_name: str, slug: str, summary: str,
                  keywords: str, body: str,
-                 status: str = "") -> str:
-    """Save the session log and the thread's Status paragraph.
+                 recently: list[str], up_next: list[str]) -> str:
+    """Save the session log and rewrite the thread's Status as two lists.
 
     One call writes the whole log. The body replaces everything the session
     file holds, including anything written to it earlier, so it must be the
     complete log.
 
-    Returns `{"id": ..., "status_written": ...}`. A refusal returns
-    `{"error": CODE, ...}` and writes nothing. `BODY_EMPTY` means the body was
-    blank; nothing was saved, and the call needs the full log.
+    The README's Status section is rewritten on every save as two lists,
+    **Recently** and **Up next**. Both lists are passed every time. Decide each
+    time whether they changed; passing the same items as last time is a valid
+    answer.
+
+    Each item is written as given, as one bullet. Nothing is looked up, so an id
+    stays an id. To mention a todo, write it in your own words, such as "Tackle
+    todo: <name>".
+
+    Returns `{"id": ...}`. A refusal returns `{"error": CODE, ...}` and writes
+    nothing. `BODY_EMPTY` means the body was blank and the call needs the full
+    log. `RECENTLY_EMPTY` means `recently` had no items. `TOO_MANY_ITEMS` means
+    a list held more than 3 items, with `detail` naming the list and `limit` the
+    maximum. `ITEM_EMPTY` means an item was blank and `ITEM_HAS_LINE_BREAK` that
+    it spanned lines, with `detail` naming the list.
 
     Args:
         workspace_dir: The tracked workspace path from session context.
@@ -525,11 +544,36 @@ def save_session(workspace_dir: str, thread_name: str, slug: str, summary: str,
         summary: Up to 150 words on what was discussed and settled.
         keywords: Comma-separated terms to search for later.
         body: Full markdown body of the session log.
-        status: The thread's Status paragraph. Omit to leave it unchanged.
+        recently: One to three items, newest first, describing the thread's
+            recent work rather than only this session. Keep items from earlier
+            sessions that are still live.
+        up_next: Zero to three items, what should happen next. An empty list
+            renders `- None`.
     """
     return _threads.save_session(workspace_dir, thread_name, slug, summary,
-                                 keywords, body, status or None)
+                                 keywords, body, recently, up_next)
 
+
+
+@mcp.tool()
+def set_about(workspace_dir: str, thread_name: str, about: str) -> str:
+    """Replace the README's About section.
+
+    About is printed to the user on every resume, so it says what the thread is
+    about and what it is for, in 50 words or fewer. Call this when About is still
+    the placeholder, has grown past 50 words, or no longer fits the thread. Never
+    edit About by hand.
+
+    Returns `{"words": n}`. A refusal writes nothing and returns one of
+    `ABOUT_EMPTY`, `ABOUT_TOO_LONG` (with `limit` and `words`) or
+    `ABOUT_UNREPRESENTABLE` (a heading or `---` line, which is the `detail`).
+
+    Args:
+        workspace_dir: The tracked workspace path from session context.
+        thread_name: Name of the thread.
+        about: The full new text of the About section.
+    """
+    return _threads.set_about(workspace_dir, thread_name, about)
 
 
 @mcp.tool()
