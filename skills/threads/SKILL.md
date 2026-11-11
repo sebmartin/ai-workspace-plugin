@@ -169,7 +169,7 @@ can be written to at all. Fetch
 
 **The order is the user's.** Propose one and apply it once they agree, and say where you put a new todo so they can move it.
 
-**Starting on a todo marks it started.** Any request to start on a todo, in whatever words, first sets it to `started` with `set_todo_state`, before anything else happens, and you tell the user you did. Picking one from a list, naming it, and handing it to another skill to design or build all count.
+**Starting on a todo marks it started, and nothing more.** Any request to start or resume a todo, in whatever words, first sets it to `started` with `set_todo_state`, and you tell the user you did. Then give a short summary of where it stands, propose a first or next step if one is clear, and stop until they say which step to take. Picking one from a list, naming it, and handing it to another skill to design or build all count as starting; the hand-off is the step they asked for.
 
 ### Memory
 
