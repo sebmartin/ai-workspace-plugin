@@ -275,9 +275,9 @@ def set_todo_state(workspace_dir: str, thread_name: str, todo_id: str, state: st
 
     Two of the states move the todo as well as labelling it. `started` sends it
     to the top of the list and clears the label from whatever held it before,
-    since it names the one thing being worked on; call it when the user says to
-    work on something. Unparking sends it to the end, because parked meant for
-    later.
+    since it names the one thing being worked on; call it when the user asks to
+    start or resume a todo. Unparking sends it to the end, because parked meant
+    for later.
 
     When the todo's link names a file, its `state:` line is rewritten to
     match, so a parked todo found by grep does not still read `state: active`.
