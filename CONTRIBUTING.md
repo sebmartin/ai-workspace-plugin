@@ -28,7 +28,8 @@ ai-workspace-plugin/
 ├── agents/                          # Canonical persona source (Claude reads directly)
 │   ├── proponent.md
 │   ├── skeptic.md
-│   └── privacy-checker.md           # Claude Code only, no Codex mirror
+│   ├── privacy-checker.md           # Claude Code only, no Codex mirror
+│   └── thread-writer.md             # Claude Code only, no Codex mirror
 ├── hooks/                           # Session-start hook
 ├── skills/                          # User-invocable skills (shared by both CLIs)
 │   ├── debate/SKILL.md

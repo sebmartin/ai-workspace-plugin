@@ -455,4 +455,32 @@ def test_the_skill_describes_the_resume_this_plugin_returns():
     assert "`## Next steps`" not in migrate
 
     for manifest in (".claude-plugin/plugin.json", ".codex-plugin/plugin.json"):
-        assert json.loads((REPO / manifest).read_text())["version"] == "3.2.0"
+        version = json.loads((REPO / manifest).read_text())["version"]
+        assert tuple(int(n) for n in version.split(".")) >= (3, 2, 0), version
+
+
+def test_writes_to_another_thread_go_through_the_thread_writer():
+    """The skill sends cross-thread writes to an agent the plugin ships.
+
+    Resuming the other thread in the main conversation is what loaded its
+    context next to the active thread's, and a reference to an agent that is
+    not shipped would leave the skill pointing at nothing.
+    """
+    from ai_workspace.text import split_frontmatter
+
+    agent = REPO / "agents" / "thread-writer.md"
+    meta, body = split_frontmatter(agent.read_text(), agent)
+    assert meta["name"] == "thread-writer"
+    assert meta["codex-mirror"] is False
+    for tool in ("resume_thread", "get_skill_file", "save_session"):
+        assert f"`{tool}`" in body, tool
+        assert f"def {tool}(" in SERVER.read_text(), tool
+
+    skill = (REPO / "skills" / "threads" / "SKILL.md").read_text()
+    assert "`ai-workspace:thread-writer`" in skill
+    assert "Never write to a thread you have not resumed" not in skill
+    assert "Working with a schema 2 thread" in body and "## Working with a schema 2 thread" in skill
+
+    link = (REPO / "skills" / "threads" / "v2" / "link-thread.md").read_text()
+    assert "the one operation that writes to a thread you have not resumed" not in link
+    assert "The thread you started from stays current" in link

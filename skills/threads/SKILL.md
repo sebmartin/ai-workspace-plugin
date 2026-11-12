@@ -112,7 +112,7 @@ Read its files directly, whenever another thread holds something you need. Do no
 
 A schema 1 thread keeps all of that inline in its README, so one read covers it.
 
-**Never write to a thread you have not resumed.** The write tools take a thread name and will do it, so nothing stops you but this.
+**Write to another thread through the `ai-workspace:thread-writer` agent, never by resuming it.** A resume would leave that thread's status, decisions and sessions in this conversation, and a write made without them would not fit the thread. Start the agent with the workspace path, the thread's name, the user's request in their own words, and anything from this thread the write needs. It resumes the thread in its own context, makes the write, and reports only what it wrote or what stopped it. Pass that on and nothing more. Where you cannot start a subagent, ask the user to switch threads. A procedure that names the other thread as its target, such as linking two threads or migrating one, writes to it directly as that procedure says.
 
 ### What resume returns
 
