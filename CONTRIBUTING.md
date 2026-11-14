@@ -6,7 +6,7 @@ Thank you for contributing! This plugin helps developers organize long-running A
 
 1. Clone the repository
 2. Make your changes (skills, agents, templates, documentation)
-3. Regenerate the Codex agent TOMLs if you edited `agents/*.md`: `python3 scripts/sync-codex-agents.py`
+3. Regenerate the Codex agent TOMLs if you edited `agents/*.md`: `uv run python3 scripts/sync-codex-agents.py`
 4. Test with `--plugin-dir` flag on Claude Code (see Testing below); Codex testing requires a local marketplace stub
 5. Submit a pull request
 
@@ -57,7 +57,7 @@ ai-workspace-plugin/
 ├── scripts/
 │   ├── sync-codex-agents.py         # Regenerates .codex-plugin/agents/*.toml
 │   └── privacy_check_regression.py  # Runs the privacy checker over the regression cases
-├── tests/                           # test_mcp_server.py, test_server_launch.py, test_layering.py, test_codex_packaging.py, test_privacy_check.py
+├── tests/                           # pytest suite (see Unit Tests)
 │   └── fixtures/privacy-check-cases.json
 ├── docs/examples/                   # User walkthroughs
 ├── AGENTS.md                        # Repo instructions (vendor-neutral)
@@ -116,7 +116,7 @@ cd ~ && rm -rf /tmp/test-workspace
 Codex has no `--plugin-dir` flag. To test a local checkout, point a Codex marketplace at the plugin directory:
 
 ```bash
-# (Once Codex marketplace stub is set up — TBD; see plan follow-ups)
+# /path/to/local/marketplace is a marketplace whose entry points at this checkout
 codex plugin marketplace add /path/to/local/marketplace
 codex
 > initialize the ai-workspace
@@ -141,7 +141,7 @@ codex
 ## Adding New Skills
 
 1. Create directory in `skills/<skill-name>/`
-2. Add `SKILL.md` with skill definition (keep frontmatter to `name` + `description`; Codex requires this and Claude accepts it)
+2. Add `SKILL.md` with skill definition. Frontmatter needs `name` and `description`, which both CLIs read. A Claude-only key such as `disable-model-invocation` is allowed, but how Codex treats it is unverified, so a skill that must not run on Codex also says so in its body, as `skills/privacy-check/SKILL.md` does
 3. Write prose vendor-neutrally: prefer "your CLI" or note Claude-vs-Codex differences explicitly. Avoid hard-coding `/ai-workspace:` namespace in user-facing examples (Codex uses bare `/skill-name`).
 4. Add supporting scripts in `scripts/` subdirectory if needed
 5. Update README.md to list the new skill
@@ -152,7 +152,7 @@ codex
 1. Edit `agents/{name}.md` (Claude format)
 2. Regenerate Codex `.toml` mirrors:
    ```bash
-   python3 scripts/sync-codex-agents.py
+   uv run python3 scripts/sync-codex-agents.py
    ```
 3. Commit both the `.md` source and the generated `.toml` files together. Do not hand-edit the `.toml` files; they are generated artifacts. An agent with `codex-mirror: false` in its frontmatter is Claude Code only: the sync skips it and it has no `.toml`.
 4. Write prose vendor-neutrally so the same persona works under both CLIs' subagent systems.
@@ -228,7 +228,7 @@ Merging to `main` ships the plugin, so this is the pre-merge checklist for every
 - [ ] Debate works (both CLIs):
   - [ ] Proponent and skeptic subagents spawn in isolated contexts
   - [ ] Final artifact is saved to the active thread
-- [ ] Agents `.toml` mirrors regenerated if any `agents/*.md` changed (`python3 scripts/sync-codex-agents.py`)
+- [ ] Agents `.toml` mirrors regenerated if any `agents/*.md` changed (`uv run python3 scripts/sync-codex-agents.py`)
 - [ ] Documentation is up to date:
   - [ ] README.md Quick Start is accurate
   - [ ] CONTRIBUTING.md reflects current structure
