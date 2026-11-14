@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
 sys.path.insert(0, str(Path(__file__).parent.parent / "skills" / "threads" / "scripts"))
 
 from ai_workspace.threads import marker, schema
-from ai_workspace.threads.v2 import ids, render, session
+from ai_workspace.threads.v2 import ids, render, session, stars
 from ai_workspace.threads.v2 import index as idx
 from ai_workspace.threads.v2 import thread as v2
 from ai_workspace.threads.v2 import todos as todos_mod
@@ -46,99 +46,143 @@ def _v2_thread(tmp_path, name="t"):
     return d
 
 
-def _sessions(d, *sids, summary=True):
+def _sessions(d, *sids, summary=True, body="body\n"):
     """Index one session per id given, each with a summary naming it."""
     for sid in sids:
         front = f'---\ndate: x\nsummary: "Summary of {sid}."\n---\n' if summary else "---\ndate: x\n---\n"
-        (d / "sessions" / f"{sid}.md").write_text(front + "body\n")
+        (d / "sessions" / f"{sid}.md").write_text(front + body)
         idx.add(d, "sessions", idx.Entry(sid, None, sid, f"./sessions/{sid}.md"))
 
 
-def _days(*days):
-    return [f"{day}-s" for day in days]
+def _big(d, sid="20260109-big"):
+    """A newest session over the whole allowance, so every older one is summarized."""
+    over = "z" * (int(v2.SESSION_BODY_BUDGET * v2.CHARS_PER_TOKEN) + 1)
+    _sessions(d, sid, body=over + "\n")
 
 
-class TestRecentSessions:
-    def test_everything_within_fourteen_days_of_the_newest(self, tmp_path):
+class TestSessionWindow:
+    def test_the_newest_is_full_even_over_budget(self):
+        assert v2.session_window([10, 10, 99_999], 100, 5) == (1, 2)
+
+    def test_older_bodies_fill_until_one_does_not_fit(self):
+        # 50 fits, 40 fits (10 left), 30 does not; 5 is never pulled forward
+        assert v2.session_window([5, 30, 40, 50], 100, 5) == (2, 2)
+
+    def test_summaries_are_capped(self):
+        assert v2.session_window([1] * 3 + [200] * 10, 100, 5) == (1, 5)
+
+    def test_no_sessions(self):
+        assert v2.session_window([], 100, 5) == (0, 0)
+
+
+class TestSessionBodies:
+    # Ten sessions 20260101-s .. 20260110-s, each body f"BODY-{sid}\n" + "x" * 3990,
+    # so three fit in SESSION_BODY_BUDGET * CHARS_PER_TOKEN = 14,000 characters.
+    def _ten(self, tmp_path):
         d = _v2_thread(tmp_path)
-        _sessions(d, *_days(*[f"202601{n:02d}" for n in range(1, 11)],
-                            *[f"202603{n:02d}" for n in range(1, 9)]))
+        for n in range(1, 11):
+            sid = f"202601{n:02d}-s"
+            _sessions(d, sid, body=f"BODY-{sid}\n" + "x" * 3990)
+        return d
+
+    def test_heading_counts_full_summarized_and_total(self, tmp_path):
+        out = v2.compose(self._ten(tmp_path), "t")
+        assert "## Recent sessions (3 in full, 5 summarized, of 10)" in out
+        assert "BODY-20260110-s" in out and "BODY-20260108-s" in out
+        assert "BODY-20260107-s" not in out
+        assert "Summary of 20260103-s." in out and "Summary of 20260102-s." not in out
+        assert "Summary of 20260110-s." not in out   # shown in full, so no summary line
+
+    def test_summaries_then_bodies_newest_last(self, tmp_path):
+        out = v2.compose(self._ten(tmp_path), "t")
+        assert (out.index("Summary of 20260107-s.") < out.index("BODY-20260108-s")
+                < out.index("BODY-20260110-s"))
+
+    def test_a_newest_session_over_the_budget_is_whole(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        _sessions(d, "20260101-s", body="y" * 60_000 + "END")
         out = v2.compose(d, "t")
-        assert "## Recent sessions (8 of 18)" in out
-        assert "20260301-s" in out and "20260110-s" not in out
+        assert "END" in out and "(1 in full, 0 summarized, of 1)" in out
 
-    def test_the_boundary_day_is_included(self, tmp_path):
+    def test_a_smaller_older_session_is_not_pulled_forward(self, tmp_path):
         d = _v2_thread(tmp_path)
-        _sessions(d, *_days("20260101", "20260201", "20260202", "20260203",
-                            "20260204", "20260205", "20260215", "20260216"))
+        _sessions(d, "20260101-a", body="TINY")
+        _sessions(d, "20260102-b", "20260103-c", body="x" * 10_000)
         out = v2.compose(d, "t")
-        assert "20260202-s" in out and "20260201-s" not in out
-        assert "(6 of 8)" in out
+        assert "TINY" not in out and "Summary of 20260101-a." in out
 
-    def test_never_fewer_than_five(self, tmp_path):
-        d = _v2_thread(tmp_path)
-        _sessions(d, *_days("20250101", "20250301", "20250501", "20250701",
-                            "20250901", "20251101", "20260101"))
-        out = v2.compose(d, "t")
-        assert "(5 of 7)" in out
-        assert "20250301-s" not in out and "20250501-s" in out
-
-    def test_never_more_than_twenty(self, tmp_path):
-        d = _v2_thread(tmp_path)
-        _sessions(d, *[f"20260301-s{n:02d}" for n in range(1, 26)])
-        out = v2.compose(d, "t")
-        assert "(20 of 25)" in out
-        assert "20260301-s06" in out and "20260301-s05" not in out
-
-    def test_a_short_thread_shows_everything(self, tmp_path):
-        d = _v2_thread(tmp_path)
-        _sessions(d, *_days("20260101", "20260102"))
-        assert "## Recent sessions (2 of 2)" in v2.compose(d, "t")
-
-    def test_each_session_carries_its_summary(self, tmp_path):
+    def test_the_body_excludes_frontmatter(self, tmp_path):
         d = _v2_thread(tmp_path)
         _sessions(d, "20260101-s")
-        assert "- 20260101-s [20260101-s](./sessions/20260101-s.md)\n  Summary of 20260101-s." in v2.compose(d, "t")
+        out = v2.compose(d, "t")
+        assert "body" in out and "summary:" not in out and "date: x" not in out
+
+    def test_unparseable_frontmatter_still_shows_the_body(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        _sessions(d, "20260101-s")
+        (d / "sessions" / "20260101-s.md").write_text("---\nsummary: a: b: c\n---\nthe body\n")
+        assert "the body" in v2.compose(d, "t")
+
+    def test_a_body_heading_named_like_a_payload_section_is_demoted(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        _sessions(d, "20260101-s", body="# Big\n\n## Todos\n\n```\n# not a heading\n```\n")
+        out = v2.compose(d, "t")
+        assert "### Big" in out and "#### Todos" in out
+        assert "\n# not a heading\n" in out          # fenced code is left alone
+        assert not re.search(r"(?m)^##? (Big|Todos)$", out)
+
+    def test_a_missing_session_file_does_not_break_resume(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        idx.add(d, "sessions", idx.Entry("20260101-gone", None, "gone", "./sessions/20260101-gone.md"))
+        assert "- 20260101-gone [gone](./sessions/20260101-gone.md)" in v2.compose(d, "t")
+
+    def test_the_size_notice_threshold(self):
+        assert v2.SIZE_NOTICE == 54_000
+
+    def test_demote_caps_at_six_hashes(self):
+        assert v2._demote("##### a\n###### b\n#nospace\n") == "###### a\n###### b\n#nospace\n"
+
+    def test_demote_skips_tilde_fences(self):
+        assert v2._demote("~~~\n# x\n~~~\n# y\n") == "~~~\n# x\n~~~\n### y\n"
+
+    def test_a_file_with_an_unclosed_frontmatter_block_is_still_a_body(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        _sessions(d, "20260101-s")
+        (d / "sessions" / "20260101-s.md").write_text("---\nonly opened\nthe body\n")
+        assert "the body" in v2.compose(d, "t")
+
+
+class TestSessionSummaries:
+    """Summary lines, for sessions older than the full ones."""
+
+    def _old(self, tmp_path, **kw):
+        d = _v2_thread(tmp_path)
+        _sessions(d, "20260101-s", **kw)
+        _big(d)
+        return d
+
+    def test_each_session_carries_its_summary(self, tmp_path):
+        out = v2.compose(self._old(tmp_path), "t")
+        assert "- 20260101-s [20260101-s](./sessions/20260101-s.md)\n  Summary of 20260101-s." in out
 
     def test_a_session_without_a_summary_is_its_line_alone(self, tmp_path):
-        d = _v2_thread(tmp_path)
-        _sessions(d, "20260101-s", summary=False)
-        out = v2.compose(d, "t")
+        out = v2.compose(self._old(tmp_path, summary=False), "t")
         assert "- 20260101-s [20260101-s](./sessions/20260101-s.md)" in out
-        assert "  Summary" not in out
+        assert "  Summary of 20260101-s" not in out
 
     def test_a_long_frontmatter_block_still_yields_its_summary(self, tmp_path):
         """A fixed-size read cut the closing fence off and returned no summary."""
-        d = _v2_thread(tmp_path)
-        _sessions(d, "20260101-s")
+        d = self._old(tmp_path)
         padding = "".join(f"k{n}: {'x' * 40}\n" for n in range(150))
         (d / "sessions" / "20260101-s.md").write_text(
             f"---\n{padding}summary: Found at the end.\n---\nbody\n")
         assert "  Found at the end." in v2.compose(d, "t")
 
     def test_unparseable_frontmatter_is_its_line_alone(self, tmp_path):
-        d = _v2_thread(tmp_path)
-        _sessions(d, "20260101-s")
+        d = self._old(tmp_path)
         (d / "sessions" / "20260101-s.md").write_text("---\nsummary: a: b: c\n---\n")
         out = v2.compose(d, "t")
         assert "20260101-s" in out and "not valid YAML" not in out
-
-    def test_undated_sessions_do_not_break_resume(self, tmp_path):
-        """20260231-x matches the id pattern but is not a real date, so
-        _session_date takes its ValueError branch. It sorts mid-index, and it
-        stops the window walk after 3 newer sessions, so the floor of 5 decides."""
-        d = _v2_thread(tmp_path)
-        _sessions(d, "20260210-a", "20260211-b", "20260212-c", "20260231-x",
-                  "20260301-d", "20260302-e", "20260303-f")
-        out = v2.compose(d, "t")
-        assert "(5 of 7)" in out
-        assert "20260231-x" in out and "20260211-b" not in out
-
-    def test_an_undated_newest_session_falls_back_to_the_floor(self, tmp_path):
-        d = _v2_thread(tmp_path)
-        _sessions(d, *_days(*[f"202601{n:02d}" for n in range(1, 8)]))
-        idx.add(d, "sessions", idx.Entry("odd-id", None, "odd", "./sessions/odd.md"))
-        assert "(5 of 8)" in v2.compose(d, "t")
 
 
 class TestSchemaDetection:
@@ -783,3 +827,154 @@ class TestCompose:
 def test_schema_1_is_readable_but_has_no_create():
     from ai_workspace.threads import v1
     assert "create" not in v1.__all__ and not hasattr(v1, "create")
+
+
+class TestStarFile:
+    def test_missing_file_is_nothing_starred(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        assert stars.read(d) == [] and not (d / "artifacts-starred.md").exists()
+
+    def test_round_trip(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        s = stars.Star("20260801-guide-style", "the user asks about formatting or tone")
+        stars.write(d, [s])
+        assert (d / "artifacts-starred.md").read_text() == \
+            "- 20260801-guide-style -- when: the user asks about formatting or tone\n"
+        assert stars.read(d) == [s]
+
+    def test_a_line_that_is_not_a_star_is_skipped(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        (d / "artifacts-starred.md").write_text(
+            "- 20260101-a -- when: x\nhand-written note\n")
+        assert stars.read(d) == [stars.Star("20260101-a", "x")]
+
+    def test_an_empty_list_leaves_an_empty_file(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        stars.write(d, [])
+        assert (d / "artifacts-starred.md").read_text() == ""
+
+    def test_unrepresentable_names_the_field(self):
+        assert stars.unrepresentable(stars.Star("a", "x\ny")) is not None
+        assert stars.unrepresentable(stars.Star("a b", "x")) is not None
+        assert stars.unrepresentable(stars.Star("a", "fine")) is None
+
+    @pytest.mark.parametrize("sep", ["\x0b", "\x0c", "\x1c", "\x85", "\u2028", "\u2029"])
+    def test_a_break_that_splitlines_honours_is_unrepresentable(self, sep):
+        assert stars.unrepresentable(stars.Star("a", f"x{sep}y")) is not None
+        assert stars.unrepresentable(stars.Star(f"a{sep}b", "x")) is not None
+
+    def test_drop_returns_the_star_and_writes_nothing_when_absent(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        assert stars.drop(d, "a") is None
+        assert not (d / "artifacts-starred.md").exists()
+        stars.write(d, [stars.Star("a", "x"), stars.Star("b", "y")])
+        assert stars.drop(d, "a") == stars.Star("a", "x")
+        assert stars.read(d) == [stars.Star("b", "y")]
+
+    def test_rekey_moves_in_place_and_ignores_an_unstarred_id(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        stars.write(d, [stars.Star("a", "x"), stars.Star("b", "y")])
+        stars.rekey(d, "a", "c")
+        assert stars.read(d) == [stars.Star("c", "x"), stars.Star("b", "y")]
+        stars.rekey(d, "zzz", "q")
+        assert stars.read(d) == [stars.Star("c", "x"), stars.Star("b", "y")]
+
+
+class TestStarredInPayload:
+    GUIDE = idx.Entry("20260801-guide-style", "current", "20260801-guide-style",
+                      "./artifacts/20260801-guide-style.md",
+                      "House style for everything written in this thread.")
+    OTHER = idx.Entry("20260802-notes-other", "current", "20260802-notes-other",
+                      "./artifacts/20260802-notes-other.md", "Other notes.")
+
+    def _thread(self, tmp_path, *entries, starred=()):
+        d = _v2_thread(tmp_path)
+        for e in entries:
+            idx.add(d, "artifacts", e)
+        if starred:
+            stars.write(d, list(starred))
+        return d
+
+    def test_link_description_and_trigger(self, tmp_path):
+        d = self._thread(tmp_path, self.GUIDE, starred=[
+            stars.Star("20260801-guide-style", "the user asks about formatting or tone")])
+        out = v2.compose(d, "t")
+        assert ("## Starred artifacts (1)\n\n- [20260801-guide-style](./artifacts/20260801-guide-style.md)"
+                " -- House style for everything written in this thread. Read when: the user asks"
+                " about formatting or tone.") in out
+
+    def test_a_starred_artifact_leaves_the_artifacts_list(self, tmp_path):
+        d = self._thread(tmp_path, self.GUIDE, self.OTHER,
+                         starred=[stars.Star(self.GUIDE.id, "x")])
+        out = v2.compose(d, "t")
+        assert "## Artifacts (1)" in out
+        assert self.GUIDE.render() not in out
+        assert self.OTHER.render() in out
+
+    def test_an_orphaned_star_shows_not_found(self, tmp_path):
+        d = self._thread(tmp_path, starred=[
+            stars.Star("20260415-notes-old-plan", "the user asks about the original plan")])
+        out = v2.compose(d, "t")
+        assert ("- 20260415-notes-old-plan (not found). Read when: the user asks about"
+                " the original plan.") in out
+
+    def test_no_description_leaves_it_out(self, tmp_path):
+        bare = idx.Entry("20260803-bare", "current", "20260803-bare", "./artifacts/20260803-bare.md")
+        d = self._thread(tmp_path, bare, starred=[stars.Star(bare.id, "needed!")])
+        assert "- [20260803-bare](./artifacts/20260803-bare.md) -- Read when: needed!" \
+            in v2.compose(d, "t")
+
+    def test_after_memory_before_the_header(self, tmp_path):
+        d = self._thread(tmp_path, self.GUIDE, starred=[stars.Star(self.GUIDE.id, "x")])
+        (d / "memory.md").write_text("- a rule\n")
+        out = v2.compose(d, "t")
+        assert out.index("## Thread memory") < out.index("## Starred artifacts") < out.index("**Started**")
+
+    def test_nothing_starred_means_no_section(self, tmp_path):
+        d = self._thread(tmp_path, self.GUIDE)
+        assert "Starred artifacts" not in v2.compose(d, "t")
+
+    def test_an_index_with_no_star_file_renders_as_before(self, tmp_path):
+        d = self._thread(tmp_path, self.GUIDE, self.OTHER)
+        out = v2.compose(d, "t")
+        assert "## Artifacts (2)" in out and all(e.render() in out for e in idx.read(d, "artifacts"))
+
+    def test_sentence_adds_a_full_stop_unless_one_is_there(self):
+        assert v2._sentence("a") == "a."
+        assert [v2._sentence(t) for t in ("a.", "a!", "a?")] == ["a.", "a!", "a?"]
+
+
+class TestMemoryBudget:
+    NOTICE = "tokens and loads on every resume"
+
+    def _over(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        (d / "memory.md").write_text("word " * 6_000 + "LAST")  # 30,000 chars, about 8,600 tokens
+        return d
+
+    def test_memory_under_budget_says_nothing_about_size(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        (d / "memory.md").write_text("A short rule. " * 50)
+        assert self.NOTICE not in v2.compose(d, "t")
+
+    def test_memory_at_the_budget_says_nothing(self):
+        limit = int(v2.MEMORY_BUDGET * v2.CHARS_PER_TOKEN)
+        assert v2._memory_notice(limit) == ""
+        assert v2._memory_notice(limit + 1) != ""
+
+    def test_memory_over_budget_says_its_size_right_after_the_text(self, tmp_path):
+        d = self._over(tmp_path)
+        out = v2.compose(d, "t")
+        assert "memory.md is about ~8,600 tokens and loads on every resume." in out
+        assert out.index("LAST") < out.index(self.NOTICE) < out.index("**Started**")
+
+    def test_the_notice_gives_no_target(self, tmp_path):
+        out = v2.compose(self._over(tmp_path), "t")
+        line = next(ln for ln in out.splitlines() if self.NOTICE in ln)
+        assert re.findall(r"\d[\d,]*", line) == ["8,600"]
+
+    def test_resume_never_trims_memory(self, tmp_path):
+        d = self._over(tmp_path)
+        before = (d / "memory.md").read_bytes()
+        out = v2.compose(d, "t")
+        assert (d / "memory.md").read_bytes() == before and "LAST" in out

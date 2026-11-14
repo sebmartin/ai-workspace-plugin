@@ -17,7 +17,8 @@ archive/ never opens it, so it needs nothing from any schema.
 import json
 import re
 from collections.abc import Callable
-from typing import NamedTuple
+from pathlib import Path
+from typing import Any, NamedTuple
 
 from ai_workspace import workspace as ws
 from ai_workspace.threads.schema import (  # noqa: F401  (re-exported)
@@ -49,6 +50,8 @@ __all__ = [
     "save_session",
     "set_about",
     "set_todo_state",
+    "star_artifact",
+    "unstar_artifact",
     "validate_thread_name",
 ]
 
@@ -102,7 +105,7 @@ class Dispatch(NamedTuple):
     """A resolved thread and the schema function about to run on it."""
 
     thread: Thread
-    fn: Callable[..., str]
+    fn: Callable[..., Any]
 
 
 def _for(workspace_dir: str, thread_name: str, op: str) -> Dispatch | str:
@@ -138,12 +141,80 @@ def _focus(thread: Thread, body: str) -> str:
     )
 
 
+LINKED_ABOUT_WORDS = 50  # local so this layer names no schema module
+
+
+def _cut_about(text: str) -> str:
+    """The first paragraph on one line, cut to LINKED_ABOUT_WORDS words."""
+    words = text.strip().split("\n\n")[0].split()
+    if len(words) > LINKED_ABOUT_WORDS:
+        return " ".join(words[:LINKED_ABOUT_WORDS]) + "…"
+    return " ".join(words)
+
+
+def _refusal_code(message: str) -> str:
+    """The `error` of a JSON refusal, else the message's first line."""
+    try:
+        parsed = json.loads(message)
+    except ValueError:
+        parsed = None
+    if isinstance(parsed, dict) and "error" in parsed:
+        return str(parsed["error"])
+    return message.splitlines()[0] if message else ""
+
+
+def _linked_about(workspace: Path, name: str) -> str:
+    """What to show of a linked thread: its About, or why there is none."""
+    state = ws.thread_state(workspace, name)
+    if state == ws.ARCHIVED:
+        return "(archived)"
+    if state != ws.ACTIVE or not (ws.thread_path(workspace, name) / "README.md").exists():
+        return "(not found)"
+    result = _for(str(workspace), name, "about")
+    if isinstance(result, str):
+        return "(unreadable schema)"
+    about = result.fn(result.thread)
+    return _cut_about(about) if about.strip() else "(no About)"
+
+
+def _linked_threads(thread: Thread) -> str:
+    """The section naming the threads this one links, or "" when it links none."""
+    call = _for(str(thread.workspace), thread.name, "links")
+    if isinstance(call, str):
+        return (
+            f"\n## Linked threads\n\nThis thread's links could not be read "
+            f"({_refusal_code(call)}).\n"
+        )
+    seen: set[str] = set()
+    lines = []
+    for link in call.fn(call.thread):
+        if link.name is None:
+            lines.append(f"- {link.role}: {link.text}")
+            continue
+        if link.name in seen:
+            continue
+        seen.add(link.name)
+        note = f" (note: {link.note})" if link.note else ""
+        about = _linked_about(thread.workspace, link.name)
+        lines.append(
+            f"- {link.role}: [{link.name}](../{link.name}/README.md){note} — {about}"
+        )
+    if not lines:
+        return ""
+    return (
+        f"\n## Linked threads ({len(lines)})\n\n"
+        "Before saying you don't know something, check whether one of these covers it. "
+        "Read its README and indexes; don't resume it.\n\n"
+        + "\n".join(lines) + "\n"
+    )
+
+
 def resume(workspace_dir: str, thread_name: str) -> str:
     """Return the thread's context, in whatever form its schema keeps it."""
     call = _for(workspace_dir, thread_name, "resume")
     if isinstance(call, str):
         return call
-    return _focus(call.thread, call.fn(call.thread))
+    return _focus(call.thread, call.fn(call.thread) + _linked_threads(call.thread))
 
 
 def create(workspace_dir: str, thread_name: str, about: str = "") -> str:
@@ -253,6 +324,23 @@ def retire_artifact(workspace_dir: str, thread_name: str, artifact_id: str,
     if isinstance(call, str):
         return call
     return call.fn(call.thread, artifact_id, state)
+
+
+def star_artifact(workspace_dir: str, thread_name: str, artifact_id: str,
+                  when: str) -> str:
+    """Star an artifact so resume lists it with a trigger for reading it."""
+    call = _for(workspace_dir, thread_name, "star_artifact")
+    if isinstance(call, str):
+        return call
+    return call.fn(call.thread, artifact_id, when)
+
+
+def unstar_artifact(workspace_dir: str, thread_name: str, artifact_id: str) -> str:
+    """Remove an artifact's star."""
+    call = _for(workspace_dir, thread_name, "unstar_artifact")
+    if isinstance(call, str):
+        return call
+    return call.fn(call.thread, artifact_id)
 
 
 def save_session(workspace_dir: str, thread_name: str, slug: str, summary: str,

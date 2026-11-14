@@ -35,7 +35,8 @@ the pre-migration state is not recoverable if the answer is no.
    converted README yourself as well
 6. Rename `{name}-v2` to `{name}`
 7. Record the backup as a todo, and tell the user `{name}-v1` is theirs to
-   remove or archive when they are satisfied
+   remove or archive when they are satisfied. Your report lists every star you
+   created, with its trigger, so they can unstar any
 
 Renaming first means every directory states its version at every instant, and
 there is never a `{name}` whose shape is ambiguous. The cutover is one rename
@@ -190,7 +191,8 @@ the section in the same layout.
 
 **Write About through `set_about`**, from the v1 About, in 50 words or fewer. If
 the v1 About holds more than a summary, carry the rest into an artifact as the
-floor rule below says, rather than looking for a way past the limit.
+floor rule below says, rather than looking for a way past the limit. Star that artifact if it reads as
+the thread's purpose rather than its history.
 
 **A section the template does not define is the part most likely to be lost.**
 Schema 1 said the README is the thread and to read it in full, so anyone could
@@ -199,13 +201,21 @@ custom section survives in the file and is never read again. `audit_migration`
 lists them under `readme_sections_to_place`, and it cannot tell whether you
 placed them, so that list is a checklist for you rather than a failure.
 
+Memory is not a dumping ground. It loads on every resume, so it holds only what
+you need in hand to be useful in this thread. A long section goes to an
+artifact, starred if you need to know when to read it, and moving README
+sections into memory wholesale only moves the bloat.
+
 Place each by two questions. Who is it written for, and does it have to be
 loaded before you can act?
 
-| | you have to be holding it | you only have to know it exists |
-|---|---|---|
-| **for you** | `memory.md` | a decision or an artifact: its index line loads, its body does not |
-| **for the user** | Status, About and the Todos section | a session log, an artifact |
+| | you have to be holding it | you have to know when to read it | you only have to know it exists |
+|---|---|---|---|
+| **for you** | `memory.md` | a starred artifact (`star_artifact`) | a decision or an artifact: its index line loads, its body does not |
+| **for the user** | Status, About and the Todos section | a starred artifact | a session log, an artifact |
+
+The middle column is the default for a long custom section that matters but does
+not need loading on every resume.
 
 Anything still to do is a todo whichever row it came from. Where it sits in the
 list decides whether the user meets it on resume, since the Todos section shows the
@@ -214,15 +224,22 @@ top five.
 `memory.md` is the cell schema 1 had no file for, and that is why these sections
 became custom headings in the first place. Schema 1 said the README was the
 thread and to read it whole, so a heading was enough to guarantee it got read.
-What passes SKILL.md's test for memory goes there: durable, and about this
-thread, such as house rules, who is who, or what a term means here. Anything
-tied to one past task belongs in an artifact or a session log instead. Carry
+What passes SKILL.md's definition of memory goes there: what a session needs in
+hand before it starts, such as house rules, who is who, or what a term means
+here. Anything tied to one past task belongs in an artifact or a session log
+instead. Carry
 what goes into memory across verbatim, keep the attribution if the original had
 one, and add one if you know it.
 
 A choice that was made is a decision even where the prose is still arguing it,
 which is a decision with `proposed` status. Its `summary:` loads on every
 resume, so it needs no memory entry.
+
+You star on your own judgement, without asking. A schema 1 README was loaded
+whole on every resume, like `memory.md`, so migration runs the same path as
+trimming memory: what still needs to be in hand stays in memory, what is too big
+for that becomes a starred artifact, and what needs no trigger becomes a plain
+artifact.
 
 An artifact is the floor. Anything that fits no cell goes there verbatim, under
 its own heading, indexed with a description saying what it was, because losing

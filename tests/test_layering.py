@@ -449,14 +449,23 @@ def test_the_skill_describes_the_resume_this_plugin_returns():
                    "set_about", "recently", "up_next", "`summary:` and `keywords:`"):
         assert phrase in skill, phrase
     assert "## Next steps" not in skill
+    assert "14 days" not in SERVER.read_text()
+    assert "in full" in SERVER.read_text()
+    assert "artifacts-starred.md" in skill and "star_artifact" in skill
+    assert "star_dropped" in SERVER.read_text()
+    assert "a standing instruction for this thread" not in skill
+    assert "what a session needs in hand before it starts" in skill
 
-    migrate = (REPO / "skills" / "threads" / "v2" / "migrate-from-v1.md").read_text()
+    migrate =(REPO / "skills" / "threads" / "v2" / "migrate-from-v1.md").read_text()
     assert "## Todos" in migrate and "set_about" in migrate and "**Recently**" in migrate
     assert "`## Next steps`" not in migrate
+    for phrase in ("you have to know when to read it", "`star_artifact`",
+                   "not a dumping ground", "without asking"):
+        assert phrase in migrate, phrase
 
     for manifest in (".claude-plugin/plugin.json", ".codex-plugin/plugin.json"):
         version = json.loads((REPO / manifest).read_text())["version"]
-        assert tuple(int(n) for n in version.split(".")) >= (3, 2, 0), version
+        assert tuple(int(n) for n in version.split(".")) >= (3, 4, 0), version
 
 
 def test_writes_to_another_thread_go_through_the_thread_writer():
@@ -491,3 +500,59 @@ def test_writes_to_another_thread_go_through_the_thread_writer():
     link = (REPO / "skills" / "threads" / "v2" / "link-thread.md").read_text()
     assert "the one operation that writes to a thread you have not resumed" not in link
     assert "The thread you started from stays current" in link
+
+
+# Budgets the model must never be told. Quoting one invites it to reason about
+# the figure instead of the payload, and the figure moves.
+_BUDGETS = ["SESSION_BODY_BUDGET", "MEMORY_BUDGET"]
+
+
+def test_no_budget_figure_reaches_the_model():
+    from ai_workspace.threads.v2 import thread
+    files = [p for p in (REPO / "skills").rglob("*") if p.is_file() and p.suffix in (".md", ".py")]
+    for name in _BUDGETS:
+        tokens = getattr(thread, name)
+        chars = round(tokens * thread.CHARS_PER_TOKEN)
+        for figure in {str(tokens), f"{tokens:,}", str(chars), f"{chars:,}"}:
+            pattern = rf"(?<![\d,]){re.escape(figure)}(?![\d,])"
+            hits = [str(p.relative_to(REPO)) for p in files if re.search(pattern, p.read_text())]
+            assert not hits, f"{name} ({figure}) is model-facing in {hits}"
+
+
+def test_every_schema_provides_the_reads_resume_relies_on():
+    from ai_workspace.threads import schema
+
+    for version, module in schema.SCHEMAS.items():
+        assert {"links", "about"} <= set(module.__all__), f"schema {version}"
+
+
+_OUTSIDE_THE_THREAD = ("ai_workspace.workspace", "ai_workspace.config")
+
+
+def test_no_schema_module_reaches_outside_its_own_thread():
+    """A schema reads one thread. Anything spanning threads is done above it."""
+    import ast
+
+    problems = []
+    for version in ("v1", "v2"):
+        for path in sorted((_threads_pkg() / version).rglob("*.py")):
+            rel = path.relative_to(REPO)
+            for node in ast.walk(ast.parse(path.read_text())):
+                if isinstance(node, ast.ImportFrom):
+                    mod = node.module or ""
+                    named = {mod, *(f"{mod}.{a.name}" for a in node.names)}
+                    if named & set(_OUTSIDE_THE_THREAD):
+                        problems.append(f"{rel}:{node.lineno} imports {mod}")
+                elif isinstance(node, ast.Import):
+                    for a in node.names:
+                        if a.name in _OUTSIDE_THE_THREAD:
+                            problems.append(f"{rel}:{node.lineno} imports {a.name}")
+                elif isinstance(node, ast.Attribute):
+                    if node.attr == "workspace":
+                        problems.append(f"{rel}:{node.lineno} reads .workspace")
+                    elif node.attr == "parent" and (
+                        (isinstance(node.value, ast.Name) and node.value.id == "thread_dir")
+                        or (isinstance(node.value, ast.Attribute) and node.value.attr == "dir")
+                    ):
+                        problems.append(f"{rel}:{node.lineno} leaves the thread directory")
+    assert not problems, "\n  ".join(["", *problems])

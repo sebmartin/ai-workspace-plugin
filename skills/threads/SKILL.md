@@ -63,7 +63,7 @@ slot here:
 
 | what it is | where it goes |
 |---|---|
-| a standing instruction for this thread | `memory.md` |
+| what a session needs in hand before it starts | `memory.md` |
 | a choice that was made | a decision |
 | something still to do | a todo |
 | something established, produced, or worth keeping | an artifact |
@@ -86,7 +86,7 @@ threads/{name}/
 ├── memory.md                for you (optional; absent until there is something in it)
 ├── sessions/     + sessions-index.md
 ├── decisions/    + decisions-index.md, decisions-retired.md
-├── artifacts/    + artifacts-index.md, artifacts-retired.md
+├── artifacts/    + artifacts-index.md, artifacts-retired.md, artifacts-starred.md
 ├── attachments/  (no index; scan the directory when you need to know)
 └── todos/        + todos-index.md, todos-retired.md
 ```
@@ -122,19 +122,19 @@ A schema 1 thread keeps all of that inline in its README, so one read covers it.
 
 **Print each todo as a markdown link on its title**, so the user can open what it points at rather than asking you for it. An external URL goes as it is. Drop the id, which is for your calls rather than the screen, and name a state only when it is not `active`.
 
-The payload carries the recent sessions with their summaries, and older ones are not listed. Before answering a question about earlier work from memory, search `sessions/`, whose files carry `summary:` and `keywords:` frontmatter.
+The payload carries the full text of the newest sessions, then summaries of the few before them, and the heading says how many it is not holding. Before answering a question about earlier work from memory, search `sessions/`, whose files carry `summary:` and `keywords:` frontmatter.
 
 **Decision bodies are never opened on resume.** Open one when a constraint is challenged, or when you are about to extend or reverse it.
 
 ### Writing
 
-**Adding to the record is the user's call.** Every index entry (a todo, a decision, an artifact) and every `memory.md` entry is read on every resume from then on, so add one only when the user asked for it. The ask can be implicit: "write up your research" means write an artifact and index it, without checking first. When nobody asked and you think something belongs on the record, suggest it in your reply and add it once the user agrees.
+**Adding to the record is the user's call.** Every index entry (a todo, a decision, an artifact, a star) and every `memory.md` entry is read on every resume from then on, so add one only when the user asked for it. The ask can be implicit: "write up your research" means write an artifact and index it, without checking first. When nobody asked and you think something belongs on the record, suggest it in your reply and add it once the user agrees.
 
 **Declaring something settled is the user's call.** Don't call a draft, a decision or a section locked, final or done, and don't ask whether to lock it. Present the work and the reasoning, then wait. A tentative "maybe X" is not a decision.
 
 **Say "saved", not "archived", when you have written a file.** Archiving is a different operation in this plugin: it retires a whole thread from the active list. Calling a save an archive tells the user their work was put away.
 
-Never hand-edit an index or the README's Todos section; both are rendered from what the tools write, and a hand edit will be overwritten. Status is written only by `save_session`, on every save; never edit it by hand, since the next save overwrites it, except when migrating a thread as `migrate-from-v1.md` describes. About is written by `set_about`, never by hand. The header fields and `memory.md` have no tool; edit them directly.
+Never hand-edit an index, `artifacts-starred.md` or the README's Todos section; both are rendered from what the tools write, and a hand edit will be overwritten. Status is written only by `save_session`, on every save; never edit it by hand, since the next save overwrites it, except when migrating a thread as `migrate-from-v1.md` describes. About is written by `set_about`, never by hand. The header fields and `memory.md` have no tool; edit them directly.
 
 A render replaces `## Todos` down to the next `##`, so never leave it as the last section of a README. Anything below it is swallowed without a word.
 
@@ -143,6 +143,15 @@ date it was written, a kind such as `spec`, `notes`, `report` or `bug`, and a sh
 slug. Write the file, then call `index_file` with a one-sentence description. The
 id's date comes from the filename, so a name without one is indexed as undated
 unless you pass `date`.
+
+**Starring an artifact.** A star marks an artifact you need to know when to read.
+Its line and trigger load on every resume, and its body only on demand. Star an
+artifact that matters too much to be one line among many but is too long to hold
+in memory. Star with `star_artifact`. Every star carries a trigger, one sentence on when
+to read it, because a star without one tells you nothing. Propose stars and unstars, typically when
+trimming memory or at save, and the user decides; the exception is a schema 1
+migration, which follows its own guide. Unstar with `unstar_artifact` when the
+artifact matters less. Retiring an artifact drops its star.
 
 **A todo's link names the record of this todo.** When the work is tracked in
 GitHub Issues or JIRA, link that item, because the item is the todo. Otherwise
@@ -173,14 +182,18 @@ can be written to at all. Fetch
 
 ### Memory
 
-`memory.md` holds standing instructions for this thread, and `resume_thread` loads all of it at the top of every resume. It replaces the harness's project memory for anything about the thread, so it follows the thread to whichever machine resumes it. Don't write thread context to the harness's memory. An entry belongs in `memory.md` only if it is both:
+`memory.md` is prose. It holds context a session in this thread needs before it starts and that has no other slot: how the user wants this thread run, what a term means here, who is who. `resume_thread` loads all of it at the top of every resume, so it holds only what you need in hand to be useful in this thread: what you would otherwise get wrong, reason badly about, or have to ask the user again. It replaces the harness's project memory for anything about the thread, so it follows the thread to whichever machine resumes it. Don't write thread context to the harness's memory.
+
+Knowledge itself goes in an artifact. When an entry runs past a few lines, move it to an artifact, and star the artifact if you need to know when to read it. Memory does not hold links to artifacts; that is what a star is for.
+
+An entry belongs in `memory.md` only if it is both:
 
 - **Durable**: still true in six months, and useful again whenever the same situation comes up in this thread, beyond the task at hand.
 - **About this thread**: its subject, the people in it, what a term means here, or how the user wants this thread run.
 
 Anything tied to the current session or task, such as a particular PR, stays out of `memory.md`. Keep it in mind while you work; if it is part of what happened, the session log records it. Guidance about how you should behave in general, which would apply in any thread, belongs in the user's own instructions, such as their `CLAUDE.md`; suggest it to them and leave that file to them. A choice that was made is a decision.
 
-Add or change an entry only when the user asks you to remember something or agrees to an entry you proposed. There is no tool; edit the file directly. Date and attribute each entry with the user's name, `[Name, 2026-08-13]`. When something new contradicts or narrows an entry, edit that entry instead of appending below it.
+When you learn something of this kind, propose an entry. The user approves every one, so add or change an entry only when they ask you to remember something or agree to one you proposed. There is no tool; edit the file directly. Date and attribute each entry with the user's name, `[Name, 2026-08-13]`. When something new contradicts or narrows an entry, edit that entry instead of appending below it.
 
 ### Saving
 
@@ -191,7 +204,7 @@ A save writes the session log and the Status section, because todos, decisions a
 - When an Up next sentence was already there when you resumed and is still not done, suggest making it a todo, and add one only if the user agrees. Nothing stores past lists; what you saw on resume is the only history.
 - Look at About too, and call `set_about` if it no longer fits the thread, is still the template's placeholder, or runs past 50 words.
 
-It is also the moment to read `memory.md` through, if the thread has one, and propose dropping anything that no longer applies. A session that ends without a save leaves no log, and what it produced is still in the indexes.
+It is also the moment to read `memory.md` through, if the thread has one, and propose dropping entries that are no longer true, entries now covered by a decision or an artifact, and entries that have grown into something better kept as an artifact, starred or not. A session that ends without a save leaves no log, and what it produced is still in the indexes.
 
 Everything from here on applies whatever the schema, except where a schema's own file says otherwise.
 
