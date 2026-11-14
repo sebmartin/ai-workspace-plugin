@@ -9,6 +9,7 @@ from frontmatter.default_handlers import YAMLHandler
 from ai_workspace.plugin import get_template_path
 from ai_workspace.text import split_frontmatter
 from ai_workspace.threads import marker
+from ai_workspace.threads.v1.header import section as _section
 from ai_workspace.threads.v2 import index as idx
 from ai_workspace.threads.v2 import stars
 from ai_workspace.threads.v2 import todos as todos_mod
@@ -39,16 +40,6 @@ SIZE_NOTICE = 54_000
 # ever used to produce a hard-rounded figure, so the vendors' tokenizers
 # disagreeing by 15% changes nothing about what it is read for.
 CHARS_PER_TOKEN = 3.5
-
-
-# Stop at the next heading or at a horizontal rule: the last section would
-# otherwise swallow the footer that follows it.
-_SECTION_RE = r"(?m)^##[ \t]+{name}[ \t]*$\n(.*?)(?=^##[ \t]|^---[ \t]*$|\Z)"
-
-
-def _section(text: str, name: str) -> str:
-    m = re.search(_SECTION_RE.format(name=re.escape(name)), text, re.DOTALL)
-    return m.group(1).strip() if m else ""
 
 
 def _sentence(text: str) -> str:
@@ -106,6 +97,17 @@ def create(thread, about: str = "") -> str | dict:
 def resume(thread) -> str:
     """The composed payload, built from the indexes rather than the README."""
     return compose(thread.dir, thread.name)
+
+
+def about(thread) -> str:
+    """The README's About section, with the template's placeholder counting as none."""
+    try:
+        text = (thread.dir / "README.md").read_text(errors="replace")
+    except FileNotFoundError:
+        return ""
+    found = _section(text, "About")
+    placeholder = _section(get_template_path("v2/thread-template.md").read_text(), "About")
+    return "" if found == placeholder else found
 
 
 def compose(thread_dir: Path, thread_name: str) -> str:

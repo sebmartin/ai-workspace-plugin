@@ -514,3 +514,42 @@ def test_no_budget_figure_reaches_the_model():
             pattern = rf"(?<![\d,]){re.escape(figure)}(?![\d,])"
             hits = [str(p.relative_to(REPO)) for p in files if re.search(pattern, p.read_text())]
             assert not hits, f"{name} ({figure}) is model-facing in {hits}"
+
+
+def test_every_schema_provides_the_reads_resume_relies_on():
+    from ai_workspace.threads import schema
+
+    for version, module in schema.SCHEMAS.items():
+        assert {"links", "about"} <= set(module.__all__), f"schema {version}"
+
+
+_OUTSIDE_THE_THREAD = ("ai_workspace.workspace", "ai_workspace.config")
+
+
+def test_no_schema_module_reaches_outside_its_own_thread():
+    """A schema reads one thread. Anything spanning threads is done above it."""
+    import ast
+
+    problems = []
+    for version in ("v1", "v2"):
+        for path in sorted((_threads_pkg() / version).rglob("*.py")):
+            rel = path.relative_to(REPO)
+            for node in ast.walk(ast.parse(path.read_text())):
+                if isinstance(node, ast.ImportFrom):
+                    mod = node.module or ""
+                    named = {mod, *(f"{mod}.{a.name}" for a in node.names)}
+                    if named & set(_OUTSIDE_THE_THREAD):
+                        problems.append(f"{rel}:{node.lineno} imports {mod}")
+                elif isinstance(node, ast.Import):
+                    for a in node.names:
+                        if a.name in _OUTSIDE_THE_THREAD:
+                            problems.append(f"{rel}:{node.lineno} imports {a.name}")
+                elif isinstance(node, ast.Attribute):
+                    if node.attr == "workspace":
+                        problems.append(f"{rel}:{node.lineno} reads .workspace")
+                    elif node.attr == "parent" and (
+                        (isinstance(node.value, ast.Name) and node.value.id == "thread_dir")
+                        or (isinstance(node.value, ast.Attribute) and node.value.attr == "dir")
+                    ):
+                        problems.append(f"{rel}:{node.lineno} leaves the thread directory")
+    assert not problems, "\n  ".join(["", *problems])
