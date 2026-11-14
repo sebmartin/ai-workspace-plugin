@@ -46,99 +46,143 @@ def _v2_thread(tmp_path, name="t"):
     return d
 
 
-def _sessions(d, *sids, summary=True):
+def _sessions(d, *sids, summary=True, body="body\n"):
     """Index one session per id given, each with a summary naming it."""
     for sid in sids:
         front = f'---\ndate: x\nsummary: "Summary of {sid}."\n---\n' if summary else "---\ndate: x\n---\n"
-        (d / "sessions" / f"{sid}.md").write_text(front + "body\n")
+        (d / "sessions" / f"{sid}.md").write_text(front + body)
         idx.add(d, "sessions", idx.Entry(sid, None, sid, f"./sessions/{sid}.md"))
 
 
-def _days(*days):
-    return [f"{day}-s" for day in days]
+def _big(d, sid="20260109-big"):
+    """A newest session over the whole allowance, so every older one is summarized."""
+    over = "z" * (int(v2.SESSION_BODY_BUDGET * v2.CHARS_PER_TOKEN) + 1)
+    _sessions(d, sid, body=over + "\n")
 
 
-class TestRecentSessions:
-    def test_everything_within_fourteen_days_of_the_newest(self, tmp_path):
+class TestSessionWindow:
+    def test_the_newest_is_full_even_over_budget(self):
+        assert v2.session_window([10, 10, 99_999], 100, 5) == (1, 2)
+
+    def test_older_bodies_fill_until_one_does_not_fit(self):
+        # 50 fits, 40 fits (10 left), 30 does not; 5 is never pulled forward
+        assert v2.session_window([5, 30, 40, 50], 100, 5) == (2, 2)
+
+    def test_summaries_are_capped(self):
+        assert v2.session_window([1] * 3 + [200] * 10, 100, 5) == (1, 5)
+
+    def test_no_sessions(self):
+        assert v2.session_window([], 100, 5) == (0, 0)
+
+
+class TestSessionBodies:
+    # Ten sessions 20260101-s .. 20260110-s, each body f"BODY-{sid}\n" + "x" * 3990,
+    # so three fit in SESSION_BODY_BUDGET * CHARS_PER_TOKEN = 14,000 characters.
+    def _ten(self, tmp_path):
         d = _v2_thread(tmp_path)
-        _sessions(d, *_days(*[f"202601{n:02d}" for n in range(1, 11)],
-                            *[f"202603{n:02d}" for n in range(1, 9)]))
+        for n in range(1, 11):
+            sid = f"202601{n:02d}-s"
+            _sessions(d, sid, body=f"BODY-{sid}\n" + "x" * 3990)
+        return d
+
+    def test_heading_counts_full_summarized_and_total(self, tmp_path):
+        out = v2.compose(self._ten(tmp_path), "t")
+        assert "## Recent sessions (3 in full, 5 summarized, of 10)" in out
+        assert "BODY-20260110-s" in out and "BODY-20260108-s" in out
+        assert "BODY-20260107-s" not in out
+        assert "Summary of 20260103-s." in out and "Summary of 20260102-s." not in out
+        assert "Summary of 20260110-s." not in out   # shown in full, so no summary line
+
+    def test_summaries_then_bodies_newest_last(self, tmp_path):
+        out = v2.compose(self._ten(tmp_path), "t")
+        assert (out.index("Summary of 20260107-s.") < out.index("BODY-20260108-s")
+                < out.index("BODY-20260110-s"))
+
+    def test_a_newest_session_over_the_budget_is_whole(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        _sessions(d, "20260101-s", body="y" * 60_000 + "END")
         out = v2.compose(d, "t")
-        assert "## Recent sessions (8 of 18)" in out
-        assert "20260301-s" in out and "20260110-s" not in out
+        assert "END" in out and "(1 in full, 0 summarized, of 1)" in out
 
-    def test_the_boundary_day_is_included(self, tmp_path):
+    def test_a_smaller_older_session_is_not_pulled_forward(self, tmp_path):
         d = _v2_thread(tmp_path)
-        _sessions(d, *_days("20260101", "20260201", "20260202", "20260203",
-                            "20260204", "20260205", "20260215", "20260216"))
+        _sessions(d, "20260101-a", body="TINY")
+        _sessions(d, "20260102-b", "20260103-c", body="x" * 10_000)
         out = v2.compose(d, "t")
-        assert "20260202-s" in out and "20260201-s" not in out
-        assert "(6 of 8)" in out
+        assert "TINY" not in out and "Summary of 20260101-a." in out
 
-    def test_never_fewer_than_five(self, tmp_path):
-        d = _v2_thread(tmp_path)
-        _sessions(d, *_days("20250101", "20250301", "20250501", "20250701",
-                            "20250901", "20251101", "20260101"))
-        out = v2.compose(d, "t")
-        assert "(5 of 7)" in out
-        assert "20250301-s" not in out and "20250501-s" in out
-
-    def test_never_more_than_twenty(self, tmp_path):
-        d = _v2_thread(tmp_path)
-        _sessions(d, *[f"20260301-s{n:02d}" for n in range(1, 26)])
-        out = v2.compose(d, "t")
-        assert "(20 of 25)" in out
-        assert "20260301-s06" in out and "20260301-s05" not in out
-
-    def test_a_short_thread_shows_everything(self, tmp_path):
-        d = _v2_thread(tmp_path)
-        _sessions(d, *_days("20260101", "20260102"))
-        assert "## Recent sessions (2 of 2)" in v2.compose(d, "t")
-
-    def test_each_session_carries_its_summary(self, tmp_path):
+    def test_the_body_excludes_frontmatter(self, tmp_path):
         d = _v2_thread(tmp_path)
         _sessions(d, "20260101-s")
-        assert "- 20260101-s [20260101-s](./sessions/20260101-s.md)\n  Summary of 20260101-s." in v2.compose(d, "t")
+        out = v2.compose(d, "t")
+        assert "body" in out and "summary:" not in out and "date: x" not in out
+
+    def test_unparseable_frontmatter_still_shows_the_body(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        _sessions(d, "20260101-s")
+        (d / "sessions" / "20260101-s.md").write_text("---\nsummary: a: b: c\n---\nthe body\n")
+        assert "the body" in v2.compose(d, "t")
+
+    def test_a_body_heading_named_like_a_payload_section_is_demoted(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        _sessions(d, "20260101-s", body="# Big\n\n## Todos\n\n```\n# not a heading\n```\n")
+        out = v2.compose(d, "t")
+        assert "### Big" in out and "#### Todos" in out
+        assert "\n# not a heading\n" in out          # fenced code is left alone
+        assert not re.search(r"(?m)^##? (Big|Todos)$", out)
+
+    def test_a_missing_session_file_does_not_break_resume(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        idx.add(d, "sessions", idx.Entry("20260101-gone", None, "gone", "./sessions/20260101-gone.md"))
+        assert "- 20260101-gone [gone](./sessions/20260101-gone.md)" in v2.compose(d, "t")
+
+    def test_the_size_notice_threshold(self):
+        assert v2.SIZE_NOTICE == 54_000
+
+    def test_demote_caps_at_six_hashes(self):
+        assert v2._demote("##### a\n###### b\n#nospace\n") == "###### a\n###### b\n#nospace\n"
+
+    def test_demote_skips_tilde_fences(self):
+        assert v2._demote("~~~\n# x\n~~~\n# y\n") == "~~~\n# x\n~~~\n### y\n"
+
+    def test_a_file_with_an_unclosed_frontmatter_block_is_still_a_body(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        _sessions(d, "20260101-s")
+        (d / "sessions" / "20260101-s.md").write_text("---\nonly opened\nthe body\n")
+        assert "the body" in v2.compose(d, "t")
+
+
+class TestSessionSummaries:
+    """Summary lines, for sessions older than the full ones."""
+
+    def _old(self, tmp_path, **kw):
+        d = _v2_thread(tmp_path)
+        _sessions(d, "20260101-s", **kw)
+        _big(d)
+        return d
+
+    def test_each_session_carries_its_summary(self, tmp_path):
+        out = v2.compose(self._old(tmp_path), "t")
+        assert "- 20260101-s [20260101-s](./sessions/20260101-s.md)\n  Summary of 20260101-s." in out
 
     def test_a_session_without_a_summary_is_its_line_alone(self, tmp_path):
-        d = _v2_thread(tmp_path)
-        _sessions(d, "20260101-s", summary=False)
-        out = v2.compose(d, "t")
+        out = v2.compose(self._old(tmp_path, summary=False), "t")
         assert "- 20260101-s [20260101-s](./sessions/20260101-s.md)" in out
-        assert "  Summary" not in out
+        assert "  Summary of 20260101-s" not in out
 
     def test_a_long_frontmatter_block_still_yields_its_summary(self, tmp_path):
         """A fixed-size read cut the closing fence off and returned no summary."""
-        d = _v2_thread(tmp_path)
-        _sessions(d, "20260101-s")
+        d = self._old(tmp_path)
         padding = "".join(f"k{n}: {'x' * 40}\n" for n in range(150))
         (d / "sessions" / "20260101-s.md").write_text(
             f"---\n{padding}summary: Found at the end.\n---\nbody\n")
         assert "  Found at the end." in v2.compose(d, "t")
 
     def test_unparseable_frontmatter_is_its_line_alone(self, tmp_path):
-        d = _v2_thread(tmp_path)
-        _sessions(d, "20260101-s")
+        d = self._old(tmp_path)
         (d / "sessions" / "20260101-s.md").write_text("---\nsummary: a: b: c\n---\n")
         out = v2.compose(d, "t")
         assert "20260101-s" in out and "not valid YAML" not in out
-
-    def test_undated_sessions_do_not_break_resume(self, tmp_path):
-        """20260231-x matches the id pattern but is not a real date, so
-        _session_date takes its ValueError branch. It sorts mid-index, and it
-        stops the window walk after 3 newer sessions, so the floor of 5 decides."""
-        d = _v2_thread(tmp_path)
-        _sessions(d, "20260210-a", "20260211-b", "20260212-c", "20260231-x",
-                  "20260301-d", "20260302-e", "20260303-f")
-        out = v2.compose(d, "t")
-        assert "(5 of 7)" in out
-        assert "20260231-x" in out and "20260211-b" not in out
-
-    def test_an_undated_newest_session_falls_back_to_the_floor(self, tmp_path):
-        d = _v2_thread(tmp_path)
-        _sessions(d, *_days(*[f"202601{n:02d}" for n in range(1, 8)]))
-        idx.add(d, "sessions", idx.Entry("odd-id", None, "odd", "./sessions/odd.md"))
-        assert "(5 of 8)" in v2.compose(d, "t")
 
 
 class TestSchemaDetection:

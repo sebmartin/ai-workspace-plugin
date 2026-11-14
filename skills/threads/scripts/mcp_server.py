@@ -51,8 +51,10 @@ def resume_thread(workspace_dir: str, thread_name: str) -> str:
     Todos window (top five of the todo list in priority order, its heading
     counting shown, active and parked), any parked todos, every in-force
     decision with its `summary:`, the artifacts index, and the recent sessions:
-    every session within 14 days of the newest one, at least five and at most
-    twenty, each with its `summary:`, the heading counting shown and total.
+    the full log of the newest ones, as many as fit a fixed allowance and
+    always at least the newest, then the `summary:` of the five before them,
+    oldest first with the newest last; the heading counts how many are in full,
+    how many summarized, and the total.
     Older sessions are not listed; their files under `sessions/` carry
     `summary:` and `keywords:` frontmatter to search. A `## Thread size`
     heading appears only when the thread has grown expensive to open.

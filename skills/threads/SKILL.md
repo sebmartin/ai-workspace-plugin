@@ -122,7 +122,7 @@ A schema 1 thread keeps all of that inline in its README, so one read covers it.
 
 **Print each todo as a markdown link on its title**, so the user can open what it points at rather than asking you for it. An external URL goes as it is. Drop the id, which is for your calls rather than the screen, and name a state only when it is not `active`.
 
-The payload carries the recent sessions with their summaries, and older ones are not listed. Before answering a question about earlier work from memory, search `sessions/`, whose files carry `summary:` and `keywords:` frontmatter.
+The payload carries the full text of the newest sessions, then summaries of the few before them, and the heading says how many it is not holding. Before answering a question about earlier work from memory, search `sessions/`, whose files carry `summary:` and `keywords:` frontmatter.
 
 **Decision bodies are never opened on resume.** Open one when a constraint is challenged, or when you are about to extend or reverse it.
 

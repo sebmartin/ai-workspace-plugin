@@ -4,20 +4,21 @@ import re
 from datetime import date
 from pathlib import Path
 
+from frontmatter.default_handlers import YAMLHandler
+
 from ai_workspace.plugin import get_template_path
 from ai_workspace.text import split_frontmatter
 from ai_workspace.threads import marker
-from ai_workspace.threads.v2 import ids
 from ai_workspace.threads.v2 import index as idx
 from ai_workspace.threads.v2 import todos as todos_mod
 
-# Sessions shown on resume: everything within RECENT_DAYS of the newest one,
-# never fewer than RECENT_FLOOR and never more than RECENT_CAP. Anchored on the
-# thread's own newest session so a thread left alone for a month still opens
-# with its last stretch of work.
-RECENT_DAYS = 14
-RECENT_FLOOR = 5
-RECENT_CAP = 20
+# What resume spends on session bodies, in tokens. The newest sessions are shown
+# in full, newest first, until the next one would not fit. The newest is always
+# shown whole, however long: it is the discussion a resumed agent most needs.
+# Never quoted to the model, which would reason about the figure.
+SESSION_BODY_BUDGET = 4_000
+# Sessions older than the full ones that still get their `summary:` line.
+SESSION_SUMMARIES = 5
 ATTACHMENT_WINDOW = 12
 
 MEMORY = "memory.md"
@@ -26,7 +27,9 @@ MEMORY = "memory.md"
 # output limit: those differ per vendor and this plugin ships to two, and by the
 # time one of them truncates the thread has been costly for a long while. Set to
 # about three times the largest real thread we have, which leaves room to act.
-SIZE_NOTICE = 40_000
+# 40,000 before session bodies were embedded, plus the body budget (14,000
+# characters), so a thread is not charged for the bodies it is meant to carry.
+SIZE_NOTICE = 54_000
 
 # Markdown carrying this many ids, dates and table pipes runs near this. Only
 # ever used to produce a hard-rounded figure, so the vendors' tokenizers
@@ -156,11 +159,19 @@ def compose(thread_dir: Path, thread_name: str) -> str:
     out.extend(e.render() for e in artifacts)
 
     sessions = idx.read(thread_dir, "sessions")
-    shown_sessions = recent_sessions(sessions)
-    out.append(f"\n## Recent sessions ({len(shown_sessions)} of {len(sessions)})\n")
-    for entry in shown_sessions:
+    bodies = [_session_body(thread_dir, e) for e in sessions]
+    n_full, n_sum = session_window(
+        [len(b) for b in bodies], int(SESSION_BODY_BUDGET * CHARS_PER_TOKEN), SESSION_SUMMARIES)
+    out.append(
+        f"\n## Recent sessions ({n_full} in full, {n_sum} summarized, of {len(sessions)})\n")
+    # Summaries first and the full sessions after, each oldest first, so the
+    # newest session is the last thing in the payload.
+    first_full = len(sessions) - n_full
+    for entry in sessions[first_full - n_sum:first_full]:
         summary = _summary(thread_dir, entry)
         out.append(entry.render() + (f"\n  {summary}" if summary else ""))
+    for i in range(first_full, len(sessions)):
+        out.append(f"{sessions[i].render()}\n\n{_demote(bodies[i]).strip()}\n")
 
     # Listed while listing is cheap, counted once it is not. A few filenames
     # save a call; eighty-six of them cost a real thread 15% of every resume.
@@ -229,31 +240,69 @@ def _memory(thread_dir: Path) -> str:
         return ""
 
 
-def _session_date(entry: idx.Entry) -> date | None:
-    """The id's YYYYMMDD as a date, or None when the id has none."""
-    parsed = ids.parse_id(entry.id)
-    if parsed is None:
-        return None
+def session_window(sizes: list[int], budget_chars: int, summaries: int) -> tuple[int, int]:
+    """How many sessions to show in full and how many to summarize.
+
+    `sizes` is each session's body length, oldest first. Counted back from the
+    newest: the newest is always in full, however long, then each older one
+    while it fits in what is left of the budget. The first that does not fit
+    ends the run, so a small old session is never pulled forward past a large
+    one and the full sessions are always a contiguous recent stretch.
+    """
+    n_full, left = 0, budget_chars
+    for size in reversed(sizes):
+        if n_full and size > left:
+            break
+        n_full += 1
+        left -= size
+    return n_full, min(summaries, len(sizes) - n_full)
+
+
+def _session_body(thread_dir: Path, entry: idx.Entry) -> str:
+    """A session file's text after its frontmatter, or "" if it cannot be read.
+
+    Split on the delimiters, never parsed, so a file whose frontmatter is not
+    valid YAML still yields its body. Uses `frontmatter`'s own boundary so this
+    and `split_frontmatter` agree about where the body starts.
+    """
+    path = thread_dir / entry.link.lstrip("./")
     try:
-        d = parsed[0]
-        return date(int(d[:4]), int(d[4:6]), int(d[6:8]))
-    except ValueError:
-        return None
+        text = path.read_text(errors="replace")
+    except OSError:
+        return ""
+    handler = YAMLHandler()
+    if handler.detect(text):
+        try:
+            return handler.split(text)[1]
+        except ValueError:  # opened but never closed: no frontmatter to drop
+            return text
+    return text
 
 
-def recent_sessions(entries: list[idx.Entry]) -> list[idx.Entry]:
-    """Every session within RECENT_DAYS of the newest, bounded by floor and cap."""
-    if not entries:
-        return []
-    anchor = _session_date(entries[-1])
-    within = 0
-    if anchor is not None:
-        for entry in reversed(entries):
-            when = _session_date(entry)
-            if when is None or (anchor - when).days > RECENT_DAYS:
-                break
-            within += 1
-    return entries[-min(max(within, RECENT_FLOOR), RECENT_CAP):]
+_HEADING = re.compile(r"#{1,6}\s")
+_FENCE = re.compile(r"\s{0,3}(`{3,}|~{3,})")
+
+
+def _demote(body: str) -> str:
+    """Push every heading two levels down, so none can pass for a payload section.
+
+    A session body is free prose and may carry a `## Todos` of its own. Capped
+    at six `#`, and fenced code is left alone since a `#` there is a comment.
+    """
+    out, fence = [], None
+    for line in body.split("\n"):
+        m = _FENCE.match(line)
+        if m:
+            marker_ = m.group(1)
+            if fence is None:
+                fence = marker_
+            elif marker_[0] == fence[0] and len(marker_) >= len(fence):
+                fence = None
+        elif fence is None and _HEADING.match(line):
+            hashes = len(line) - len(line.lstrip("#"))
+            line = "#" * min(6, hashes + 2) + line[hashes:]
+        out.append(line)
+    return "\n".join(out)
 
 
 def _summary(thread_dir: Path, entry: idx.Entry) -> str | None:
