@@ -68,7 +68,7 @@ ai-workspace-plugin/                # Plugin repository
 ├── scripts/
 │   ├── sync-codex-agents.py        # Regenerates .codex-plugin/agents/*.toml from agents/*.md
 │   └── privacy_check_regression.py # Runs the privacy checker over the regression cases
-├── tests/                          # test_mcp_server.py, test_server_launch.py, test_layering.py, test_codex_packaging.py, test_privacy_check.py
+├── tests/                          # pytest suite (see Run the tests)
 │   └── fixtures/privacy-check-cases.json  # Fictional regression cases
 ├── docs/examples/                  # Walkthroughs for users
 ├── AGENTS.md                       # This file (vendor-neutral repo instructions)
@@ -123,7 +123,7 @@ One source tree serves both CLIs. Maximum deduplication:
 
 1. **Read before modifying** - Always read files before editing them
 2. **Follow existing patterns** - Match the style and structure of existing code
-3. **Regenerate Codex agents after editing `agents/*.md`** - Run `python3 scripts/sync-codex-agents.py` and commit both the `.md` source and the `.toml` mirror together. An agent with `codex-mirror: false` in its frontmatter is Claude Code only; the sync skips it and it has no `.toml`
+3. **Regenerate Codex agents after editing `agents/*.md`** - Run `uv run python3 scripts/sync-codex-agents.py` and commit both the `.md` source and the `.toml` mirror together. An agent with `codex-mirror: false` in its frontmatter is Claude Code only; the sync skips it and it has no `.toml`
 4. **Run the tests** - `uv run --with pytest --with-requirements skills/threads/scripts/mcp_server.py python3 -m pytest tests/ -q`. That reads the server's own dependency block, so a bare `pytest` will not work and neither will a hand-written package list that drifts from it.
 5. **Lint and type-check before pushing** - both must be clean, and there is no CI to catch it if they are not:
    ```
