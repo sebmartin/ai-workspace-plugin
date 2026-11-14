@@ -23,6 +23,9 @@ SESSION_SUMMARIES = 5
 ATTACHMENT_WINDOW = 12
 
 MEMORY = "memory.md"
+# Past this many tokens resume says what memory.md costs. Never quoted to the
+# model, which would treat the figure as room to fill.
+MEMORY_BUDGET = 4_000
 
 # Where a thread stops being cheap to open. Not derived from any CLI's tool
 # output limit: those differ per vendor and this plugin ships to two, and by the
@@ -121,7 +124,8 @@ def compose(thread_dir: Path, thread_name: str) -> str:
     # one body the payload carries, because a rule read afterwards has already
     # been broken.
     if memory := _memory(thread_dir):
-        out.append(f"## Thread memory\n\n{memory}\n")
+        notice = _memory_notice(len(memory))
+        out.append(f"## Thread memory\n\n{memory}\n" + (f"\n{notice}\n" if notice else ""))
 
     starred = stars.read(thread_dir)
     artifacts = idx.read(thread_dir, "artifacts")
@@ -240,6 +244,22 @@ def _size_notice(payload_chars: int) -> str:
         f"~{tokens:,} tokens per resume. Expensive to open, and every session "
         f"pays it. Say so, break it down by section if asked, and leave "
         f"splitting or retiring to the user.\n\n"
+    )
+
+
+def _memory_notice(memory_chars: int) -> str:
+    """What memory.md costs on every resume, once that is worth saying. Else nothing.
+
+    Gives the size and no target: a figure to get under reads as room to fill
+    up to, and the budget is kept out of everything the agent reads.
+    """
+    if memory_chars <= MEMORY_BUDGET * CHARS_PER_TOKEN:
+        return ""
+    tokens = _two_figures(int(memory_chars / CHARS_PER_TOKEN))
+    return (
+        f"memory.md is about ~{tokens:,} tokens and loads on every resume. "
+        f"Propose dropping entries that are no longer true, and moving long "
+        f"ones to artifacts, starring those you need to know when to read."
     )
 
 

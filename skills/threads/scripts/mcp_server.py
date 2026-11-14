@@ -47,7 +47,8 @@ def resume_thread(workspace_dir: str, thread_name: str) -> str:
     """Resolve the workspace and thread path, and return the thread's context.
 
     On a schema 2 thread the reply is composed rather than read from a file:
-    `memory.md` in full if there is one, then starred artifacts, each with its
+    `memory.md` in full if there is one (a line on its size follows it when it
+    has grown large), then starred artifacts, each with its
     description and when to read it (an id whose artifact is no longer in force
     shows `(not found)`), then the header, About, Status, the
     Todos window (top five of the todo list in priority order, its heading

@@ -453,6 +453,8 @@ def test_the_skill_describes_the_resume_this_plugin_returns():
     assert "in full" in SERVER.read_text()
     assert "artifacts-starred.md" in skill and "star_artifact" in skill
     assert "star_dropped" in SERVER.read_text()
+    assert "a standing instruction for this thread" not in skill
+    assert "what a session needs in hand before it starts" in skill
 
     migrate =(REPO / "skills" / "threads" / "v2" / "migrate-from-v1.md").read_text()
     assert "## Todos" in migrate and "set_about" in migrate and "**Recently**" in migrate
@@ -499,7 +501,7 @@ def test_writes_to_another_thread_go_through_the_thread_writer():
 
 # Budgets the model must never be told. Quoting one invites it to reason about
 # the figure instead of the payload, and the figure moves.
-_BUDGETS = ["SESSION_BODY_BUDGET"]
+_BUDGETS = ["SESSION_BODY_BUDGET", "MEMORY_BUDGET"]
 
 
 def test_no_budget_figure_reaches_the_model():

@@ -942,3 +942,39 @@ class TestStarredInPayload:
     def test_sentence_adds_a_full_stop_unless_one_is_there(self):
         assert v2._sentence("a") == "a."
         assert [v2._sentence(t) for t in ("a.", "a!", "a?")] == ["a.", "a!", "a?"]
+
+
+class TestMemoryBudget:
+    NOTICE = "tokens and loads on every resume"
+
+    def _over(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        (d / "memory.md").write_text("word " * 6_000 + "LAST")  # 30,000 chars, about 8,600 tokens
+        return d
+
+    def test_memory_under_budget_says_nothing_about_size(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        (d / "memory.md").write_text("A short rule. " * 50)
+        assert self.NOTICE not in v2.compose(d, "t")
+
+    def test_memory_at_the_budget_says_nothing(self):
+        limit = int(v2.MEMORY_BUDGET * v2.CHARS_PER_TOKEN)
+        assert v2._memory_notice(limit) == ""
+        assert v2._memory_notice(limit + 1) != ""
+
+    def test_memory_over_budget_says_its_size_right_after_the_text(self, tmp_path):
+        d = self._over(tmp_path)
+        out = v2.compose(d, "t")
+        assert "memory.md is about ~8,600 tokens and loads on every resume." in out
+        assert out.index("LAST") < out.index(self.NOTICE) < out.index("**Started**")
+
+    def test_the_notice_gives_no_target(self, tmp_path):
+        out = v2.compose(self._over(tmp_path), "t")
+        line = next(ln for ln in out.splitlines() if self.NOTICE in ln)
+        assert re.findall(r"\d[\d,]*", line) == ["8,600"]
+
+    def test_resume_never_trims_memory(self, tmp_path):
+        d = self._over(tmp_path)
+        before = (d / "memory.md").read_bytes()
+        out = v2.compose(d, "t")
+        assert (d / "memory.md").read_bytes() == before and "LAST" in out
