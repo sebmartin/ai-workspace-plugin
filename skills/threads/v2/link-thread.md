@@ -36,11 +36,11 @@ Linking writes to the other thread directly rather than through the
 `ai-workspace:thread-writer` agent, because it changes one header line you can
 read first. It is still someone else's thread. Open its README before editing it.
 
-**Check its schema.** A `schema-version` file at its root holding `2` means the
-model you are working in. Anything else, or no file at all, means an older
-schema, which is readable and never writable. Do not edit it. Say which thread
-needs migrating and offer to migrate it, then link once it is converted. A one
-sided link is not the fallback: it silently claims a relationship the other
+**Check its schema.** A `schema-version` file at its root holding the schema
+SKILL.md says this plugin creates means the model you are working in. Anything
+else, or no file at all, means an older schema, which is readable and never
+writable. Do not edit it. Say which thread needs migrating and offer to migrate
+it, then link once it is converted. A one sided link is not the fallback: it silently claims a relationship the other
 thread does not know about.
 
 The reason is not that an old README is hard to edit. It is that keeping every

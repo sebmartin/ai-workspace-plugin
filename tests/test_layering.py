@@ -479,7 +479,14 @@ def test_writes_to_another_thread_go_through_the_thread_writer():
     skill = (REPO / "skills" / "threads" / "SKILL.md").read_text()
     assert "`ai-workspace:thread-writer`" in skill
     assert "Never write to a thread you have not resumed" not in skill
-    assert "Working with a schema 2 thread" in body and "## Working with a schema 2 thread" in skill
+    # The agent learns the current schema from SKILL.md, so it never names one
+    # and nothing in it goes stale when CURRENT_SCHEMA moves.
+    from ai_workspace.threads.schema import CURRENT_SCHEMA
+
+    named = re.search(r"schema[`:\s]*\d", body, re.IGNORECASE) or f"`{CURRENT_SCHEMA}`" in body
+    assert not named, "thread-writer names a schema number"
+    assert f"**Schema {CURRENT_SCHEMA} is what this plugin creates" in skill
+    assert f"## Working with a schema {CURRENT_SCHEMA} thread" in skill
 
     link = (REPO / "skills" / "threads" / "v2" / "link-thread.md").read_text()
     assert "the one operation that writes to a thread you have not resumed" not in link
