@@ -878,3 +878,67 @@ class TestStarFile:
         assert stars.read(d) == [stars.Star("c", "x"), stars.Star("b", "y")]
         stars.rekey(d, "zzz", "q")
         assert stars.read(d) == [stars.Star("c", "x"), stars.Star("b", "y")]
+
+
+class TestStarredInPayload:
+    GUIDE = idx.Entry("20260801-guide-style", "current", "20260801-guide-style",
+                      "./artifacts/20260801-guide-style.md",
+                      "House style for everything written in this thread.")
+    OTHER = idx.Entry("20260802-notes-other", "current", "20260802-notes-other",
+                      "./artifacts/20260802-notes-other.md", "Other notes.")
+
+    def _thread(self, tmp_path, *entries, starred=()):
+        d = _v2_thread(tmp_path)
+        for e in entries:
+            idx.add(d, "artifacts", e)
+        if starred:
+            stars.write(d, list(starred))
+        return d
+
+    def test_link_description_and_trigger(self, tmp_path):
+        d = self._thread(tmp_path, self.GUIDE, starred=[
+            stars.Star("20260801-guide-style", "the user asks about formatting or tone")])
+        out = v2.compose(d, "t")
+        assert ("## Starred artifacts (1)\n\n- [20260801-guide-style](./artifacts/20260801-guide-style.md)"
+                " -- House style for everything written in this thread. Read when: the user asks"
+                " about formatting or tone.") in out
+
+    def test_a_starred_artifact_leaves_the_artifacts_list(self, tmp_path):
+        d = self._thread(tmp_path, self.GUIDE, self.OTHER,
+                         starred=[stars.Star(self.GUIDE.id, "x")])
+        out = v2.compose(d, "t")
+        assert "## Artifacts (1)" in out
+        assert self.GUIDE.render() not in out
+        assert self.OTHER.render() in out
+
+    def test_an_orphaned_star_shows_not_found(self, tmp_path):
+        d = self._thread(tmp_path, starred=[
+            stars.Star("20260415-notes-old-plan", "the user asks about the original plan")])
+        out = v2.compose(d, "t")
+        assert ("- 20260415-notes-old-plan (not found). Read when: the user asks about"
+                " the original plan.") in out
+
+    def test_no_description_leaves_it_out(self, tmp_path):
+        bare = idx.Entry("20260803-bare", "current", "20260803-bare", "./artifacts/20260803-bare.md")
+        d = self._thread(tmp_path, bare, starred=[stars.Star(bare.id, "needed!")])
+        assert "- [20260803-bare](./artifacts/20260803-bare.md) -- Read when: needed!" \
+            in v2.compose(d, "t")
+
+    def test_after_memory_before_the_header(self, tmp_path):
+        d = self._thread(tmp_path, self.GUIDE, starred=[stars.Star(self.GUIDE.id, "x")])
+        (d / "memory.md").write_text("- a rule\n")
+        out = v2.compose(d, "t")
+        assert out.index("## Thread memory") < out.index("## Starred artifacts") < out.index("**Started**")
+
+    def test_nothing_starred_means_no_section(self, tmp_path):
+        d = self._thread(tmp_path, self.GUIDE)
+        assert "Starred artifacts" not in v2.compose(d, "t")
+
+    def test_an_index_with_no_star_file_renders_as_before(self, tmp_path):
+        d = self._thread(tmp_path, self.GUIDE, self.OTHER)
+        out = v2.compose(d, "t")
+        assert "## Artifacts (2)" in out and all(e.render() in out for e in idx.read(d, "artifacts"))
+
+    def test_sentence_adds_a_full_stop_unless_one_is_there(self):
+        assert v2._sentence("a") == "a."
+        assert [v2._sentence(t) for t in ("a.", "a!", "a?")] == ["a.", "a!", "a?"]

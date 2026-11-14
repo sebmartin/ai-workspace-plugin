@@ -47,10 +47,13 @@ def resume_thread(workspace_dir: str, thread_name: str) -> str:
     """Resolve the workspace and thread path, and return the thread's context.
 
     On a schema 2 thread the reply is composed rather than read from a file:
-    `memory.md` in full if there is one, then the header, About, Status, the
+    `memory.md` in full if there is one, then starred artifacts, each with its
+    description and when to read it (an id whose artifact is no longer in force
+    shows `(not found)`), then the header, About, Status, the
     Todos window (top five of the todo list in priority order, its heading
     counting shown, active and parked), any parked todos, every in-force
-    decision with its `summary:`, the artifacts index, and the recent sessions:
+    decision with its `summary:`, the artifacts index (starred artifacts are left
+    out of it), and the recent sessions:
     the full log of the newest ones, as many as fit a fixed allowance and
     always at least the newest, then the `summary:` of the five before them,
     oldest first with the newest last; the heading counts how many are in full,
@@ -497,8 +500,10 @@ def retire_artifact(workspace_dir: str, thread_name: str, artifact_id: str,
                     state: str) -> str:
     """Retire an artifact so it stops appearing as current.
 
-    Returns `{"id": ...}`. A refusal returns `{"error": CODE, ...}` and writes
-    nothing: `STATE_UNKNOWN` with the `allowed` states, or `NO_SUCH_ENTRY`.
+    Returns `{"id": ...}`. A starred artifact loses its star, and the reply then
+    also carries `star_dropped`, the trigger it had, so you can star it again
+    if the retire was a mistake. A refusal returns `{"error": CODE, ...}` and
+    writes nothing: `STATE_UNKNOWN` with the `allowed` states, or `NO_SUCH_ENTRY`.
 
     Args:
         workspace_dir: The tracked workspace path from session context.

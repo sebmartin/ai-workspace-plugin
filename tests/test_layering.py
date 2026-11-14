@@ -451,6 +451,8 @@ def test_the_skill_describes_the_resume_this_plugin_returns():
     assert "## Next steps" not in skill
     assert "14 days" not in SERVER.read_text()
     assert "in full" in SERVER.read_text()
+    assert "artifacts-starred.md" in skill and "star_artifact" in skill
+    assert "star_dropped" in SERVER.read_text()
 
     migrate =(REPO / "skills" / "threads" / "v2" / "migrate-from-v1.md").read_text()
     assert "## Todos" in migrate and "set_about" in migrate and "**Recently**" in migrate

@@ -151,6 +151,8 @@ def _redate(thread_dir: Path, kind: str, entry, entries: list,
     if entry.title == was:
         entry.title = entry.id
     idx.add(thread_dir, kind, entry, retired)
+    if kind == "artifacts":
+        stars.rekey(thread_dir, was, entry.id)
     return entry.id, was
 
 
@@ -568,8 +570,12 @@ def retire_artifact(thread, artifact_id: str, state: str) -> str:
         return unwritable
     if error := idx.retire(thread.dir, "artifacts", artifact_id, state):
         return json.dumps(error)
+    dropped = stars.drop(thread.dir, artifact_id)
     render.render(thread.dir)
-    return json.dumps({"id": artifact_id})
+    reply: dict = {"id": artifact_id}
+    if dropped:
+        reply["star_dropped"] = dropped.when
+    return json.dumps(reply)
 
 
 def star_artifact(thread, artifact_id: str, when: str) -> str:

@@ -10,6 +10,7 @@ from ai_workspace.plugin import get_template_path
 from ai_workspace.text import split_frontmatter
 from ai_workspace.threads import marker
 from ai_workspace.threads.v2 import index as idx
+from ai_workspace.threads.v2 import stars
 from ai_workspace.threads.v2 import todos as todos_mod
 
 # What resume spends on session bodies, in tokens. The newest sessions are shown
@@ -45,6 +46,11 @@ _SECTION_RE = r"(?m)^##[ \t]+{name}[ \t]*$\n(.*?)(?=^##[ \t]|^---[ \t]*$|\Z)"
 def _section(text: str, name: str) -> str:
     m = re.search(_SECTION_RE.format(name=re.escape(name)), text, re.DOTALL)
     return m.group(1).strip() if m else ""
+
+
+def _sentence(text: str) -> str:
+    """The text as a sentence: a full stop unless it already ends in one."""
+    return text if text.endswith((".", "!", "?")) else text + "."
 
 
 def _header(text: str) -> str:
@@ -117,6 +123,20 @@ def compose(thread_dir: Path, thread_name: str) -> str:
     if memory := _memory(thread_dir):
         out.append(f"## Thread memory\n\n{memory}\n")
 
+    starred = stars.read(thread_dir)
+    artifacts = idx.read(thread_dir, "artifacts")
+    if starred:
+        by_id = {e.id: e for e in artifacts}
+        out.append(f"## Starred artifacts ({len(starred)})\n")
+        for star in starred:
+            when = f"Read when: {_sentence(star.when)}"
+            if (entry := by_id.get(star.id)) is None:
+                out.append(f"- {star.id} (not found). {when}")
+                continue
+            described = f"{_sentence(entry.description)} " if entry.description else ""
+            out.append(f"- [{star.id}]({entry.link}) -- {described}{when}")
+        out.append("")
+
     out.append(_header(text))
 
     about = _section(text, "About")
@@ -154,7 +174,8 @@ def compose(thread_dir: Path, thread_name: str) -> str:
             summary = "(frontmatter is not valid YAML, so no summary; worth fixing)"
         out.append(entry.render() + (f"\n  {summary}" if summary else ""))
 
-    artifacts = idx.read(thread_dir, "artifacts")
+    starred_ids = {s.id for s in starred}
+    artifacts = [e for e in artifacts if e.id not in starred_ids]
     out.append(f"\n## Artifacts ({len(artifacts)})\n")
     out.extend(e.render() for e in artifacts)
 

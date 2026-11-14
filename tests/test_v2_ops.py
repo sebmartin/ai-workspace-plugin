@@ -1705,6 +1705,48 @@ class TestStars:
         _d, ws, aid = self._starrable(tmp_path)
         assert _reply(unstar_artifact(ws, "t", aid)) == {"error": "NOT_STARRED", "detail": aid}
 
+    def test_reindexing_the_description_keeps_the_star(self, tmp_path):
+        d, ws, aid = self._starrable(tmp_path)
+        star_artifact(ws, "t", aid, "trigger")
+        index_file(ws, "t", "./artifacts/20260101-notes.md", "a new description")
+        assert stars.read(d) == [stars.Star(aid, "trigger")]
+
+    def test_retiring_drops_the_star_and_returns_its_trigger(self, tmp_path):
+        d, ws, aid = self._starrable(tmp_path)
+        star_artifact(ws, "t", aid, "trigger")
+        assert _reply(retire_artifact(ws, "t", aid, "stale")) == \
+            {"id": aid, "star_dropped": "trigger"}
+        assert stars.read(d) == []
+
+    def test_retiring_an_unstarred_artifact_replies_as_before(self, tmp_path):
+        _d, ws, aid = self._starrable(tmp_path)
+        assert _reply(retire_artifact(ws, "t", aid, "stale")) == {"id": aid}
+
+    def test_a_refused_retire_keeps_the_star(self, tmp_path):
+        d, ws, aid = self._starrable(tmp_path)
+        star_artifact(ws, "t", aid, "trigger")
+        assert _reply(retire_artifact(ws, "t", aid, "bogus"))["error"] == "STATE_UNKNOWN"
+        assert stars.read(d) == [stars.Star(aid, "trigger")]
+
+    def test_redating_moves_the_star(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        index_file(ws, "t", TestArtifacts()._artifact(d, "orphan.md"))
+        aid = _only_id(d, "artifacts")
+        assert aid == "19700101-orphan"
+        star_artifact(ws, "t", aid, "trigger")
+        index_file(ws, "t", "./artifacts/orphan.md", date="2026-07-27")
+        assert stars.read(d) == [stars.Star("20260727-orphan", "trigger")]
+
+    def test_unstarring_lists_it_back_under_artifacts(self, tmp_path):
+        from ai_workspace.threads.v2.thread import compose
+        d, ws, aid = self._starrable(tmp_path)
+        star_artifact(ws, "t", aid, "trigger")
+        assert "## Artifacts (0)" in compose(d, "t")
+        unstar_artifact(ws, "t", aid)
+        out = compose(d, "t")
+        assert "## Artifacts (1)" in out and "Starred artifacts" not in out
+
     def test_unstar_clears_an_orphan(self, tmp_path):
         d, ws, _aid = self._starrable(tmp_path)
         stars.write(d, [stars.Star("20260415-notes-old-plan", "x")])

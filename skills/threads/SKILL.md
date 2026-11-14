@@ -86,7 +86,7 @@ threads/{name}/
 ├── memory.md                for you (optional; absent until there is something in it)
 ├── sessions/     + sessions-index.md
 ├── decisions/    + decisions-index.md, decisions-retired.md
-├── artifacts/    + artifacts-index.md, artifacts-retired.md
+├── artifacts/    + artifacts-index.md, artifacts-retired.md, artifacts-starred.md
 ├── attachments/  (no index; scan the directory when you need to know)
 └── todos/        + todos-index.md, todos-retired.md
 ```
@@ -128,13 +128,13 @@ The payload carries the full text of the newest sessions, then summaries of the 
 
 ### Writing
 
-**Adding to the record is the user's call.** Every index entry (a todo, a decision, an artifact) and every `memory.md` entry is read on every resume from then on, so add one only when the user asked for it. The ask can be implicit: "write up your research" means write an artifact and index it, without checking first. When nobody asked and you think something belongs on the record, suggest it in your reply and add it once the user agrees.
+**Adding to the record is the user's call.** Every index entry (a todo, a decision, an artifact, a star) and every `memory.md` entry is read on every resume from then on, so add one only when the user asked for it. The ask can be implicit: "write up your research" means write an artifact and index it, without checking first. When nobody asked and you think something belongs on the record, suggest it in your reply and add it once the user agrees.
 
 **Declaring something settled is the user's call.** Don't call a draft, a decision or a section locked, final or done, and don't ask whether to lock it. Present the work and the reasoning, then wait. A tentative "maybe X" is not a decision.
 
 **Say "saved", not "archived", when you have written a file.** Archiving is a different operation in this plugin: it retires a whole thread from the active list. Calling a save an archive tells the user their work was put away.
 
-Never hand-edit an index or the README's Todos section; both are rendered from what the tools write, and a hand edit will be overwritten. Status is written only by `save_session`, on every save; never edit it by hand, since the next save overwrites it, except when migrating a thread as `migrate-from-v1.md` describes. About is written by `set_about`, never by hand. The header fields and `memory.md` have no tool; edit them directly.
+Never hand-edit an index, `artifacts-starred.md` or the README's Todos section; both are rendered from what the tools write, and a hand edit will be overwritten. Status is written only by `save_session`, on every save; never edit it by hand, since the next save overwrites it, except when migrating a thread as `migrate-from-v1.md` describes. About is written by `set_about`, never by hand. The header fields and `memory.md` have no tool; edit them directly.
 
 A render replaces `## Todos` down to the next `##`, so never leave it as the last section of a README. Anything below it is swallowed without a word.
 
@@ -143,6 +143,15 @@ date it was written, a kind such as `spec`, `notes`, `report` or `bug`, and a sh
 slug. Write the file, then call `index_file` with a one-sentence description. The
 id's date comes from the filename, so a name without one is indexed as undated
 unless you pass `date`.
+
+**Starring an artifact.** A star marks an artifact you need to know when to read.
+Its line and trigger load on every resume, and its body only on demand. Star an
+artifact that matters too much to be one line among many but is too long to hold
+in memory. Star with `star_artifact`. Every star carries a trigger, one sentence on when
+to read it, because a star without one tells you nothing. Propose stars and unstars, typically when
+trimming memory or at save, and the user decides; the exception is a schema 1
+migration, which follows its own guide. Unstar with `unstar_artifact` when the
+artifact matters less. Retiring an artifact drops its star.
 
 **A todo's link names the record of this todo.** When the work is tracked in
 GitHub Issues or JIRA, link that item, because the item is the todo. Otherwise
