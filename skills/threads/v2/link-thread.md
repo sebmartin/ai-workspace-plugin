@@ -28,19 +28,19 @@ always written: a link recorded on one side only is worse than no link, because
 it reads as complete from the side that has it.
 
 If no thread name was given, list the threads, number them, ask which, and wait.
-For `create child`, create the thread first, then link it.
+For `create child`, create the thread first, then link it. `create_thread` returns headers that would make the new thread the active one: ignore them here. The thread you started from stays current, and the child is only created and linked.
 
 ## Look at the other thread before you write to it
 
-This is the one operation that writes to a thread you have not resumed, so it is
-the one place the rule against that does not apply. It is still someone else's
-thread. Open its README before editing it.
+Linking writes to the other thread directly rather than through the
+`ai-workspace:thread-writer` agent, because it changes one header line you can
+read first. It is still someone else's thread. Open its README before editing it.
 
-**Check its schema.** A `schema-version` file at its root holding `2` means the
-model you are working in. Anything else, or no file at all, means an older
-schema, which is readable and never writable. Do not edit it. Say which thread
-needs migrating and offer to migrate it, then link once it is converted. A one
-sided link is not the fallback: it silently claims a relationship the other
+**Check its schema.** A `schema-version` file at its root holding the schema
+SKILL.md says this plugin creates means the model you are working in. Anything
+else, or no file at all, means an older schema, which is readable and never
+writable. Do not edit it. Say which thread needs migrating and offer to migrate
+it, then link once it is converted. A one sided link is not the fallback: it silently claims a relationship the other
 thread does not know about.
 
 The reason is not that an old README is hard to edit. It is that keeping every
