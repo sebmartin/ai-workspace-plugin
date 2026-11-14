@@ -459,10 +459,13 @@ def test_the_skill_describes_the_resume_this_plugin_returns():
     migrate =(REPO / "skills" / "threads" / "v2" / "migrate-from-v1.md").read_text()
     assert "## Todos" in migrate and "set_about" in migrate and "**Recently**" in migrate
     assert "`## Next steps`" not in migrate
+    for phrase in ("you have to know when to read it", "`star_artifact`",
+                   "not a dumping ground", "without asking"):
+        assert phrase in migrate, phrase
 
     for manifest in (".claude-plugin/plugin.json", ".codex-plugin/plugin.json"):
         version = json.loads((REPO / manifest).read_text())["version"]
-        assert tuple(int(n) for n in version.split(".")) >= (3, 2, 0), version
+        assert tuple(int(n) for n in version.split(".")) >= (3, 4, 0), version
 
 
 def test_writes_to_another_thread_go_through_the_thread_writer():
