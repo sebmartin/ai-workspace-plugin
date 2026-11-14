@@ -11,7 +11,7 @@ from ai_workspace.text import split_frontmatter
 from ai_workspace.threads import marker
 from ai_workspace.threads.v1.header import section as _section
 from ai_workspace.threads.v2 import index as idx
-from ai_workspace.threads.v2 import stars
+from ai_workspace.threads.v2 import ops, stars
 from ai_workspace.threads.v2 import todos as todos_mod
 
 # What resume spends on session bodies, in tokens. The newest sessions are shown
@@ -193,9 +193,17 @@ def compose(thread_dir: Path, thread_name: str) -> str:
     out.extend(e.render() for e in artifacts)
 
     sessions = idx.read(thread_dir, "sessions")
-    bodies = [_session_body(thread_dir, e) for e in sessions]
-    n_full, n_sum = session_window(
-        [len(b) for b in bodies], int(SESSION_BODY_BUDGET * CHARS_PER_TOKEN), SESSION_SUMMARIES)
+    # Read newest first, and only as far as the window needs: a session older
+    # than the first one that does not fit is never opened for its body.
+    bodies: dict[int, str] = {}
+
+    def newest_first_sizes():
+        for i in range(len(sessions) - 1, -1, -1):
+            bodies[i] = _session_body(thread_dir, sessions[i])
+            yield len(bodies[i])
+
+    n_full = _full_count(newest_first_sizes(), int(SESSION_BODY_BUDGET * CHARS_PER_TOKEN))
+    n_sum = min(SESSION_SUMMARIES, len(sessions) - n_full)
     out.append(
         f"\n## Recent sessions ({n_full} in full, {n_sum} summarized, of {len(sessions)})\n")
     # Summaries first and the full sessions after, each oldest first, so the
@@ -299,13 +307,39 @@ def session_window(sizes: list[int], budget_chars: int, summaries: int) -> tuple
     ends the run, so a small old session is never pulled forward past a large
     one and the full sessions are always a contiguous recent stretch.
     """
+    n_full = _full_count(reversed(sizes), budget_chars)
+    return n_full, min(summaries, len(sizes) - n_full)
+
+
+def _full_count(newest_first, budget_chars: int) -> int:
+    """How many sessions fit in full. Consumes `newest_first` only as far as it
+    must, so a caller that reads each size lazily stops reading at the first miss."""
     n_full, left = 0, budget_chars
-    for size in reversed(sizes):
+    for size in newest_first:
         if n_full and size > left:
             break
         n_full += 1
         left -= size
-    return n_full, min(summaries, len(sizes) - n_full)
+    return n_full
+
+
+def _file_inside(thread_dir: Path, link: str) -> Path | None:
+    """The file an index link names, only if it is a file inside this thread.
+
+    An index line can be edited by hand or copied from elsewhere, so a link
+    with `..` segments, or a symlink leading out, must not make resume embed
+    a file that is not part of the thread.
+    """
+    relative = ops._inside(link)
+    if relative is None:
+        return None
+    path = thread_dir / relative
+    try:
+        if not path.resolve().is_relative_to(thread_dir.resolve()):
+            return None
+        return path if path.is_file() else None
+    except OSError:
+        return None
 
 
 def _session_body(thread_dir: Path, entry: idx.Entry) -> str:
@@ -315,7 +349,9 @@ def _session_body(thread_dir: Path, entry: idx.Entry) -> str:
     valid YAML still yields its body. Uses `frontmatter`'s own boundary so this
     and `split_frontmatter` agree about where the body starts.
     """
-    path = thread_dir / entry.link.lstrip("./")
+    path = _file_inside(thread_dir, entry.link)
+    if path is None:
+        return ""
     try:
         text = path.read_text(errors="replace")
     except OSError:
@@ -358,8 +394,8 @@ def _demote(body: str) -> str:
 def _summary(thread_dir: Path, entry: idx.Entry) -> str | None:
     """The file's `summary:`; "" when absent or unreadable; None when the
     frontmatter does not parse."""
-    path = thread_dir / entry.link.lstrip("./")
-    if not path.is_file():
+    path = _file_inside(thread_dir, entry.link)
+    if path is None:
         return ""
     try:
         fields, _ = split_frontmatter(path.read_text(errors="ignore"), path)

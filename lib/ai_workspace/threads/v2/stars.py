@@ -90,12 +90,13 @@ def unrepresentable(star: Star) -> str | None:
 
 
 def drop(thread_dir: Path, artifact_id: str) -> Star | None:
-    """Remove a star and return it. Writes nothing when there is none."""
+    """Remove a star (every line for the id) and return the first. Writes nothing when there is none."""
     stars = read(thread_dir)
     gone = next((s for s in stars if s.id == artifact_id), None)
     if gone is None:
         return None
-    write(thread_dir, [s for s in stars if s is not gone])
+    # Every line for the id, since a merge or hand edit can leave two.
+    write(thread_dir, [s for s in stars if s.id != artifact_id])
     return gone
 
 

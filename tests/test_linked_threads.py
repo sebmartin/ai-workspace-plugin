@@ -269,3 +269,26 @@ def test_resume_writes_nothing(home):
 def test_cut_about():
     assert threads._cut_about("one\ntwo\n\nlater") == "one two"
     assert threads._cut_about(" ".join(["w"] * 60)) == " ".join(["w"] * 50) + "…"
+
+
+def test_a_double_hyphen_starts_a_note():
+    line = "**Related Threads**: [b](../b/README.md) -- the origin, a note"
+    assert parse_links(H.format(lines=line)) == [Link("Related", "b", "b", "the origin, a note")]
+
+
+def test_an_unreadable_linked_thread_shows_unreadable_and_resume_succeeds(tmp_path, monkeypatch):
+    _v2(tmp_path, "a", "A.")
+    _v2(tmp_path, "b", "B.")
+    _v2(tmp_path, "c", "C.")
+    _set_header(tmp_path, "a", related="[b](../b/README.md), [c](../c/README.md)")
+    real = Path.read_text
+
+    def deny(self, *args, **kwargs):
+        if self == tmp_path / "threads" / "b" / "README.md":
+            raise PermissionError(13, "denied")
+        return real(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", deny)
+    out = threads.resume(str(tmp_path), "a")
+    assert "- Related: [b](../b/README.md) — (unreadable)\n" in out
+    assert "- Related: [c](../c/README.md) — C.\n" in out

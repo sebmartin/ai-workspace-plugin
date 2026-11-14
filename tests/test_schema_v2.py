@@ -111,6 +111,32 @@ class TestSessionBodies:
         out = v2.compose(d, "t")
         assert "TINY" not in out and "Summary of 20260101-a." in out
 
+    def test_a_link_leaving_the_thread_is_never_embedded(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        (tmp_path / "secret.txt").write_text("OUTSIDE-SECRET\nsummary: leaked\n")
+        idx.add(d, "sessions", idx.Entry(
+            "20260101-s", None, "20260101-s", "./sessions/../../../secret.txt"))
+        assert "OUTSIDE-SECRET" not in v2.compose(d, "t")
+
+    def test_a_symlink_leading_out_is_never_embedded(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        (tmp_path / "secret.txt").write_text("OUTSIDE-SECRET")
+        (d / "sessions").mkdir(exist_ok=True)
+        (d / "sessions" / "20260101-s.md").symlink_to(tmp_path / "secret.txt")
+        idx.add(d, "sessions", idx.Entry(
+            "20260101-s", None, "20260101-s", "./sessions/20260101-s.md"))
+        assert "OUTSIDE-SECRET" not in v2.compose(d, "t")
+
+    def test_older_sessions_past_the_window_are_not_opened_for_their_body(
+            self, tmp_path, monkeypatch):
+        d = self._ten(tmp_path)
+        opened = []
+        real = v2._session_body
+        monkeypatch.setattr(
+            v2, "_session_body", lambda td, e: opened.append(e.id) or real(td, e))
+        v2.compose(d, "t")
+        assert opened == ["20260110-s", "20260109-s", "20260108-s", "20260107-s"]
+
     def test_the_body_excludes_frontmatter(self, tmp_path):
         d = _v2_thread(tmp_path)
         _sessions(d, "20260101-s")
@@ -868,6 +894,12 @@ class TestStarFile:
         assert stars.drop(d, "a") is None
         assert not (d / "artifacts-starred.md").exists()
         stars.write(d, [stars.Star("a", "x"), stars.Star("b", "y")])
+        assert stars.drop(d, "a") == stars.Star("a", "x")
+        assert stars.read(d) == [stars.Star("b", "y")]
+
+    def test_drop_removes_every_line_for_the_id(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        stars.write(d, [stars.Star("a", "x"), stars.Star("b", "y"), stars.Star("a", "z")])
         assert stars.drop(d, "a") == stars.Star("a", "x")
         assert stars.read(d) == [stars.Star("b", "y")]
 

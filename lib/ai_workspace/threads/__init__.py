@@ -165,15 +165,20 @@ def _refusal_code(message: str) -> str:
 
 def _linked_about(workspace: Path, name: str) -> str:
     """What to show of a linked thread: its About, or why there is none."""
-    state = ws.thread_state(workspace, name)
-    if state == ws.ARCHIVED:
-        return "(archived)"
-    if state != ws.ACTIVE or not (ws.thread_path(workspace, name) / "README.md").exists():
-        return "(not found)"
-    result = _for(str(workspace), name, "about")
-    if isinstance(result, str):
-        return "(unreadable schema)"
-    about = result.fn(result.thread)
+    try:
+        state = ws.thread_state(workspace, name)
+        if state == ws.ARCHIVED:
+            return "(archived)"
+        if state != ws.ACTIVE or not (ws.thread_path(workspace, name) / "README.md").exists():
+            return "(not found)"
+        result = _for(str(workspace), name, "about")
+        if isinstance(result, str):
+            return "(unreadable schema)"
+        about = result.fn(result.thread)
+    except OSError:
+        # A sibling's permissions or a flaky mount must not stop this thread
+        # from resuming.
+        return "(unreadable)"
     return _cut_about(about) if about.strip() else "(no About)"
 
 
