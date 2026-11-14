@@ -1670,7 +1670,9 @@ class TestStars:
 
     @pytest.mark.parametrize("when, code", [
         ("", "WHEN_EMPTY"), ("   ", "WHEN_EMPTY"),
-        ("line one\nline two", "WHEN_HAS_LINE_BREAK"), ("x" * 201, "WHEN_TOO_LONG")])
+        ("line one\nline two", "WHEN_HAS_LINE_BREAK"),
+        ("one\x0btwo", "WHEN_HAS_LINE_BREAK"), ("one\u2028two", "WHEN_HAS_LINE_BREAK"),
+        ("x" * 201, "WHEN_TOO_LONG")])
     def test_a_bad_trigger_is_refused_and_writes_nothing(self, tmp_path, when, code):
         d, ws, aid = self._starrable(tmp_path)
         reply = _reply(star_artifact(ws, "t", aid, when))

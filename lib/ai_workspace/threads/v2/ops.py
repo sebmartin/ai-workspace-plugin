@@ -581,7 +581,7 @@ def star_artifact(thread, artifact_id: str, when: str) -> str:
     when = when.strip()
     if not when:
         return json.dumps({"error": "WHEN_EMPTY"})
-    if "\n" in when or "\r" in when:
+    if stars.has_line_break(when):
         return json.dumps({"error": "WHEN_HAS_LINE_BREAK"})
     if len(when) > MAX_DESCRIPTION:
         return json.dumps({"error": "WHEN_TOO_LONG", "detail": str(MAX_DESCRIPTION)})

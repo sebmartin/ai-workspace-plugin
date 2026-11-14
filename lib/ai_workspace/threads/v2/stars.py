@@ -34,6 +34,15 @@ def path(thread_dir: Path) -> Path:
     return thread_dir / STARRED
 
 
+def has_line_break(value: str) -> bool:
+    """Whether `read` would split this text, which is what it uses on a file.
+
+    Asked of `splitlines` itself, so a character it splits on (a vertical
+    tab, a form feed, U+2028) counts as well as \\n and \\r.
+    """
+    return value.splitlines() != [value] and value != ""
+
+
 def _render(star: Star) -> str:
     return f"- {star.id} -- when: {star.when}"
 
@@ -67,7 +76,7 @@ def unrepresentable(star: Star) -> str | None:
     """
     fields = {"id": star.id, "when": star.when}
     for field, value in fields.items():
-        if "\n" in value or "\r" in value:
+        if has_line_break(value):
             return f"{field} contains a line break"
     hit = _LINE_RE.match(_render(star))
     if hit is not None and (hit["id"], hit["when"]) == star:

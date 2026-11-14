@@ -858,6 +858,11 @@ class TestStarFile:
         assert stars.unrepresentable(stars.Star("a b", "x")) is not None
         assert stars.unrepresentable(stars.Star("a", "fine")) is None
 
+    @pytest.mark.parametrize("sep", ["\x0b", "\x0c", "\x1c", "\x85", "\u2028", "\u2029"])
+    def test_a_break_that_splitlines_honours_is_unrepresentable(self, sep):
+        assert stars.unrepresentable(stars.Star("a", f"x{sep}y")) is not None
+        assert stars.unrepresentable(stars.Star(f"a{sep}b", "x")) is not None
+
     def test_drop_returns_the_star_and_writes_nothing_when_absent(self, tmp_path):
         d = _v2_thread(tmp_path)
         assert stars.drop(d, "a") is None
