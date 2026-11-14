@@ -510,6 +510,56 @@ def retire_artifact(workspace_dir: str, thread_name: str, artifact_id: str,
     return _threads.retire_artifact(workspace_dir, thread_name, artifact_id, state)
 
 
+@mcp.tool()
+def star_artifact(workspace_dir: str, thread_name: str, artifact_id: str,
+                  when: str) -> str:
+    """Star an artifact, recording when it should be read.
+
+    A star marks an artifact you need to know when to read. Its index line and
+    trigger load on every resume under Starred artifacts, and its body is still
+    read only on demand.
+
+    Starring and unstarring are the user's call: you propose it, typically when
+    trimming memory or at save. The one exception is migrating a schema 1
+    thread, where the migration guide has you star on your own judgement.
+
+    Starring an artifact that is already starred replaces its trigger.
+
+    Returns `{"id": ...}`. A refusal returns `{"error": CODE, ...}` and writes
+    nothing: `WHEN_EMPTY`, `WHEN_HAS_LINE_BREAK`, `WHEN_TOO_LONG` with `detail`
+    the limit, `NO_SUCH_ENTRY` with `detail` the id (it is not a current
+    artifact), or `UNREPRESENTABLE` with `detail` the field that cannot be
+    stored.
+
+    Args:
+        workspace_dir: The tracked workspace path from session context.
+        thread_name: Name of the thread (kebab-case).
+        artifact_id: The id from the index line.
+        when: One sentence on one line saying when to read the artifact, such
+            as "the user asks about formatting or tone". Refused past 200
+            characters.
+    """
+    return _threads.star_artifact(workspace_dir, thread_name, artifact_id, when)
+
+
+@mcp.tool()
+def unstar_artifact(workspace_dir: str, thread_name: str, artifact_id: str) -> str:
+    """Remove an artifact's star.
+
+    Works on a star whose artifact is retired or missing, which resume shows as
+    `(not found)`.
+
+    Returns `{"id": ...}`. A refusal returns `{"error": "NOT_STARRED", "detail":
+    the id}` and writes nothing.
+
+    Args:
+        workspace_dir: The tracked workspace path from session context.
+        thread_name: Name of the thread (kebab-case).
+        artifact_id: The id of the starred artifact.
+    """
+    return _threads.unstar_artifact(workspace_dir, thread_name, artifact_id)
+
+
 
 @mcp.tool()
 def save_session(workspace_dir: str, thread_name: str, slug: str, summary: str,

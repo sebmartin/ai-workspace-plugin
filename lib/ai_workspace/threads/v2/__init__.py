@@ -14,6 +14,8 @@ from ai_workspace.threads.v2.ops import (
     save_session,
     set_about,
     set_state,
+    star_artifact,
+    unstar_artifact,
 )
 from ai_workspace.threads.v2.thread import create, resume
 
@@ -31,4 +33,6 @@ __all__ = [
     "save_session",
     "set_about",
     "set_state",
+    "star_artifact",
+    "unstar_artifact",
 ]

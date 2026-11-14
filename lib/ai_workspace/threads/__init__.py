@@ -49,6 +49,8 @@ __all__ = [
     "save_session",
     "set_about",
     "set_todo_state",
+    "star_artifact",
+    "unstar_artifact",
     "validate_thread_name",
 ]
 
@@ -253,6 +255,23 @@ def retire_artifact(workspace_dir: str, thread_name: str, artifact_id: str,
     if isinstance(call, str):
         return call
     return call.fn(call.thread, artifact_id, state)
+
+
+def star_artifact(workspace_dir: str, thread_name: str, artifact_id: str,
+                  when: str) -> str:
+    """Star an artifact so resume lists it with a trigger for reading it."""
+    call = _for(workspace_dir, thread_name, "star_artifact")
+    if isinstance(call, str):
+        return call
+    return call.fn(call.thread, artifact_id, when)
+
+
+def unstar_artifact(workspace_dir: str, thread_name: str, artifact_id: str) -> str:
+    """Remove an artifact's star."""
+    call = _for(workspace_dir, thread_name, "unstar_artifact")
+    if isinstance(call, str):
+        return call
+    return call.fn(call.thread, artifact_id)
 
 
 def save_session(workspace_dir: str, thread_name: str, slug: str, summary: str,

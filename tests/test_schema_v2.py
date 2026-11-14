@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
 sys.path.insert(0, str(Path(__file__).parent.parent / "skills" / "threads" / "scripts"))
 
 from ai_workspace.threads import marker, schema
-from ai_workspace.threads.v2 import ids, render, session
+from ai_workspace.threads.v2 import ids, render, session, stars
 from ai_workspace.threads.v2 import index as idx
 from ai_workspace.threads.v2 import thread as v2
 from ai_workspace.threads.v2 import todos as todos_mod
@@ -827,3 +827,49 @@ class TestCompose:
 def test_schema_1_is_readable_but_has_no_create():
     from ai_workspace.threads import v1
     assert "create" not in v1.__all__ and not hasattr(v1, "create")
+
+
+class TestStarFile:
+    def test_missing_file_is_nothing_starred(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        assert stars.read(d) == [] and not (d / "artifacts-starred.md").exists()
+
+    def test_round_trip(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        s = stars.Star("20260801-guide-style", "the user asks about formatting or tone")
+        stars.write(d, [s])
+        assert (d / "artifacts-starred.md").read_text() == \
+            "- 20260801-guide-style -- when: the user asks about formatting or tone\n"
+        assert stars.read(d) == [s]
+
+    def test_a_line_that_is_not_a_star_is_skipped(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        (d / "artifacts-starred.md").write_text(
+            "- 20260101-a -- when: x\nhand-written note\n")
+        assert stars.read(d) == [stars.Star("20260101-a", "x")]
+
+    def test_an_empty_list_leaves_an_empty_file(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        stars.write(d, [])
+        assert (d / "artifacts-starred.md").read_text() == ""
+
+    def test_unrepresentable_names_the_field(self):
+        assert stars.unrepresentable(stars.Star("a", "x\ny")) is not None
+        assert stars.unrepresentable(stars.Star("a b", "x")) is not None
+        assert stars.unrepresentable(stars.Star("a", "fine")) is None
+
+    def test_drop_returns_the_star_and_writes_nothing_when_absent(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        assert stars.drop(d, "a") is None
+        assert not (d / "artifacts-starred.md").exists()
+        stars.write(d, [stars.Star("a", "x"), stars.Star("b", "y")])
+        assert stars.drop(d, "a") == stars.Star("a", "x")
+        assert stars.read(d) == [stars.Star("b", "y")]
+
+    def test_rekey_moves_in_place_and_ignores_an_unstarred_id(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        stars.write(d, [stars.Star("a", "x"), stars.Star("b", "y")])
+        stars.rekey(d, "a", "c")
+        assert stars.read(d) == [stars.Star("c", "x"), stars.Star("b", "y")]
+        stars.rekey(d, "zzz", "q")
+        assert stars.read(d) == [stars.Star("c", "x"), stars.Star("b", "y")]

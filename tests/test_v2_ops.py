@@ -1,5 +1,6 @@
 """Schema 2 write tools: one line per call, always re-rendered, refused on schema 1."""
 
+import inspect
 import json
 import re
 import sys
@@ -13,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "skills" / "threads" / "sc
 from ai_workspace.text import split_frontmatter
 from ai_workspace.threads import marker
 from ai_workspace.threads.v2 import index as idx
+from ai_workspace.threads.v2 import stars
 from mcp_server import (
     add_todo,
     index_directory,
@@ -25,6 +27,8 @@ from mcp_server import (
     save_session,
     set_about,
     set_todo_state,
+    star_artifact,
+    unstar_artifact,
 )
 
 
@@ -88,6 +92,8 @@ class TestRefusalOnSchema1:
             retire_artifact(ws, "old", "i", "stale"),
             save_session(ws, "old", "s", "s", "k", "# S\n", ["a"], []),
             set_about(ws, "old", "x"),
+            star_artifact(ws, "old", "i", "x"),
+            unstar_artifact(ws, "old", "i"),
         ]
         assert all("NEEDS_MIGRATION" in c for c in calls), calls
 
@@ -1638,3 +1644,68 @@ class TestAbout:
         set_about(str(tmp_path), "t", "New.")
         text = (d / "README.md").read_text()
         assert "## Todos" in text and "## Next steps" not in text
+
+
+class TestStars:
+    def _starrable(self, tmp_path, name="20260101-notes.md"):
+        d = _thread(tmp_path)
+        index_file(str(tmp_path), "t", TestArtifacts()._artifact(d, name))
+        return d, str(tmp_path), _only_id(d, "artifacts")
+
+    def test_star_a_current_artifact(self, tmp_path):
+        d, ws, aid = self._starrable(tmp_path)
+        before = (d / "artifacts-index.md").read_bytes()
+        assert _reply(star_artifact(ws, "t", aid, "the user asks about tone")) == {"id": aid}
+        assert stars.read(d) == [stars.Star(aid, "the user asks about tone")]
+        assert (d / "artifacts-index.md").read_bytes() == before
+
+    def test_restarring_replaces_the_trigger_in_place(self, tmp_path):
+        d, ws, a = self._starrable(tmp_path)
+        index_file(ws, "t", TestArtifacts()._artifact(d, "20260102-other.md"))
+        b = _only_id(d, "artifacts")
+        star_artifact(ws, "t", a, "old a")
+        star_artifact(ws, "t", b, "old b")
+        star_artifact(ws, "t", a, "new")
+        assert stars.read(d) == [stars.Star(a, "new"), stars.Star(b, "old b")]
+
+    @pytest.mark.parametrize("when, code", [
+        ("", "WHEN_EMPTY"), ("   ", "WHEN_EMPTY"),
+        ("line one\nline two", "WHEN_HAS_LINE_BREAK"), ("x" * 201, "WHEN_TOO_LONG")])
+    def test_a_bad_trigger_is_refused_and_writes_nothing(self, tmp_path, when, code):
+        d, ws, aid = self._starrable(tmp_path)
+        reply = _reply(star_artifact(ws, "t", aid, when))
+        assert reply["error"] == code
+        if code == "WHEN_TOO_LONG":
+            assert reply["detail"] == "200"
+        assert not (d / "artifacts-starred.md").exists()
+
+    def test_an_unknown_id_is_refused(self, tmp_path):
+        d, ws, _aid = self._starrable(tmp_path)
+        assert _reply(star_artifact(ws, "t", "20260101-nope", "x")) == \
+            {"error": "NO_SUCH_ENTRY", "detail": "20260101-nope"}
+        assert not (d / "artifacts-starred.md").exists()
+
+    def test_a_retired_id_is_refused(self, tmp_path):
+        _d, ws, aid = self._starrable(tmp_path)
+        retire_artifact(ws, "t", aid, "stale")
+        assert _reply(star_artifact(ws, "t", aid, "x"))["error"] == "NO_SUCH_ENTRY"
+
+    def test_when_is_required(self):
+        assert inspect.signature(star_artifact).parameters["when"].default \
+            is inspect.Parameter.empty
+
+    def test_unstar_removes_the_line(self, tmp_path):
+        d, ws, aid = self._starrable(tmp_path)
+        star_artifact(ws, "t", aid, "x")
+        assert _reply(unstar_artifact(ws, "t", aid)) == {"id": aid} and stars.read(d) == []
+
+    def test_unstar_refuses_an_id_with_no_star(self, tmp_path):
+        _d, ws, aid = self._starrable(tmp_path)
+        assert _reply(unstar_artifact(ws, "t", aid)) == {"error": "NOT_STARRED", "detail": aid}
+
+    def test_unstar_clears_an_orphan(self, tmp_path):
+        d, ws, _aid = self._starrable(tmp_path)
+        stars.write(d, [stars.Star("20260415-notes-old-plan", "x")])
+        assert _reply(unstar_artifact(ws, "t", "20260415-notes-old-plan"))["id"] \
+            == "20260415-notes-old-plan"
+        assert stars.read(d) == []
