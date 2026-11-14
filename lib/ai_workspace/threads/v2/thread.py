@@ -94,6 +94,9 @@ def create(thread, about: str = "") -> str | dict:
     return f"Created thread '{thread.name}' at {thread.dir}"
 
 
+_OLD_ABOUT_PLACEHOLDER = "What this thread is about, and what it is for."
+
+
 def resume(thread) -> str:
     """The composed payload, built from the indexes rather than the README."""
     return compose(thread.dir, thread.name)
@@ -106,8 +109,12 @@ def about(thread) -> str:
     except FileNotFoundError:
         return ""
     found = _section(text, "About")
-    placeholder = _section(get_template_path("v2/thread-template.md").read_text(), "About")
-    return "" if found == placeholder else found
+    placeholders = (
+        _section(get_template_path("v2/thread-template.md").read_text(), "About"),
+        # The template's text before set_about existed; threads made then still carry it.
+        _OLD_ABOUT_PLACEHOLDER,
+    )
+    return "" if found in placeholders else found
 
 
 def compose(thread_dir: Path, thread_name: str) -> str:

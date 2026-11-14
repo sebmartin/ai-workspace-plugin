@@ -61,6 +61,14 @@ def test_a_note_after_a_dash_keeps_its_commas(dash):
     assert (b.name, b.note) == ("b", "")
 
 
+@pytest.mark.parametrize("dash", ["\u2014", "\u2013"])
+def test_an_unspaced_em_or_en_dash_starts_a_note(dash):
+    line = f"**Related Threads**: [a](../a/README.md){dash}the thread this came out of, and more"
+    assert parse_links(H.format(lines=line)) == [
+        Link("Related", "a", "a", "the thread this came out of, and more"),
+    ]
+
+
 def test_text_after_a_separator_is_an_unresolved_name():
     line = "**Related Threads**: [a](../a/README.md), bare-name · other"
     assert parse_links(H.format(lines=line)) == [
@@ -116,6 +124,16 @@ def test_v2_placeholder_about_counts_as_none(tmp_path):
     assert not isinstance(out, dict), out
     assert (tmp_path / "threads" / "fresh" / "README.md").exists()
     assert about_of(tmp_path, "fresh") == ""
+
+
+def test_v2_pre_set_about_placeholder_counts_as_none(tmp_path):
+    (tmp_path / "threads").mkdir()
+    assert not isinstance(threads.create(str(tmp_path), "old"), dict)
+    readme = tmp_path / "threads" / "old" / "README.md"
+    text = readme.read_text()
+    current = text.split("## About\n\n")[1].split("\n")[0]
+    readme.write_text(text.replace(current, "What this thread is about, and what it is for."))
+    assert about_of(tmp_path, "old") == ""
 
 
 def test_v2_links_come_from_the_readme_header(tmp_path):

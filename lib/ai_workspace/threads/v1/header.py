@@ -14,7 +14,7 @@ _ROLES = {
     "**Related Threads**": "Related",
 }
 _LINK = re.compile(r"\[([^\]]*)\]\(\.\./([^/)\s]+)/README\.md\)")
-_NOTE = re.compile(r"[ \t]*[\u2014\u2013-]\s+")
+_NOTE = re.compile(r"[ \t]*(?:[\u2014\u2013][ \t]*|-[ \t]+)")
 
 # Stop at the next heading or at a horizontal rule: the last section would
 # otherwise swallow the footer that follows it.
