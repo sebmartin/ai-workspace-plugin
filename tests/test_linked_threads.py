@@ -132,3 +132,122 @@ def test_about_and_links_tolerate_undecodable_bytes(tmp_path):
     _v1(tmp_path, "t", b"# t\n\n**Related Threads**: [a](../a/README.md)\n\n## About\n\nPurpose \xff here.\n")
     assert "Purpose" in about_of(tmp_path, "t")
     assert [x.name for x in links_of(tmp_path, "t")] == ["a"]
+
+
+# The linked-threads section of resume.
+
+def _set_header(ws, name, parent="None", child="None", related="None"):
+    readme = ws / "threads" / name / "README.md"
+    text = readme.read_text()
+    text = text.replace("**Parent Thread**: None", f"**Parent Thread**: {parent}")
+    text = text.replace("**Child Threads**: None", f"**Child Threads**: {child}")
+    text = text.replace("**Related Threads**: None", f"**Related Threads**: {related}")
+    readme.write_text(text)
+
+
+def _v2(ws, name, about=""):
+    (ws / "threads").mkdir(exist_ok=True)
+    out = threads.create(str(ws), name, about)
+    assert not isinstance(out, dict) and not out.startswith("Error"), out
+
+
+@pytest.fixture
+def home(tmp_path):
+    ws = tmp_path
+    _v2(ws, "parent-project", "x")
+    words = " ".join(f"w{i}" for i in range(1, 61))
+    p = ws / "threads" / "parent-project" / "README.md"
+    text = p.read_text()
+    start = text.index("## About")
+    p.write_text(text[:start] + f"## About\n\n{words}\n\nSecond paragraph.\n")
+    _v1(ws, "old-one", "# old\n\n## About\n\nOld thread purpose.\n")
+    (ws / "threads" / "old-one" / "schema-version").write_text("1")
+    _v1(ws, "bare", "# bare\n\n## Quick Resume\n\nstuff\n")
+    (ws / "threads" / "bare" / "schema-version").write_text("1")
+    _v2(ws, "some-topic")
+    (ws / "archive" / "shelved").mkdir(parents=True)
+    _v1(ws, "odd", "# odd\n\n## About\n\nhidden\n")
+    (ws / "threads" / "odd" / "schema-version").write_text("99")
+    (ws / "threads" / "empty-dir").mkdir()
+    _v2(ws, "fresh", "Short purpose.")
+    _v2(ws, "home", "Home.")
+    _set_header(
+        ws, "home",
+        parent="[Parent Project](../parent-project/README.md)",
+        child="[old-one](../old-one/README.md) · [bare](../bare/README.md)",
+        related=(
+            "[some-topic](../some-topic/README.md) — the thread this tool came out of, "
+            "[gone](../gone/README.md), [shelved](../shelved/README.md), typed-name, "
+            "[odd](../odd/README.md), [empty-dir](../empty-dir/README.md), "
+            "[fresh](../fresh/README.md), [parent-project](../parent-project/README.md)"
+        ),
+    )
+    return ws
+
+
+def test_every_kind_of_link(home):
+    out = threads.resume(str(home), "home")
+    assert "## Linked threads (10)\n\nBefore saying you don't know something" in out
+    for line in [
+        "- Parent: [parent-project](../parent-project/README.md) — " + " ".join(f"w{i}" for i in range(1, 51)) + "…",
+        "- Child: [old-one](../old-one/README.md) — Old thread purpose.",
+        "- Child: [bare](../bare/README.md) — (no About)",
+        "- Related: [some-topic](../some-topic/README.md) (note: the thread this tool came out of) — (no About)",
+        "- Related: [gone](../gone/README.md) — (not found)",
+        "- Related: [shelved](../shelved/README.md) — (archived)",
+        "- Related: typed-name",
+        "- Related: [odd](../odd/README.md) — (unreadable schema)",
+        "- Related: [empty-dir](../empty-dir/README.md) — (not found)",
+        "- Related: [fresh](../fresh/README.md) — Short purpose.",
+    ]:
+        assert line + "\n" in out, line
+
+
+def test_a_thread_named_twice_is_shown_once_under_its_first_role(home):
+    out = threads.resume(str(home), "home")
+    assert "- Related: [parent-project]" not in out
+    assert out.count("(../parent-project/README.md) —") == 1
+
+
+def test_the_section_is_last_and_the_header_keeps_its_links(home):
+    out = threads.resume(str(home), "home")
+    assert out.startswith("Workspace:") and out.rstrip().endswith("Short purpose.")
+    assert "**Related Threads**: [some-topic](../some-topic/README.md)" in out
+
+
+def test_no_links_means_no_section_and_no_cue(tmp_path):
+    _v2(tmp_path, "solo", "Alone.")
+    out = threads.resume(str(tmp_path), "solo")
+    assert "Linked threads" not in out and "Before saying you don't know" not in out
+
+
+def test_a_schema_1_thread_gets_the_section_too(tmp_path):
+    _v2(tmp_path, "fresh", "Short purpose.")
+    readme_text = "# old\n\n**Related Threads**: [fresh](../fresh/README.md)\n\n## About\n\nx\n"
+    _v1(tmp_path, "old", readme_text)
+    (tmp_path / "threads" / "old" / "schema-version").write_text("1")
+    out = threads.resume(str(tmp_path), "old")
+    assert readme_text in out and "## Linked threads (1)" in out
+
+
+def test_refused_links_still_resume_and_say_so(tmp_path, monkeypatch):
+    from ai_workspace.threads import v1
+
+    readme_text = "# old\n\n**Related Threads**: [fresh](../fresh/README.md)\n\n## About\n\nx\n"
+    _v1(tmp_path, "old", readme_text)
+    (tmp_path / "threads" / "old" / "schema-version").write_text("1")
+    monkeypatch.delattr(v1, "links")
+    out = threads.resume(str(tmp_path), "old")
+    assert readme_text in out and "## Linked threads" in out and "NEEDS_MIGRATION" in out
+
+
+def test_resume_writes_nothing(home):
+    ws = home
+    before = {p: p.read_bytes() for p in Path(ws).rglob("*") if p.is_file()}
+    threads.resume(str(ws), "home")
+    assert before == {p: p.read_bytes() for p in Path(ws).rglob("*") if p.is_file()}
+
+
+def test_cut_about():
+    assert threads._cut_about("one\ntwo\n\nlater") == "one two"
+    assert threads._cut_about(" ".join(["w"] * 60)) == " ".join(["w"] * 50) + "…"

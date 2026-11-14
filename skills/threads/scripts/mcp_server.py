@@ -63,6 +63,11 @@ def resume_thread(workspace_dir: str, thread_name: str) -> str:
     `summary:` and `keywords:` frontmatter to search. A `## Thread size`
     heading appears only when the thread has grown expensive to open.
 
+    A `## Linked threads` section ends the payload when the header links other
+    threads, giving each one's About (or why there is none: archived, not
+    found, or a schema this plugin cannot read). It applies to schema 1 threads
+    too.
+
     A thread this plugin cannot read returns `{"error": CODE, "thread": ...,
     "schema": <n>, "reads": [<low>, <high>]}`: `SCHEMA_TOO_NEW` (upgrade the
     plugin), `SCHEMA_RETIRED` (migrate it with a version that still reads it),
