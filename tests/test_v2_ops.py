@@ -2057,3 +2057,77 @@ class TestNesting:
         top = idx.read(d, "todos")
         assert [e.id for e in top] == [p + "x", p + "g"]
         assert [k.id for k in top[1].children or []] == [p + "c1", p + "c2"]
+
+
+class TestNestingParking:
+    P = "20260101-"
+
+    def _write(self, d, entries, files):
+        idx.write(d, "todos", entries)
+        for slug in files:
+            (d / "todos" / f"{slug}.md").write_text("---\nstate: active\n---\n")
+
+    def _states(self, d):
+        return {e.id.removeprefix(self.P): e.state for e in idx.flatten(idx.read(d, "todos"))}
+
+    def _file_state(self, d, slug):
+        meta, _body = split_frontmatter((d / "todos" / f"{slug}.md").read_text())
+        return meta["state"]
+
+    def _set(self, tmp_path, name, state):
+        return _reply(set_todo_state(str(tmp_path), "t", self.P + name, state))
+
+    def test_parking_a_goal_parks_its_open_children(self, tmp_path):
+        d = _thread(tmp_path)
+        self._write(d, [_e("g", children=[_e("c1"), _e("c2", "started"), _e("c3", "parked")])],
+                    ["g", "c1", "c2", "c3"])
+        out = self._set(tmp_path, "g", "parked")
+        assert out == {"id": self.P + "g"}
+        assert self._states(d) == {"g": "parked", "c1": "parked", "c2": "parked", "c3": "parked"}
+        assert self._file_state(d, "c1") == "parked"
+        assert self._file_state(d, "c2") == "parked"
+
+    def test_unparking_a_goal_unparks_every_child_and_goes_to_the_end(self, tmp_path):
+        d = _thread(tmp_path)
+        self._write(d, [_e("g", "parked", [_e("c1", "parked"), _e("c2", "parked")]), _e("x")],
+                    ["g", "c1", "c2", "x"])
+        self._set(tmp_path, "g", "active")
+        assert self._states(d) == {"x": "active", "g": "active", "c1": "active", "c2": "active"}
+        assert [e.id for e in idx.read(d, "todos")] == [self.P + "x", self.P + "g"]
+        assert self._file_state(d, "c2") == "active"
+
+    def test_parking_a_child_parks_only_that_child(self, tmp_path):
+        d = _thread(tmp_path)
+        self._write(d, [_e("g", children=[_e("c1"), _e("c2")])], ["g", "c1", "c2"])
+        self._set(tmp_path, "c1", "parked")
+        assert self._states(d) == {"g": "active", "c1": "parked", "c2": "active"}
+
+    def test_unparking_a_child_sends_it_to_the_end_of_its_goal(self, tmp_path):
+        d = _thread(tmp_path)
+        self._write(d, [_e("g", children=[_e("c1", "parked"), _e("c2"), _e("c3")])],
+                    ["g", "c1", "c2", "c3"])
+        self._set(tmp_path, "c1", "active")
+        kids = idx.read(d, "todos")[0].children or []
+        assert [k.id for k in kids] == [self.P + n for n in ("c2", "c3", "c1")]
+
+    def test_unparking_a_child_of_a_parked_goal_brings_the_goal_back(self, tmp_path):
+        d = _thread(tmp_path)
+        self._write(d, [_e("g", "parked", [_e("c", "parked")]), _e("x")], ["g", "c", "x"])
+        self._set(tmp_path, "c", "active")
+        assert self._states(d) == {"g": "active", "c": "active", "x": "active"}
+        assert [e.id for e in idx.read(d, "todos")] == [self.P + "g", self.P + "x"]
+        assert self._file_state(d, "g") == "active"
+
+    def test_a_cascaded_file_that_cannot_be_updated_is_named(self, tmp_path):
+        d = _thread(tmp_path)
+        self._write(d, [_e("g", children=[_e("c1"), _e("c2")])], ["g", "c1", "c2"])
+        (d / "todos" / "c1.md").write_text("---\ntitle: no state here\n---\n")
+        out = self._set(tmp_path, "g", "parked")
+        assert out["files_unchanged"] == ["./todos/c1.md"]
+        assert "file_unchanged" not in out
+        assert self._file_state(d, "c2") == "parked"
+
+    def test_a_state_change_on_a_child_names_its_goal(self, tmp_path):
+        d = _thread(tmp_path)
+        self._write(d, [_e("g", children=[_e("c1")])], ["g", "c1"])
+        assert self._set(tmp_path, "c1", "parked")["goal"] == self.P + "g"

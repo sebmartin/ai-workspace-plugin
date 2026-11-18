@@ -231,6 +231,45 @@ def raise_goal(entries: list[Entry], goal: Entry) -> list[Entry]:
     return []
 
 
+def apply_state(entries: list[Entry], todo_id: str, state: str) -> list[Entry]:
+    """Set a todo's state with every move and cascade it implies.
+
+    Parking a goal parks its children, and unparking it unparks them all and
+    sends the goal to the end. A child parks and unparks alone, and unparking
+    one under a parked goal brings the goal back, in its place, so the child is
+    visible. Returns the named todo first, then each other entry whose state
+    changed, so the caller can sync their files. An unknown id returns [].
+    """
+    found = locate(entries, todo_id)
+    if found is None:
+        return []
+    entry = found.entry
+    was, entry.state = entry.state, state
+    changed = [entry]
+    if state == STARTED:
+        changed += start(entries, todo_id)
+    if was == PARKED and state != PARKED:
+        if is_goal(entry):
+            for child in entry.children or []:
+                if child.state == PARKED:
+                    child.state = ACTIVE
+                    changed.append(child)
+            if state == ACTIVE:
+                to_end(entries, todo_id)
+        else:
+            if state == ACTIVE:
+                to_end(found.siblings, todo_id)
+            if found.goal is not None and found.goal.state == PARKED:
+                found.goal.state = ACTIVE
+                changed.append(found.goal)
+    elif state == PARKED and is_goal(entry):
+        for child in entry.children or []:
+            if child.state != PARKED:
+                child.state = PARKED
+                changed.append(child)
+    return changed
+
+
 def to_end(entries: list[Entry], todo_id: str) -> None:
     """Move a todo to the end of its own list. An unknown id does nothing."""
     found = locate(entries, todo_id)

@@ -459,7 +459,10 @@ def set_state(thread, kind: str, entry_id: str, state: str) -> str:
     has begun, and puts it at the top of its list (and a child's goal at the
     top of the list, made active if it was parked). `active` after `parked`
     means it is wanted again but behind whatever became current while it was
-    away. Starting one todo leaves every other started todo as it is.
+    away. Starting one todo leaves every other started todo as it is. Parking
+    a goal parks its open children, and unparking one unparks every parked
+    child. A child parks and unparks alone, and unparking one under a parked
+    goal makes the goal active again, in its place.
     """
     if state not in idx.IN_FORCE[kind]:
         return json.dumps({"error": "STATE_UNKNOWN", "detail": state,
@@ -477,23 +480,22 @@ def set_state(thread, kind: str, entry_id: str, state: str) -> str:
     if entry is None:
         return json.dumps({"error": "NO_SUCH_ENTRY", "detail": entry_id})
     before = copy.deepcopy(entries)
-    was, entry.state = entry.state, state
-    moved: list = []
+    changed = [entry]
     if kind == "todos":
-        if state == todos_mod.STARTED:
-            moved = todos_mod.start(entries, entry_id)
-        elif state == todos_mod.ACTIVE and was == todos_mod.PARKED:
-            todos_mod.to_end(entries, entry_id)
+        changed = todos_mod.apply_state(entries, entry_id, state)
+    else:
+        entry.state = state
     idx.write(thread.dir, kind, entries)
     stale = _sync_file_state(thread.dir, entry, state)
-    for changed in moved:
-        _sync_file_state(thread.dir, changed, changed.state)
+    others = [link for c in changed[1:] if (link := _sync_file_state(thread.dir, c, c.state or state))]
     render.render(thread.dir)
     reply: dict = {"id": entry_id}
     if goal is not None:
         reply["goal"] = goal.id
     if stale:
         reply["file_unchanged"] = stale
+    if others:
+        reply["files_unchanged"] = others
     if kind == "todos" and (waiting := todos_mod.just_crowded(before, entries)):
         reply["active"] = waiting
     return json.dumps(reply)

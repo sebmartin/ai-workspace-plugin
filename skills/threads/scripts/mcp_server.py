@@ -307,15 +307,22 @@ def set_todo_state(workspace_dir: str, thread_name: str, todo_id: str, state: st
     todo. Unparking sends it to the end of its list, because parked meant for
     later.
 
+    Parking a goal parks its open children too. Unparking a goal unparks every
+    parked child and sends the goal to the end of the list. A child moves
+    alone: parking it leaves its goal and siblings as they are, and unparking
+    it sends it to the end of its goal's children, and makes its goal active
+    if the goal was parked, so the child is visible.
+
     When the todo's link names a file, its `state:` line is rewritten to
     match, so a parked todo found by grep does not still read `state: active`.
 
     Returns `{"id": ...}`, with `goal` carrying the goal's id when the todo is
     a child, `active` carrying the count when unparking is
     what takes the list past five, and `file_unchanged` naming the todo's file
-    when its `state:` line could not be found. The index and the file then
-    disagree, and the file is the copy a reader finds by grep. Nothing else
-    reports it, so say so and name the file.
+    when its `state:` line could not be found, and `files_unchanged` listing
+    the same for any other todo the change cascaded to, only when there are
+    some. The index and the file then disagree, and the file is the copy a
+    reader finds by grep. Nothing else reports it, so say so and name the files.
 
     A refusal returns
     `{"error": "STATE_UNKNOWN", "allowed": [...]}` or
@@ -448,9 +455,10 @@ def retire_decision(workspace_dir: str, thread_name: str, decision_id: str,
     """Retire a decision, updating the index and the file's own `state:` line.
 
     Returns `{"id": ...}`, plus `file_unchanged` naming the decision's file
-    when its `state:` line could not be found. The index and the file then
-    disagree, and the file is the copy a reader finds by grep. Nothing else
-    reports it, so say so and name the file.
+    when its `state:` line could not be found, and `files_unchanged` listing
+    the same for any other todo the change cascaded to, only when there are
+    some. The index and the file then disagree, and the file is the copy a
+    reader finds by grep. Nothing else reports it, so say so and name the files.
 
     A decision written before the field was named `state:` is the common
     cause, and the fix is to rename that one line in the file.
