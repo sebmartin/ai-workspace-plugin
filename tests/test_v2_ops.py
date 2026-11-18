@@ -2058,6 +2058,61 @@ class TestNesting:
         assert [e.id for e in top] == [p + "x", p + "g"]
         assert [k.id for k in top[1].children or []] == [p + "c1", p + "c2"]
 
+    def _retire_setup(self, tmp_path, entries, slugs):
+        d = _thread(tmp_path)
+        idx.write(d, "todos", entries)
+        for slug in slugs:
+            (d / "todos" / f"{slug}.md").write_text("---\nstate: active\n---\n")
+        return d
+
+    def test_retiring_a_goal_with_children_is_refused(self, tmp_path):
+        d = self._retire_setup(
+            tmp_path, [_e("g", children=[_e("c1"), _e("c2")])], ["g", "c1", "c2"])
+        before = _snapshot(d)
+        out = _reply(retire_todo(str(tmp_path), "t", "20260101-g", "done"))
+        assert out == {"error": "GOAL_HAS_OPEN_CHILDREN",
+                       "detail": "20260101-c1, 20260101-c2"}
+        assert _snapshot(d) == before
+
+    def test_retiring_a_child_records_its_goal(self, tmp_path):
+        d = self._retire_setup(
+            tmp_path, [_e("g", children=[_e("c1"), _e("c2")])], ["g", "c1", "c2"])
+        out = _reply(retire_todo(str(tmp_path), "t", "20260101-c1", "done"))
+        assert out == {"id": "20260101-c1", "goal": {"id": "20260101-g", "open": 1}}
+        gone = idx.read(d, "todos", retired=True)
+        assert [e.id for e in gone] == ["20260101-c1"]
+        assert gone[0].state == "done" and gone[0].parent == "20260101-g"
+        raw = json.loads((d / "todos-retired.json").read_text())
+        assert raw["entries"][0]["parent"] == "20260101-g"
+        assert [c.id for c in idx.read(d, "todos")[0].children or []] == ["20260101-c2"]
+
+    def test_the_last_child_retired_leaves_an_empty_goal(self, tmp_path):
+        d = self._retire_setup(tmp_path, [_e("g", children=[_e("c")])], ["g", "c"])
+        out = _reply(retire_todo(str(tmp_path), "t", "20260101-c", "done"))
+        assert out["goal"] == {"id": "20260101-g", "open": 0}
+        assert idx.read(d, "todos")[0].children == []
+        raw = json.loads((d / "todos-index.json").read_text())
+        assert raw["entries"][0]["children"] == []
+        line = "- 20260101-g:active [G](./todos/g.md)\n"
+        readme = (d / "README.md").read_text()
+        assert line in readme
+        assert not readme.split(line, 1)[1].startswith(" ")
+
+    def test_an_empty_goal_can_be_retired(self, tmp_path):
+        d = self._retire_setup(tmp_path, [_e("g", children=[_e("c")])], ["g", "c"])
+        retire_todo(str(tmp_path), "t", "20260101-c", "done")
+        out = _reply(retire_todo(str(tmp_path), "t", "20260101-g", "done"))
+        assert out == {"id": "20260101-g"}
+        raw = json.loads((d / "todos-retired.json").read_text())
+        assert "20260101-g" in [e["id"] for e in raw["entries"]]
+        assert idx.read(d, "todos") == []
+
+    def test_retiring_a_child_syncs_its_file(self, tmp_path):
+        d = self._retire_setup(tmp_path, [_e("g", children=[_e("c")])], ["g", "c"])
+        retire_todo(str(tmp_path), "t", "20260101-c", "dropped")
+        meta, _body = split_frontmatter((d / "todos" / "c.md").read_text())
+        assert meta["state"] == "dropped"
+
 
 class TestNestingParking:
     P = "20260101-"

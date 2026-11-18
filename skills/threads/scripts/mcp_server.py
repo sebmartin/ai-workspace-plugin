@@ -277,13 +277,21 @@ def retire_todo(workspace_dir: str, thread_name: str, todo_id: str, state: str) 
     match, so a finished todo found by grep does not still read
     `state: active`.
 
+    Retire a child on its own: a goal that still has children is refused. A
+    retired child keeps its goal in a `parent` field, so the goal's history
+    shows what was under it.
+
     Returns `{"id": ...}`, plus `file_unchanged` naming that file when its
     `state:` line could not be found. The index and the file then disagree,
     and the file is the copy a reader finds by grep. Nothing else reports it,
-    so say so and name the file.
+    so say so and name the file. For a child it also returns
+    `"goal": {"id": ..., "open": N}`, the goal and how many children it still
+    has. At `open` 0 the goal is empty, so offer to retire it too.
 
     A refusal returns `{"error": CODE, ...}` and writes nothing:
-    `STATE_UNKNOWN` with the `allowed` states, or `NO_SUCH_ENTRY`.
+    `STATE_UNKNOWN` with the `allowed` states, `NO_SUCH_ENTRY`, or
+    `GOAL_HAS_OPEN_CHILDREN` with the open children's ids in `detail`. Retire
+    those first.
 
     Args:
         workspace_dir: The tracked workspace path from session context.

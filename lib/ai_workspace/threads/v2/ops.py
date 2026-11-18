@@ -417,17 +417,37 @@ def add_todo(thread, title: str, link: str, state: str = "active",
 
 @idx.refuses_unreadable
 def retire_todo(thread, todo_id: str, state: str) -> str:
+    if state not in idx.RETIRED["todos"]:
+        return json.dumps({"error": "STATE_UNKNOWN", "detail": state,
+                           "allowed": list(idx.RETIRED["todos"])})
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
-    entry = idx.find(idx.read(thread.dir, "todos"), todo_id)
+    entries = idx.read(thread.dir, "todos")
+    # Read before the live index is written, so a retired index that does not
+    # parse stops this before it has moved anything.
     idx.read(thread.dir, "todos", retired=True)
-    if error := idx.retire(thread.dir, "todos", todo_id, state):
-        return json.dumps(error)
-    stale = _sync_file_state(thread.dir, entry, state) if entry else ""
+    found = todos_mod.locate(entries, todo_id)
+    if found is None:
+        return json.dumps({"error": "NO_SUCH_ENTRY", "detail": todo_id})
+    entry, goal = found.entry, found.goal
+    if entry.children:
+        return json.dumps({"error": "GOAL_HAS_OPEN_CHILDREN",
+                           "detail": ", ".join(c.id for c in entry.children)})
+    found.siblings.remove(entry)
+    entry.state = state
+    if goal is not None:
+        # The retired entry keeps its goal, so the goal's history shows what
+        # was under it.
+        entry.parent = goal.id
+    idx.write(thread.dir, "todos", entries)
+    idx.add(thread.dir, "todos", entry, retired=True)
+    stale = _sync_file_state(thread.dir, entry, state)
     render.render(thread.dir)
     reply: dict = {"id": todo_id}
     if stale:
         reply["file_unchanged"] = stale
+    if goal is not None:
+        reply["goal"] = {"id": goal.id, "open": len(goal.children or [])}
     return json.dumps(reply)
 
 
