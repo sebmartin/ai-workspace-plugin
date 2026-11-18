@@ -326,7 +326,7 @@ def _full_count(newest_first, budget_chars: int) -> int:
 def _file_inside(thread_dir: Path, link: str) -> Path | None:
     """The file an index link names, only if it is a file inside this thread.
 
-    An index line can be edited by hand or copied from elsewhere, so a link
+    An index entry can be edited by hand or copied from elsewhere, so a link
     with `..` segments, or a symlink leading out, must not make resume embed
     a file that is not part of the thread.
     """

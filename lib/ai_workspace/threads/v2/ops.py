@@ -132,7 +132,7 @@ def _redate(thread_dir: Path, kind: str, entry, entries: list,
     """Give an indexed file a new date, and with it a new id.
 
     The only repair for an entry that landed on the epoch, since a filename is
-    never renamed and an index line is never hand-edited. The id changes, so
+    never renamed and an index entry is never hand-edited. The id changes, so
     the reply has to say so: ids are what order_todos and the retire tools
     take, and the caller is holding the old one.
 

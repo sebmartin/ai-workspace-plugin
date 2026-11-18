@@ -30,13 +30,12 @@ def next_id(thread_dir: Path, slug: str, today: date) -> str:
 
 
 def ensure_indexed(thread_dir: Path, session_id: str, title: str) -> None:
-    """Give this session an index line, or correct the title on the one it has.
+    """Give this session an index entry, or correct the title on the one it has.
 
     The title is the slug as the id spells it, not as it was passed, so a
     session's title agrees with its id the way a decision's and an artifact's
-    do. Passed through raw, a slug carrying `]` wrote a line the index could
-    not read back. Beyond the id's length cap the two agree on the shortened
-    spelling rather than the full slug, which is the same bargain.
+    do. Beyond the id's length cap the two agree on the shortened spelling
+    rather than the full slug, which is the same bargain.
     """
     entries = idx.read(thread_dir, "sessions")
     entry = idx.find(entries, session_id)
