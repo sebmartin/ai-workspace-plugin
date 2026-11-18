@@ -1016,3 +1016,36 @@ class TestMemoryBudget:
         before = (d / "memory.md").read_bytes()
         out = v2.compose(d, "t")
         assert (d / "memory.md").read_bytes() == before and "LAST" in out
+
+
+def _e(slug, state="active", children=None):
+    return idx.Entry(f"20260101-{slug}", state, slug.upper(), f"./todos/{slug}.md", children=children)
+
+
+class TestNesting:
+    def test_flatten_lists_each_goal_then_its_children(self):
+        assert [e.id for e in idx.flatten([_e("g", children=[_e("c1"), _e("c2")]), _e("x")])] == \
+            ["20260101-g", "20260101-c1", "20260101-c2", "20260101-x"]
+
+    def test_locate_a_top_level_todo(self):
+        entries = [_e("a"), _e("b")]
+        loc = todos_mod.locate(entries, "20260101-b")
+        assert loc is not None
+        assert loc.siblings is entries and loc.at == 1 and loc.goal is None and loc.entry.id == "20260101-b"
+
+    def test_locate_a_child(self):
+        g = _e("g", children=[_e("c")])
+        loc = todos_mod.locate([g], "20260101-c")
+        assert loc is not None
+        assert loc.siblings is g.children and loc.at == 0 and loc.goal is g
+
+    def test_locate_an_unknown_id_is_none(self):
+        assert todos_mod.locate([_e("a")], "20260101-zzz") is None
+
+    def test_a_goal_is_a_shape(self):
+        assert todos_mod.is_goal(_e("g", children=[])) and not todos_mod.is_goal(_e("a"))
+
+    def test_a_child_id_is_taken(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        idx.write(d, "todos", [_e("g", children=[_e("c")])])
+        assert "20260101-c" in idx.taken_ids(d, "todos")

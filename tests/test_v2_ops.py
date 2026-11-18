@@ -4,6 +4,7 @@ import inspect
 import json
 import re
 import sys
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "skills" / "threads" / "sc
 
 from ai_workspace.text import split_frontmatter
 from ai_workspace.threads import marker
+from ai_workspace.threads.v2 import ids as ids_mod
 from ai_workspace.threads.v2 import index as idx
 from mcp_server import (
     add_todo,
@@ -107,6 +109,13 @@ class TestRefusalOnSchema1:
 
 
 class TestTodos:
+    def test_a_new_todo_never_takes_a_child_s_id(self, tmp_path):
+        d = _thread(tmp_path)
+        clash = ids_mod.make_id(date.today(), "New")
+        idx.write(d, "todos", [idx.Entry("20260101-g", "active", "G", "./s.md",
+                  children=[idx.Entry(clash, "active", "New", "./s.md")])])
+        assert _reply(add_todo(str(tmp_path), "t", "New", "./s.md"))["id"] != clash
+
     def test_add_requires_a_title(self, tmp_path):
         """Stripped to nothing, it renders an empty link label."""
         d = _thread(tmp_path)

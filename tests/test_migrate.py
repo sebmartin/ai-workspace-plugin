@@ -83,6 +83,31 @@ class TestSafetyCheck:
 
 
 class TestAudit:
+    def test_a_child_todo_with_nothing_behind_it_is_dangling(self, tmp_path):
+        v1 = _v1(tmp_path)
+        conv = _converted_from(v1, tmp_path)
+        idx.write(conv, "todos", [idx.Entry("20260101-g", "active", "G", "https://x.test/g",
+                  children=[idx.Entry("20260101-c", "active", "C", "./todos/nope.md")])])
+        assert json.loads(migrate.audit(v1, conv))["dangling"]["todos"] == ["./todos/nope.md"]
+
+    def test_the_migration_guide_s_calls_produce_json_indexes_the_audit_reads(self, tmp_path):
+        from mcp_server import add_todo, audit_migration, index_directory, index_file, star_artifact
+        v1 = _v1(tmp_path)
+        conv = _converted_from(v1, tmp_path)
+        ws = str(tmp_path)
+        (conv / "decisions" / "20260202-choice.md").write_text("---\nstate: locked\nsummary: Chose x.\n---\n")
+        (conv / "artifacts" / "20260303-notes.md").write_text("x")
+        (conv / "todos").mkdir()
+        (conv / "todos" / "20260101-a.md").write_text("---\nstate: active\n---\n")
+        assert json.loads(index_directory(ws, "t-v2", "./sessions")) == {}
+        assert json.loads(index_directory(ws, "t-v2", "./decisions")) == {}
+        aid = json.loads(index_file(ws, "t-v2", "./artifacts/20260303-notes.md", "Notes."))["id"]
+        assert json.loads(star_artifact(ws, "t-v2", aid, "the user asks")) == {"id": aid}
+        assert "id" in json.loads(add_todo(ws, "t-v2", "A", "./todos/20260101-a.md"))
+        assert sorted(p.name for p in conv.glob("*-*.*")) == [
+            "artifacts-index.json", "decisions-index.json", "sessions-index.json", "todos-index.json"]
+        assert json.loads(audit_migration(ws, "t", "t-v2"))["clean"] is True
+
     def test_an_unreadable_index_is_refused_not_audited(self, tmp_path):
         v1 = _v1(tmp_path)
         conv = _converted_from(v1, tmp_path)

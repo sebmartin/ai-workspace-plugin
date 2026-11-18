@@ -158,7 +158,7 @@ def _audit(original: Path, converted: Path) -> str:
 
     for kind in idx.TYPES:
         entries = idx.read(converted, kind)
-        for entry in entries:
+        for entry in idx.flatten(entries):
             if idx.external(entry.link):
                 continue
             if not (converted / entry.link.lstrip("./")).exists():
@@ -185,7 +185,7 @@ def _audit(original: Path, converted: Path) -> str:
 
     unknown = sum(
         1 for kind in idx.TYPES
-        for e in idx.read(converted, kind)
+        for e in idx.flatten(idx.read(converted, kind))
         if e.id.startswith(ids.UNKNOWN)
     )
 

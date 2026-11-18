@@ -24,6 +24,35 @@ PARKED = "parked"
 COMFORTABLE = 5
 
 
+class Located(NamedTuple):
+    """Where a todo sits: the list holding it, its position, and its goal."""
+
+    siblings: list[Entry]  # the top-level list or goal.children
+    at: int  # its position in siblings
+    goal: Entry | None  # its goal, or None at top level
+
+    @property
+    def entry(self) -> Entry:
+        return self.siblings[self.at]
+
+
+def locate(entries: list[Entry], todo_id: str) -> Located | None:
+    """Find a todo at the top level or one level down, or None."""
+    for i, entry in enumerate(entries):
+        if entry.id == todo_id:
+            return Located(entries, i, None)
+        for j, child in enumerate(entry.children or []):
+            if child.id == todo_id:
+                assert entry.children is not None
+                return Located(entry.children, j, entry)
+    return None
+
+
+def is_goal(entry: Entry) -> bool:
+    """A goal is a todo with a children list, even an empty one."""
+    return entry.children is not None
+
+
 def next_up(entries: list[Entry]) -> list[Entry]:
     """Every todo that is still a next step, in order."""
     return [e for e in entries if e.state != PARKED]

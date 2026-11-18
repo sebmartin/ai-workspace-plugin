@@ -336,9 +336,18 @@ def find(entries: list[Entry], entry_id: str) -> Entry | None:
     return next((e for e in entries if e.id == entry_id), None)
 
 
+def flatten(entries: list[Entry]) -> list[Entry]:
+    """Each entry, then its children, in file order."""
+    out: list[Entry] = []
+    for entry in entries:
+        out.append(entry)
+        out.extend(entry.children or [])
+    return out
+
+
 def taken_ids(thread_dir: Path, kind: str) -> set[str]:
-    live = read(thread_dir, kind)
-    gone = read(thread_dir, kind, retired=True)
+    live = flatten(read(thread_dir, kind))
+    gone = flatten(read(thread_dir, kind, retired=True))
     return {e.id for e in live} | {e.id for e in gone}
 
 
