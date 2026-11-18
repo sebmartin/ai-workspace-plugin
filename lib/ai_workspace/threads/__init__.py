@@ -219,7 +219,11 @@ def resume(workspace_dir: str, thread_name: str) -> str:
     call = _for(workspace_dir, thread_name, "resume")
     if isinstance(call, str):
         return call
-    return _focus(call.thread, call.fn(call.thread) + _linked_threads(call.thread))
+    body = call.fn(call.thread)
+    if isinstance(body, dict):
+        # A refusal is the whole reply: no headers, no linked threads.
+        return json.dumps(body)
+    return _focus(call.thread, body + _linked_threads(call.thread))
 
 
 def create(workspace_dir: str, thread_name: str, about: str = "") -> str:

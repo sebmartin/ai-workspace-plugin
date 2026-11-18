@@ -556,3 +556,14 @@ def test_no_schema_module_reaches_outside_its_own_thread():
                     ):
                         problems.append(f"{rel}:{node.lineno} leaves the thread directory")
     assert not problems, "\n  ".join(["", *problems])
+
+
+def test_every_v2_operation_turns_an_unreadable_index_into_a_refusal():
+    from ai_workspace.threads import v2
+    from ai_workspace.threads.v2 import ops
+
+    for name in v2.__all__:
+        fn = getattr(v2, name)
+        if getattr(fn, "__module__", "") == ops.__name__:
+            assert hasattr(fn, "__wrapped__"), (
+                f"{name} is not wrapped in idx.refuses_unreadable")

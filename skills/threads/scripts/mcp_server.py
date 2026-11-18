@@ -73,6 +73,9 @@ def resume_thread(workspace_dir: str, thread_name: str) -> str:
     plugin), `SCHEMA_RETIRED` (migrate it with a version that still reads it),
     or `UNREADABLE_SCHEMA` (its marker file is not an integer).
 
+    An index that does not parse returns `{"error": "UNREADABLE_INDEX", "file",
+    "detail", "fix"}` instead of the thread.
+
     Args:
         workspace_dir: Directory hint for locating the workspace; typically the
             tracked workspace path from session context, or the caller's cwd on

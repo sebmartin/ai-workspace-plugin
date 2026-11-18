@@ -21,6 +21,7 @@ from mcp_server import (
     index_file,
     log_decision,
     order_todos,
+    resume_thread,
     retire_artifact,
     retire_decision,
     retire_todo,
@@ -1689,3 +1690,93 @@ class TestStars:
         assert _reply(unstar_artifact(ws, "t", "20260415-notes-old-plan"))["id"] \
             == "20260415-notes-old-plan"
         assert stars.read(d) == []
+
+
+BROKEN = '{"entries": [\n  {"id": "x",}\n]}\n'
+INDEXES = ["sessions-index.json", "decisions-index.json", "artifacts-index.json",
+           "todos-index.json", "decisions-retired.json", "artifacts-retired.json",
+           "todos-retired.json"]
+
+
+def _snapshot(d):
+    return {p: p.read_bytes() for p in sorted(d.rglob("*")) if p.is_file()}
+
+
+def _populated(tmp_path):
+    """A thread in which all seven index files exist. Returns (d, ws, ids), where
+    ids names the todos, decision and artifacts still in force."""
+    d = _thread(tmp_path)
+    ws = str(tmp_path)
+    ids = {}
+    todo_ids = [_reply(add_todo(ws, "t", title, "./s.md"))["id"]
+                for title in ("One", "Two", "Three")]
+    ids["todo"], ids["todo2"] = todo_ids[0], todo_ids[1]
+    retire_todo(ws, "t", todo_ids[2], "done")
+    first = _reply(log_decision(ws, "t", "First", "s", "b"))["id"]
+    ids["decision"] = _reply(log_decision(ws, "t", "Second", "s", "b"))["id"]
+    log_decision(ws, "t", "Third", "s", "b", supersedes=[first])
+    arts = []
+    for name in ("20260101-a.md", "20260102-b.md", "20260103-c.md"):
+        (d / "artifacts" / name).write_text("x")
+        arts.append(_reply(index_file(ws, "t", f"./artifacts/{name}"))["id"])
+    ids["artifact"], ids["artifact2"] = arts[0], arts[1]
+    retire_artifact(ws, "t", arts[2], "stale")
+    save_session(ws, "t", "first", "s", "k", "# x\n", ["a"], [])
+    for name in INDEXES:
+        assert (d / name).exists(), name
+    return d, ws, ids
+
+
+CALLS = [
+    ("todos-index.json", lambda ws, i: add_todo(ws, "t", "New", "./s.md")),
+    ("todos-index.json", lambda ws, i: set_todo_state(ws, "t", i["todo"], "parked")),
+    ("todos-index.json", lambda ws, i: order_todos(ws, "t", [i["todo2"]])),
+    ("todos-index.json", lambda ws, i: retire_todo(ws, "t", i["todo"], "done")),
+    ("todos-retired.json", lambda ws, i: retire_todo(ws, "t", i["todo"], "done")),
+    ("todos-index.json", lambda ws, i: set_about(ws, "t", "New about.")),
+    ("todos-index.json", lambda ws, i: log_decision(ws, "t", "N", "s", "b")),
+    ("decisions-index.json", lambda ws, i: log_decision(ws, "t", "N", "s", "b")),
+    ("decisions-retired.json",
+     lambda ws, i: retire_decision(ws, "t", i["decision"], "withdrawn")),
+    ("artifacts-index.json",
+     lambda ws, i: index_file(ws, "t", "./artifacts/20260105-new.md")),
+    ("artifacts-retired.json",
+     lambda ws, i: index_file(ws, "t", "./artifacts/20260105-new.md")),
+    ("artifacts-index.json", lambda ws, i: index_directory(ws, "t", "./artifacts")),
+    ("artifacts-index.json",
+     lambda ws, i: star_artifact(ws, "t", i["artifact"], "x")),
+    ("artifacts-index.json",
+     lambda ws, i: retire_artifact(ws, "t", i["artifact"], "stale")),
+    ("artifacts-retired.json",
+     lambda ws, i: retire_artifact(ws, "t", i["artifact"], "stale")),
+    ("sessions-index.json",
+     lambda ws, i: save_session(ws, "t", "new", "s", "k", "# x\n", ["a"], [])),
+]
+
+
+class TestUnreadableIndex:
+    @pytest.mark.parametrize("name", INDEXES)
+    def test_resume_refuses_as_a_whole(self, tmp_path, name):
+        d, ws, _ = _populated(tmp_path)
+        (d / name).write_text(BROKEN)
+        before = _snapshot(d)
+        r = json.loads(resume_thread(ws, "t"))
+        assert r["error"] == "UNREADABLE_INDEX" and r["file"] == name
+        assert "line 2 column" in r["detail"] and "not delete" in r["fix"]
+        assert _snapshot(d) == before
+
+    @pytest.mark.parametrize("name, call", CALLS)
+    def test_every_tool_refuses_and_writes_nothing(self, tmp_path, name, call):
+        d, ws, ids = _populated(tmp_path)
+        (d / "artifacts" / "20260105-new.md").write_text("x")
+        (d / name).write_text(BROKEN)
+        before = _snapshot(d)
+        r = _reply(call(ws, ids))
+        assert r["error"] == "UNREADABLE_INDEX" and r["file"] == name
+        assert _snapshot(d) == before
+
+    def test_a_wrong_shape_refuses_like_a_parse_error(self, tmp_path):
+        d = _thread(tmp_path)
+        (d / "todos-index.json").write_text('{"entries": null}')
+        r = _reply(add_todo(str(tmp_path), "t", "A", "./s.md"))
+        assert r["error"] == "UNREADABLE_INDEX"

@@ -33,9 +33,11 @@ only kind that carries one.
 """
 
 import contextlib
+import functools
 import json
 import os
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
 
 FIX = ("Repair this file by hand so it parses, then retry. Do not delete or "
@@ -75,6 +77,24 @@ class UnreadableIndex(Exception):
     def payload(self) -> dict:
         return {"error": "UNREADABLE_INDEX", "file": self.file,
                 "detail": self.detail, "fix": FIX}
+
+
+def refuses_unreadable[**P](fn: Callable[P, str]) -> Callable[P, str]:
+    """Turn `UnreadableIndex` into its refusal, as the reply a tool returns.
+
+    Every operation reads each index it will touch before its first write, so
+    by the time this catches one nothing has been written. The layering test
+    requires it on every operation `v2` exports.
+    """
+
+    @functools.wraps(fn)
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> str:
+        try:
+            return fn(*args, **kwargs)
+        except UnreadableIndex as exc:
+            return json.dumps(exc.payload())
+
+    return wrapper
 
 
 _STRINGS = ("state", "description", "star", "parent")
@@ -336,6 +356,9 @@ def retire(thread_dir: Path, kind: str, entry_id: str, state: str) -> dict | Non
         return {"error": "STATE_UNKNOWN", "detail": state,
                 "allowed": list(RETIRED[kind])}
     entries = read(thread_dir, kind)
+    # Read before the live index is written, so a retired index that does not
+    # parse stops this before it has moved anything.
+    read(thread_dir, kind, retired=True)
     entry = find(entries, entry_id)
     if entry is None:
         return {"error": "NO_SUCH_ENTRY", "detail": entry_id}

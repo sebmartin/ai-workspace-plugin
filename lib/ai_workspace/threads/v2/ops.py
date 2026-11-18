@@ -227,6 +227,7 @@ def _index_one(thread, link: str, description: str = "",
     return Indexed(entry_id), None
 
 
+@idx.refuses_unreadable
 def index_file(thread, link: str, description: str = "",
                when: str | None = None) -> str:
     """Index a file that is already in the thread.
@@ -260,6 +261,7 @@ def index_file(thread, link: str, description: str = "",
     return json.dumps(reply)
 
 
+@idx.refuses_unreadable
 def index_directory(thread, link: str) -> str:
     """Index every top-level entry in one directory that is not indexed yet.
 
@@ -339,6 +341,7 @@ def _unplaceable(where) -> str:
     return json.dumps(reply)
 
 
+@idx.refuses_unreadable
 def add_todo(thread, title: str, link: str, state: str = "active",
              place: str = "") -> str:
     """Add a todo at a chosen place in the list.
@@ -394,10 +397,12 @@ def add_todo(thread, title: str, link: str, state: str = "active",
     return json.dumps(reply)
 
 
+@idx.refuses_unreadable
 def retire_todo(thread, todo_id: str, state: str) -> str:
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
     entry = idx.find(idx.read(thread.dir, "todos"), todo_id)
+    idx.read(thread.dir, "todos", retired=True)
     if error := idx.retire(thread.dir, "todos", todo_id, state):
         return json.dumps(error)
     stale = _sync_file_state(thread.dir, entry, state) if entry else ""
@@ -427,6 +432,7 @@ def _sync_file_state(thread_dir: Path, entry, state: str) -> str:
         return entry.link
 
 
+@idx.refuses_unreadable
 def set_state(thread, kind: str, entry_id: str, state: str) -> str:
     """Move an entry between in-force states, e.g. parking or starting a todo.
 
@@ -462,6 +468,7 @@ def set_state(thread, kind: str, entry_id: str, state: str) -> str:
     return json.dumps(reply)
 
 
+@idx.refuses_unreadable
 def order_todos(thread, todo_ids: list[str], place: str = "") -> str:
     """Move the named todos together, in the order given.
 
@@ -496,6 +503,7 @@ def order_todos(thread, todo_ids: list[str], place: str = "") -> str:
     return json.dumps({"ordered": len(todo_ids)})
 
 
+@idx.refuses_unreadable
 def log_decision(thread, title: str, summary: str, body: str,
                  state: str = "proposed",
                  supersedes: list[str] | None = None) -> str:
@@ -541,6 +549,7 @@ def log_decision(thread, title: str, summary: str, body: str,
     return json.dumps(reply)
 
 
+@idx.refuses_unreadable
 def retire_decision(thread, decision_id: str, state: str) -> str:
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
@@ -556,6 +565,7 @@ def retire_decision(thread, decision_id: str, state: str) -> str:
     return json.dumps(reply)
 
 
+@idx.refuses_unreadable
 def retire_artifact(thread, artifact_id: str, state: str) -> str:
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
@@ -569,6 +579,7 @@ def retire_artifact(thread, artifact_id: str, state: str) -> str:
     return json.dumps(reply)
 
 
+@idx.refuses_unreadable
 def star_artifact(thread, artifact_id: str, when: str) -> str:
     """Star a current artifact, or replace the trigger of one already starred.
 
@@ -598,6 +609,7 @@ def star_artifact(thread, artifact_id: str, when: str) -> str:
     return json.dumps({"id": artifact_id})
 
 
+@idx.refuses_unreadable
 def unstar_artifact(thread, artifact_id: str) -> str:
     """Remove a star. The index is never consulted, so a star whose artifact is
     retired or missing can still be cleared."""
@@ -625,6 +637,7 @@ def _status_items(field: str, items: list[str]) -> list[str] | dict:
     return out
 
 
+@idx.refuses_unreadable
 def set_about(thread, text: str) -> str:
     """Replace the README's About section, held to 50 words."""
     from ai_workspace.threads.v2 import readme as readme_mod
@@ -638,6 +651,7 @@ def set_about(thread, text: str) -> str:
     return json.dumps({"words": len(text.split())})
 
 
+@idx.refuses_unreadable
 def save_session(thread, slug: str, summary: str, keywords: str, body: str,
                  recently: list[str], up_next: list[str]) -> str:
     """Everything a save does that is not synthesis.
@@ -666,6 +680,7 @@ def save_session(thread, slug: str, summary: str, keywords: str, body: str,
         resolved[field] = got
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
+    idx.read(thread.dir, "sessions")
     session_id, _ = session.save(thread.dir, slug, summary, keywords, body)
     readme_mod.write_status(thread.dir, resolved["recently"], resolved["up_next"])
     readme_mod.touch_dates(thread.dir)

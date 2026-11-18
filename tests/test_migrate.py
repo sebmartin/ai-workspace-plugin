@@ -83,6 +83,13 @@ class TestSafetyCheck:
 
 
 class TestAudit:
+    def test_an_unreadable_index_is_refused_not_audited(self, tmp_path):
+        v1 = _v1(tmp_path)
+        conv = _converted_from(v1, tmp_path)
+        (conv / "sessions-index.json").write_text("{")
+        r = json.loads(migrate.audit(v1, conv))
+        assert r["error"] == "UNREADABLE_INDEX" and r["file"] == "sessions-index.json"
+
     def test_a_todo_cannot_vouch_for_the_sessions_index(self, tmp_path):
         """The union across indexes passed a thread with no sessions index at all.
 

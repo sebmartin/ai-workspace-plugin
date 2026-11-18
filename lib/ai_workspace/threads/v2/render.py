@@ -89,7 +89,11 @@ def blocked(thread_dir: Path) -> str | None:
 
     Asked before anything mutates, so a refusal leaves nothing behind and a
     retry after fixing the README is clean rather than a second entry.
+
+    The todos index is read first, since every render reads it: one that does
+    not parse raises `UnreadableIndex` here, before anything is written.
     """
+    idx.read(thread_dir, "todos")
     readme = thread_dir / "README.md"
     text = readme.read_text() if readme.exists() else ""
     pattern, ambiguous = _find(text)

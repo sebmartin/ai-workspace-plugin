@@ -97,9 +97,19 @@ def create(thread, about: str = "") -> str | dict:
 _OLD_ABOUT_PLACEHOLDER = "What this thread is about, and what it is for."
 
 
-def resume(thread) -> str:
-    """The composed payload, built from the indexes rather than the README."""
-    return compose(thread.dir, thread.name)
+def resume(thread) -> str | dict:
+    """The composed payload, built from the indexes rather than the README.
+
+    A dict only for the refusal: an index that does not parse. The three
+    retired indexes are read too, though compose shows none of them, so that a
+    damaged one is found here and not in the middle of a retire.
+    """
+    try:
+        for kind in idx.RETIRED_TYPES:
+            idx.read(thread.dir, kind, retired=True)
+        return compose(thread.dir, thread.name)
+    except idx.UnreadableIndex as exc:
+        return exc.payload()
 
 
 def about(thread) -> str:
