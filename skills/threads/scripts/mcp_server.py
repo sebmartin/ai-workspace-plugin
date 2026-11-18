@@ -455,10 +455,9 @@ def retire_decision(workspace_dir: str, thread_name: str, decision_id: str,
     """Retire a decision, updating the index and the file's own `state:` line.
 
     Returns `{"id": ...}`, plus `file_unchanged` naming the decision's file
-    when its `state:` line could not be found, and `files_unchanged` listing
-    the same for any other todo the change cascaded to, only when there are
-    some. The index and the file then disagree, and the file is the copy a
-    reader finds by grep. Nothing else reports it, so say so and name the files.
+    when its `state:` line could not be found. The index and the file then
+    disagree, and the file is the copy a reader finds by grep. Nothing else
+    reports it, so say so and name the file.
 
     A decision written before the field was named `state:` is the common
     cause, and the fix is to rename that one line in the file.
