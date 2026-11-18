@@ -2014,3 +2014,46 @@ class TestNesting:
             is inspect.Parameter.empty
         tool = next(t for t in asyncio.run(mcp.list_tools()) if t.name == "set_parent")
         assert "parent" in tool.input_schema["required"]
+
+    def test_children_reorder_within_their_goal(self, tmp_path):
+        d, ws, _add = self._setup(tmp_path)
+        idx.write(d, "todos", [_e("g", children=[_e("c1"), _e("c2"), _e("c3")]), _e("x")])
+        p = "20260101-"
+        assert _reply(order_todos(ws, "t", [p + "c3"])) == {"ordered": 1}
+        top = idx.read(d, "todos")
+        assert [e.id for e in top] == [p + "g", p + "x"]
+        assert [k.id for k in top[0].children or []] == [p + "c3", p + "c1", p + "c2"]
+
+    def test_ids_from_different_lists_are_refused(self, tmp_path):
+        d, ws, _add = self._setup(tmp_path)
+        idx.write(d, "todos", [_e("g", children=[_e("c1")]), _e("x")])
+        before = _snapshot(d)
+        out = _reply(order_todos(ws, "t", ["20260101-x", "20260101-c1"]))
+        assert out == {"error": "NOT_SAME_LIST", "detail": "20260101-x, 20260101-c1"}
+        assert _snapshot(d) == before
+
+    def test_children_of_two_goals_are_different_lists(self, tmp_path):
+        d, ws, _add = self._setup(tmp_path)
+        idx.write(d, "todos", [_e("g1", children=[_e("a")]), _e("g2", children=[_e("b")])])
+        before = _snapshot(d)
+        out = _reply(order_todos(ws, "t", ["20260101-a", "20260101-b"]))
+        assert out["error"] == "NOT_SAME_LIST"
+        assert _snapshot(d) == before
+
+    def test_an_anchor_outside_the_list_is_refused(self, tmp_path):
+        d, ws, _add = self._setup(tmp_path)
+        idx.write(d, "todos", [_e("g", children=[_e("c1"), _e("c2")]), _e("x")])
+        before = _snapshot(d)
+        x = "20260101-x"
+        out = _reply(order_todos(ws, "t", ["20260101-c2"], place=f"before:{x}"))
+        assert out == {"error": "NO_SUCH_ENTRY", "detail": x}
+        assert _snapshot(d) == before
+
+    def test_moving_a_goal_moves_its_children(self, tmp_path):
+        d, ws, _add = self._setup(tmp_path)
+        idx.write(d, "todos", [_e("g", children=[_e("c1"), _e("c2")]), _e("x")])
+        p = "20260101-"
+        assert _reply(order_todos(ws, "t", [p + "g"], place="end")) == {"ordered": 1}
+        top = idx.read(d, "todos")
+        assert [e.id for e in top] == [p + "x", p + "g"]
+        assert [k.id for k in top[1].children or []] == [p + "c1", p + "c2"]

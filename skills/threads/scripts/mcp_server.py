@@ -336,8 +336,11 @@ def order_todos(workspace_dir: str, thread_name: str, todo_ids: list[str],
                 place: str = "") -> str:
     """Move the named todos together, in the order given.
 
-    Everything else keeps its relative order, so naming the two that matter
-    leaves the rest alone. The order is the user's, so propose one and call
+    Every id must be in one list: all top-level todos, or all children of one
+    goal. `place` resolves in that list, so an anchor from another list is not
+    found. Everything else keeps its relative order, so naming the two that
+    matter leaves the rest alone, and moving a goal moves its children with it.
+    The order is the user's, so propose one and call
     this once they agree.
 
     This is also how what the README's Todos section shows changes, because what it shows is
@@ -347,6 +350,8 @@ def order_todos(workspace_dir: str, thread_name: str, todo_ids: list[str],
     Returns `{"ordered": <how many were named>}`. A refusal returns
     `{"error": CODE, "detail": ...}` and writes nothing: `NO_SUCH_ENTRY`
     naming the ids that are not in the list, including the anchor;
+    `NOT_SAME_LIST` when the ids are not all in one list, whose `detail` is
+    the ids given: order them in separate calls;
     `PLACE_UNKNOWN` with the `allowed` forms; `DUPLICATE_ID` naming one given
     twice; `ANCHOR_IS_MOVING` when the anchor is one of the todos being moved,
     so its place is the thing in question; and `IDS_REQUIRED` when no ids were

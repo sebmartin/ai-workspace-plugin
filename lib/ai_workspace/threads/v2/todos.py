@@ -238,6 +238,17 @@ def to_end(entries: list[Entry], todo_id: str) -> None:
         found.siblings.append(found.siblings.pop(found.at))
 
 
+def same_list(entries: list[Entry], ids: list[str]) -> list[Entry] | None:
+    """The list object (top-level or one goal's children) holding every id, or
+    None when they are spread over several lists or any is unknown."""
+    lists = [entries] + [e.children for e in entries if e.children is not None]
+    wanted = set(ids)
+    for candidate in lists:
+        if wanted <= {e.id for e in candidate}:
+            return candidate
+    return None
+
+
 def staying(entries: list[Entry], ids: list[str]) -> list[Entry]:
     """The list without the todos being moved, which is what `place` resolves
     against. Resolving against the list they are still in puts the whole move

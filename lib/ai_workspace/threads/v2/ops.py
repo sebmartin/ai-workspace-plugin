@@ -503,16 +503,18 @@ def set_state(thread, kind: str, entry_id: str, state: str) -> str:
 def order_todos(thread, todo_ids: list[str], place: str = "") -> str:
     """Move the named todos together, in the order given.
 
-    Everything else keeps its relative order, so moving the two items that
-    matter does not disturb the rest of the list. The default place is the
-    top, which is what reordering is usually for.
+    Every id must be in one list: all top-level, or all children of one goal.
+    `place` resolves in that list. Everything else keeps its relative order, so
+    moving the two items that matter does not disturb the rest of the list, and
+    a goal moves with its children. The default place is the top, which is what
+    reordering is usually for.
     """
     if not todo_ids:
         return json.dumps({"error": "IDS_REQUIRED"})
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
     entries = idx.read(thread.dir, "todos")
-    known = {e.id for e in entries}
+    known = {e.id for e in idx.flatten(entries)}
     if missing := [i for i in todo_ids if i not in known]:
         return json.dumps({"error": "NO_SUCH_ENTRY", "detail": ", ".join(missing)})
     # Refused rather than de-duplicated: collapsing a repeat would produce an
@@ -520,16 +522,20 @@ def order_todos(thread, todo_ids: list[str], place: str = "") -> str:
     if repeated := [i for i in set(todo_ids) if todo_ids.count(i) > 1]:
         return json.dumps({"error": "DUPLICATE_ID", "detail": ", ".join(sorted(repeated))})
 
+    siblings = todos_mod.same_list(entries, todo_ids)
+    if siblings is None:
+        return json.dumps({"error": "NOT_SAME_LIST", "detail": ", ".join(todo_ids)})
+
     # Resolved against the list the movers have been taken out of, which is
     # also what makes an anchor that is itself moving impossible to resolve.
-    staying = todos_mod.staying(entries, todo_ids)
+    staying = todos_mod.staying(siblings, todo_ids)
     where = todos_mod.spot(staying, place) if place.strip() else todos_mod.Spot(0)
     if where.at is None:
         if where.error == "NO_SUCH_ENTRY" and where.detail in todo_ids:
             return json.dumps({"error": "ANCHOR_IS_MOVING", "detail": where.detail})
         return _unplaceable(where)
-    idx.write(thread.dir, "todos",
-              todos_mod.reordered(entries, todo_ids, where.at))
+    siblings[:] = todos_mod.reordered(siblings, todo_ids, where.at)
+    idx.write(thread.dir, "todos", entries)
     render.render(thread.dir)
     return json.dumps({"ordered": len(todo_ids)})
 
