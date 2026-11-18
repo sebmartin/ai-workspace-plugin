@@ -338,6 +338,12 @@ class TestIndex:
         assert "Réno 🛠" in path.read_text(encoding="utf-8")
         assert idx.read(d, "todos")[0].title == "Réno 🛠"
 
+    def test_empty_title_and_link_round_trip(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        idx.write(d, "todos", [idx.Entry("20260101-a", "active", "", "")])
+        e = idx.read(d, "todos")[0]
+        assert (e.title, e.link, e.state) == ("", "", "active")
+
     def test_children_round_trip_and_an_empty_list_is_kept(self, tmp_path):
         d = _v2_thread(tmp_path)
         path = idx.index_path(d, "todos")

@@ -134,9 +134,16 @@ class Entry:
     def _known(self) -> dict:
         """The fields that are set, without `children` or unknown keys."""
         out: dict = {"id": self.id}
-        for name in ("state", "title", "link", "description", "star", "parent"):
+        # title and link are required on read, so they are always written,
+        # even when empty. Only the optional fields are left out when unset.
+        out["title"], out["link"] = self.title, self.link
+        if self.state is not None:
+            out["state"] = self.state
+        if self.description != "":
+            out["description"] = self.description
+        for name in ("star", "parent"):
             value = getattr(self, name)
-            if value is not None and value != "":
+            if value is not None:
                 out[name] = value
         return out
 
