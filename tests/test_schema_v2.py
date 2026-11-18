@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
 sys.path.insert(0, str(Path(__file__).parent.parent / "skills" / "threads" / "scripts"))
 
 from ai_workspace.threads import marker, schema
-from ai_workspace.threads.v2 import ids, render, session, stars
+from ai_workspace.threads.v2 import ids, render, session
 from ai_workspace.threads.v2 import index as idx
 from ai_workspace.threads.v2 import thread as v2
 from ai_workspace.threads.v2 import todos as todos_mod
@@ -908,63 +908,6 @@ def test_schema_1_is_readable_but_has_no_create():
     assert "create" not in v1.__all__ and not hasattr(v1, "create")
 
 
-class TestStarFile:
-    def test_missing_file_is_nothing_starred(self, tmp_path):
-        d = _v2_thread(tmp_path)
-        assert stars.read(d) == [] and not (d / "artifacts-starred.md").exists()
-
-    def test_round_trip(self, tmp_path):
-        d = _v2_thread(tmp_path)
-        s = stars.Star("20260801-guide-style", "the user asks about formatting or tone")
-        stars.write(d, [s])
-        assert (d / "artifacts-starred.md").read_text() == \
-            "- 20260801-guide-style -- when: the user asks about formatting or tone\n"
-        assert stars.read(d) == [s]
-
-    def test_a_line_that_is_not_a_star_is_skipped(self, tmp_path):
-        d = _v2_thread(tmp_path)
-        (d / "artifacts-starred.md").write_text(
-            "- 20260101-a -- when: x\nhand-written note\n")
-        assert stars.read(d) == [stars.Star("20260101-a", "x")]
-
-    def test_an_empty_list_leaves_an_empty_file(self, tmp_path):
-        d = _v2_thread(tmp_path)
-        stars.write(d, [])
-        assert (d / "artifacts-starred.md").read_text() == ""
-
-    def test_unrepresentable_names_the_field(self):
-        assert stars.unrepresentable(stars.Star("a", "x\ny")) is not None
-        assert stars.unrepresentable(stars.Star("a b", "x")) is not None
-        assert stars.unrepresentable(stars.Star("a", "fine")) is None
-
-    @pytest.mark.parametrize("sep", ["\x0b", "\x0c", "\x1c", "\x85", "\u2028", "\u2029"])
-    def test_a_break_that_splitlines_honours_is_unrepresentable(self, sep):
-        assert stars.unrepresentable(stars.Star("a", f"x{sep}y")) is not None
-        assert stars.unrepresentable(stars.Star(f"a{sep}b", "x")) is not None
-
-    def test_drop_returns_the_star_and_writes_nothing_when_absent(self, tmp_path):
-        d = _v2_thread(tmp_path)
-        assert stars.drop(d, "a") is None
-        assert not (d / "artifacts-starred.md").exists()
-        stars.write(d, [stars.Star("a", "x"), stars.Star("b", "y")])
-        assert stars.drop(d, "a") == stars.Star("a", "x")
-        assert stars.read(d) == [stars.Star("b", "y")]
-
-    def test_drop_removes_every_line_for_the_id(self, tmp_path):
-        d = _v2_thread(tmp_path)
-        stars.write(d, [stars.Star("a", "x"), stars.Star("b", "y"), stars.Star("a", "z")])
-        assert stars.drop(d, "a") == stars.Star("a", "x")
-        assert stars.read(d) == [stars.Star("b", "y")]
-
-    def test_rekey_moves_in_place_and_ignores_an_unstarred_id(self, tmp_path):
-        d = _v2_thread(tmp_path)
-        stars.write(d, [stars.Star("a", "x"), stars.Star("b", "y")])
-        stars.rekey(d, "a", "c")
-        assert stars.read(d) == [stars.Star("c", "x"), stars.Star("b", "y")]
-        stars.rekey(d, "zzz", "q")
-        assert stars.read(d) == [stars.Star("c", "x"), stars.Star("b", "y")]
-
-
 class TestStarredInPayload:
     GUIDE = idx.Entry("20260801-guide-style", "current", "20260801-guide-style",
                       "./artifacts/20260801-guide-style.md",
@@ -972,45 +915,50 @@ class TestStarredInPayload:
     OTHER = idx.Entry("20260802-notes-other", "current", "20260802-notes-other",
                       "./artifacts/20260802-notes-other.md", "Other notes.")
 
-    def _thread(self, tmp_path, *entries, starred=()):
+    def _thread(self, tmp_path, *entries):
         d = _v2_thread(tmp_path)
         for e in entries:
             idx.add(d, "artifacts", e)
-        if starred:
-            stars.write(d, list(starred))
         return d
 
+    @staticmethod
+    def _starred(entry, when):
+        return idx.Entry(entry.id, entry.state, entry.title, entry.link,
+                         entry.description, star=when)
+
     def test_link_description_and_trigger(self, tmp_path):
-        d = self._thread(tmp_path, self.GUIDE, starred=[
-            stars.Star("20260801-guide-style", "the user asks about formatting or tone")])
-        out = v2.compose(d, "t")
+        guide = self._starred(self.GUIDE, "the user asks about formatting or tone")
+        out = v2.compose(self._thread(tmp_path, guide), "t")
         assert ("## Starred artifacts (1)\n\n- [20260801-guide-style](./artifacts/20260801-guide-style.md)"
                 " -- House style for everything written in this thread. Read when: the user asks"
                 " about formatting or tone.") in out
 
     def test_a_starred_artifact_leaves_the_artifacts_list(self, tmp_path):
-        d = self._thread(tmp_path, self.GUIDE, self.OTHER,
-                         starred=[stars.Star(self.GUIDE.id, "x")])
+        d = self._thread(tmp_path, self._starred(self.GUIDE, "x"), self.OTHER)
         out = v2.compose(d, "t")
         assert "## Artifacts (1)" in out
         assert self.GUIDE.render() not in out
         assert self.OTHER.render() in out
 
-    def test_an_orphaned_star_shows_not_found(self, tmp_path):
-        d = self._thread(tmp_path, starred=[
-            stars.Star("20260415-notes-old-plan", "the user asks about the original plan")])
-        out = v2.compose(d, "t")
-        assert ("- 20260415-notes-old-plan (not found). Read when: the user asks about"
-                " the original plan.") in out
+    def test_starred_artifacts_come_in_index_order(self, tmp_path):
+        a = idx.Entry("20260801-a", "current", "20260801-a", "./artifacts/a.md", star="first")
+        b = idx.Entry("20260802-b", "current", "20260802-b", "./artifacts/b.md", star="second")
+        out = v2.compose(self._thread(tmp_path, a, b), "t")
+        assert out.index("[20260801-a]") < out.index("[20260802-b]")
+
+    def test_a_line_break_in_a_trigger_collapses_to_a_space(self, tmp_path):
+        d = self._thread(tmp_path, self._starred(self.GUIDE, "one\ntwo"))
+        assert "Read when: one two." in v2.compose(d, "t")
 
     def test_no_description_leaves_it_out(self, tmp_path):
-        bare = idx.Entry("20260803-bare", "current", "20260803-bare", "./artifacts/20260803-bare.md")
-        d = self._thread(tmp_path, bare, starred=[stars.Star(bare.id, "needed!")])
+        bare = idx.Entry("20260803-bare", "current", "20260803-bare",
+                         "./artifacts/20260803-bare.md", star="needed!")
+        d = self._thread(tmp_path, bare)
         assert "- [20260803-bare](./artifacts/20260803-bare.md) -- Read when: needed!" \
             in v2.compose(d, "t")
 
     def test_after_memory_before_the_header(self, tmp_path):
-        d = self._thread(tmp_path, self.GUIDE, starred=[stars.Star(self.GUIDE.id, "x")])
+        d = self._thread(tmp_path, self._starred(self.GUIDE, "x"))
         (d / "memory.md").write_text("- a rule\n")
         out = v2.compose(d, "t")
         assert out.index("## Thread memory") < out.index("## Starred artifacts") < out.index("**Started**")
@@ -1019,14 +967,19 @@ class TestStarredInPayload:
         d = self._thread(tmp_path, self.GUIDE)
         assert "Starred artifacts" not in v2.compose(d, "t")
 
-    def test_an_index_with_no_star_file_renders_as_before(self, tmp_path):
+    def test_an_index_with_no_star_renders_as_before(self, tmp_path):
         d = self._thread(tmp_path, self.GUIDE, self.OTHER)
         out = v2.compose(d, "t")
         assert "## Artifacts (2)" in out and all(e.render() in out for e in idx.read(d, "artifacts"))
 
+    def test_the_star_module_is_gone(self):
+        import importlib.util
+        assert importlib.util.find_spec("ai_workspace.threads.v2.stars") is None
+
     def test_sentence_adds_a_full_stop_unless_one_is_there(self):
         assert v2._sentence("a") == "a."
         assert [v2._sentence(t) for t in ("a.", "a!", "a?")] == ["a.", "a!", "a?"]
+
 
 
 class TestMemoryBudget:

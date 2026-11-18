@@ -11,7 +11,7 @@ from ai_workspace.text import split_frontmatter
 from ai_workspace.threads import marker
 from ai_workspace.threads.v1.header import section as _section
 from ai_workspace.threads.v2 import index as idx
-from ai_workspace.threads.v2 import ops, stars
+from ai_workspace.threads.v2 import ops
 from ai_workspace.threads.v2 import todos as todos_mod
 
 # What resume spends on session bodies, in tokens. The newest sessions are shown
@@ -45,6 +45,11 @@ CHARS_PER_TOKEN = 3.5
 def _sentence(text: str) -> str:
     """The text as a sentence: a full stop unless it already ends in one."""
     return text if text.endswith((".", "!", "?")) else text + "."
+
+
+def _one_line(text: str) -> str:
+    """Line breaks as spaces, so a field cannot split the line it is shown on."""
+    return " ".join(text.splitlines())
 
 
 def _header(text: str) -> str:
@@ -146,18 +151,15 @@ def compose(thread_dir: Path, thread_name: str) -> str:
         notice = _memory_notice(len(memory))
         out.append(f"## Thread memory\n\n{memory}\n" + (f"\n{notice}\n" if notice else ""))
 
-    starred = stars.read(thread_dir)
     artifacts = idx.read(thread_dir, "artifacts")
+    starred = [e for e in artifacts if e.star]
     if starred:
-        by_id = {e.id: e for e in artifacts}
         out.append(f"## Starred artifacts ({len(starred)})\n")
-        for star in starred:
-            when = f"Read when: {_sentence(star.when)}"
-            if (entry := by_id.get(star.id)) is None:
-                out.append(f"- {star.id} (not found). {when}")
-                continue
-            described = f"{_sentence(entry.description)} " if entry.description else ""
-            out.append(f"- [{star.id}]({entry.link}) -- {described}{when}")
+        for entry in starred:
+            when = f"Read when: {_sentence(_one_line(entry.star or ''))}"
+            described = (f"{_sentence(_one_line(entry.description))} "
+                         if entry.description else "")
+            out.append(f"- [{entry.id}]({entry.link}) -- {described}{when}")
         out.append("")
 
     out.append(_header(text))
@@ -197,8 +199,7 @@ def compose(thread_dir: Path, thread_name: str) -> str:
             summary = "(frontmatter is not valid YAML, so no summary; worth fixing)"
         out.append(entry.render() + (f"\n  {summary}" if summary else ""))
 
-    starred_ids = {s.id for s in starred}
-    artifacts = [e for e in artifacts if e.id not in starred_ids]
+    artifacts = [e for e in artifacts if not e.star]
     out.append(f"\n## Artifacts ({len(artifacts)})\n")
     out.extend(e.render() for e in artifacts)
 

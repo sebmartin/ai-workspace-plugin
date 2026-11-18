@@ -364,6 +364,8 @@ def retire(thread_dir: Path, kind: str, entry_id: str, state: str) -> dict | Non
         return {"error": "NO_SUCH_ENTRY", "detail": entry_id}
     entries.remove(entry)
     entry.state = state
+    # A star is a trigger to read a current artifact, so it ends with it.
+    entry.star = None
     write(thread_dir, kind, entries)
     add(thread_dir, kind, entry, retired=True)
     return None

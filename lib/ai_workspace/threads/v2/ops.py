@@ -16,7 +16,7 @@ from typing import NamedTuple
 from ai_workspace.text import set_frontmatter_field, split_frontmatter, yaml_value
 from ai_workspace.threads.v2 import ids as ids_mod
 from ai_workspace.threads.v2 import index as idx
-from ai_workspace.threads.v2 import render, session, stars
+from ai_workspace.threads.v2 import render, session
 from ai_workspace.threads.v2 import todos as todos_mod
 
 
@@ -149,8 +149,6 @@ def _redate(thread_dir: Path, kind: str, entry, entries: list,
     if entry.title == was:
         entry.title = entry.id
     idx.add(thread_dir, kind, entry, retired)
-    if kind == "artifacts":
-        stars.rekey(thread_dir, was, entry.id)
     return entry.id, was
 
 
@@ -569,13 +567,14 @@ def retire_decision(thread, decision_id: str, state: str) -> str:
 def retire_artifact(thread, artifact_id: str, state: str) -> str:
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
+    entry = idx.find(idx.read(thread.dir, "artifacts"), artifact_id)
+    dropped = entry.star if entry else None
     if error := idx.retire(thread.dir, "artifacts", artifact_id, state):
         return json.dumps(error)
-    dropped = stars.drop(thread.dir, artifact_id)
     render.render(thread.dir)
     reply: dict = {"id": artifact_id}
     if dropped:
-        reply["star_dropped"] = dropped.when
+        reply["star_dropped"] = dropped
     return json.dumps(reply)
 
 
@@ -583,38 +582,34 @@ def retire_artifact(thread, artifact_id: str, state: str) -> str:
 def star_artifact(thread, artifact_id: str, when: str) -> str:
     """Star a current artifact, or replace the trigger of one already starred.
 
-    Every refusal is decided before the star file is written. The README is
+    Every refusal is decided before the index is written. The README is
     untouched, so `render.blocked` has nothing to protect here.
     """
     when = when.strip()
     if not when:
         return json.dumps({"error": "WHEN_EMPTY"})
-    if stars.has_line_break(when):
-        return json.dumps({"error": "WHEN_HAS_LINE_BREAK"})
     if len(when) > MAX_DESCRIPTION:
         return json.dumps({"error": "WHEN_TOO_LONG", "detail": str(MAX_DESCRIPTION)})
-    live = idx.read(thread.dir, "artifacts")
-    entry = idx.find(live, artifact_id)
-    if entry is None or entry.state not in idx.IN_FORCE["artifacts"]:
+    entries = idx.read(thread.dir, "artifacts")
+    entry = idx.find(entries, artifact_id)
+    if entry is None:
         return json.dumps({"error": "NO_SUCH_ENTRY", "detail": artifact_id})
-    star = stars.Star(artifact_id, when)
-    if broken := stars.unrepresentable(star):
-        return json.dumps({"error": "UNREPRESENTABLE", "detail": broken})
-    current = stars.read(thread.dir)
-    if any(s.id == artifact_id for s in current):
-        current = [star if s.id == artifact_id else s for s in current]
-    else:
-        current.append(star)
-    stars.write(thread.dir, current)
+    entry.star = when
+    idx.write(thread.dir, "artifacts", entries)
     return json.dumps({"id": artifact_id})
 
 
 @idx.refuses_unreadable
 def unstar_artifact(thread, artifact_id: str) -> str:
-    """Remove a star. The index is never consulted, so a star whose artifact is
-    retired or missing can still be cleared."""
-    if stars.drop(thread.dir, artifact_id) is None:
+    """Remove a star from a current artifact."""
+    entries = idx.read(thread.dir, "artifacts")
+    entry = idx.find(entries, artifact_id)
+    if entry is None:
+        return json.dumps({"error": "NO_SUCH_ENTRY", "detail": artifact_id})
+    if entry.star is None:
         return json.dumps({"error": "NOT_STARRED", "detail": artifact_id})
+    entry.star = None
+    idx.write(thread.dir, "artifacts", entries)
     return json.dumps({"id": artifact_id})
 
 

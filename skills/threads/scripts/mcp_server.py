@@ -48,9 +48,8 @@ def resume_thread(workspace_dir: str, thread_name: str) -> str:
 
     On a schema 2 thread the reply is composed rather than read from a file:
     `memory.md` in full if there is one (a line on its size follows it when it
-    has grown large), then starred artifacts, each with its
-    description and when to read it (an id whose artifact is no longer in force
-    shows `(not found)`), then the header, About, Status, the
+    has grown large), then starred artifacts in artifact index order, each with
+    its description and when to read it, then the header, About, Status, the
     Todos window (top five of the todo list in priority order, its heading
     counting shown, active and parked), any parked todos, every in-force
     decision with its `summary:`, the artifacts index (starred artifacts are left
@@ -534,10 +533,8 @@ def star_artifact(workspace_dir: str, thread_name: str, artifact_id: str,
     Starring an artifact that is already starred replaces its trigger.
 
     Returns `{"id": ...}`. A refusal returns `{"error": CODE, ...}` and writes
-    nothing: `WHEN_EMPTY`, `WHEN_HAS_LINE_BREAK`, `WHEN_TOO_LONG` with `detail`
-    the limit, `NO_SUCH_ENTRY` with `detail` the id (it is not a current
-    artifact), or `UNREPRESENTABLE` with `detail` the field that cannot be
-    stored.
+    nothing: `WHEN_EMPTY`, `WHEN_TOO_LONG` with `detail` the limit, or
+    `NO_SUCH_ENTRY` with `detail` the id (it is not a current artifact).
 
     Args:
         workspace_dir: The tracked workspace path from session context.
@@ -554,11 +551,9 @@ def star_artifact(workspace_dir: str, thread_name: str, artifact_id: str,
 def unstar_artifact(workspace_dir: str, thread_name: str, artifact_id: str) -> str:
     """Remove an artifact's star.
 
-    Works on a star whose artifact is retired or missing, which resume shows as
-    `(not found)`.
-
-    Returns `{"id": ...}`. A refusal returns `{"error": "NOT_STARRED", "detail":
-    the id}` and writes nothing.
+    Returns `{"id": ...}`. A refusal returns `{"error": CODE, "detail": the id}`
+    and writes nothing: `NO_SUCH_ENTRY` (the id is not a current artifact) or
+    `NOT_STARRED`.
 
     Args:
         workspace_dir: The tracked workspace path from session context.

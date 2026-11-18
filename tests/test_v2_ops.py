@@ -14,7 +14,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "skills" / "threads" / "sc
 from ai_workspace.text import split_frontmatter
 from ai_workspace.threads import marker
 from ai_workspace.threads.v2 import index as idx
-from ai_workspace.threads.v2 import stars
 from mcp_server import (
     add_todo,
     index_directory,
@@ -1583,6 +1582,12 @@ class TestAbout:
         assert "## Todos" in text and "## Next steps" not in text
 
 
+def _art(d, aid) -> idx.Entry:
+    entry = idx.find(idx.read(d, "artifacts"), aid)
+    assert entry is not None, aid
+    return entry
+
+
 class TestStars:
     def _starrable(self, tmp_path, name="20260101-notes.md"):
         d = _thread(tmp_path)
@@ -1591,38 +1596,40 @@ class TestStars:
 
     def test_star_a_current_artifact(self, tmp_path):
         d, ws, aid = self._starrable(tmp_path)
-        before = (d / "artifacts-index.json").read_bytes()
         assert _reply(star_artifact(ws, "t", aid, "the user asks about tone")) == {"id": aid}
-        assert stars.read(d) == [stars.Star(aid, "the user asks about tone")]
-        assert (d / "artifacts-index.json").read_bytes() == before
+        assert _art(d, aid).star == "the user asks about tone"
+        assert not (d / "artifacts-starred.md").exists()
 
-    def test_restarring_replaces_the_trigger_in_place(self, tmp_path):
-        d, ws, a = self._starrable(tmp_path)
-        index_file(ws, "t", TestArtifacts()._artifact(d, "20260102-other.md"))
-        b = _only_id(d, "artifacts")
-        star_artifact(ws, "t", a, "old a")
-        star_artifact(ws, "t", b, "old b")
-        star_artifact(ws, "t", a, "new")
-        assert stars.read(d) == [stars.Star(a, "new"), stars.Star(b, "old b")]
+    def test_restarring_replaces_the_trigger(self, tmp_path):
+        d, ws, aid = self._starrable(tmp_path)
+        star_artifact(ws, "t", aid, "old")
+        star_artifact(ws, "t", aid, "new")
+        assert _art(d, aid).star == "new"
 
     @pytest.mark.parametrize("when, code", [
-        ("", "WHEN_EMPTY"), ("   ", "WHEN_EMPTY"),
-        ("line one\nline two", "WHEN_HAS_LINE_BREAK"),
-        ("one\x0btwo", "WHEN_HAS_LINE_BREAK"), ("one\u2028two", "WHEN_HAS_LINE_BREAK"),
-        ("x" * 201, "WHEN_TOO_LONG")])
+        ("", "WHEN_EMPTY"), ("   ", "WHEN_EMPTY"), ("x" * 201, "WHEN_TOO_LONG")])
     def test_a_bad_trigger_is_refused_and_writes_nothing(self, tmp_path, when, code):
         d, ws, aid = self._starrable(tmp_path)
+        before = (d / "artifacts-index.json").read_bytes()
         reply = _reply(star_artifact(ws, "t", aid, when))
         assert reply["error"] == code
         if code == "WHEN_TOO_LONG":
             assert reply["detail"] == "200"
-        assert not (d / "artifacts-starred.md").exists()
+        assert (d / "artifacts-index.json").read_bytes() == before
 
-    def test_an_unknown_id_is_refused(self, tmp_path):
+    def test_a_trigger_with_a_line_break_is_stored(self, tmp_path):
+        from ai_workspace.threads.v2.thread import compose
+        d, ws, aid = self._starrable(tmp_path)
+        assert _reply(star_artifact(ws, "t", aid, "line one\nline two")) == {"id": aid}
+        assert _art(d, aid).star == "line one\nline two"
+        assert "Read when: line one line two." in compose(d, "t")
+
+    def test_starring_a_missing_artifact_is_refused(self, tmp_path):
         d, ws, _aid = self._starrable(tmp_path)
+        before = (d / "artifacts-index.json").read_bytes()
         assert _reply(star_artifact(ws, "t", "20260101-nope", "x")) == \
             {"error": "NO_SUCH_ENTRY", "detail": "20260101-nope"}
-        assert not (d / "artifacts-starred.md").exists()
+        assert (d / "artifacts-index.json").read_bytes() == before
 
     def test_a_retired_id_is_refused(self, tmp_path):
         _d, ws, aid = self._starrable(tmp_path)
@@ -1633,27 +1640,34 @@ class TestStars:
         assert inspect.signature(star_artifact).parameters["when"].default \
             is inspect.Parameter.empty
 
-    def test_unstar_removes_the_line(self, tmp_path):
+    def test_unstar_removes_the_field(self, tmp_path):
         d, ws, aid = self._starrable(tmp_path)
         star_artifact(ws, "t", aid, "x")
-        assert _reply(unstar_artifact(ws, "t", aid)) == {"id": aid} and stars.read(d) == []
+        assert _reply(unstar_artifact(ws, "t", aid)) == {"id": aid}
+        doc = json.loads((d / "artifacts-index.json").read_text())
+        assert all("star" not in e for e in doc["entries"])
+        assert _art(d, aid).star is None
 
     def test_unstar_refuses_an_id_with_no_star(self, tmp_path):
         _d, ws, aid = self._starrable(tmp_path)
         assert _reply(unstar_artifact(ws, "t", aid)) == {"error": "NOT_STARRED", "detail": aid}
 
+    def test_unstar_refuses_an_unknown_id(self, tmp_path):
+        _d, ws, _aid = self._starrable(tmp_path)
+        assert _reply(unstar_artifact(ws, "t", "20260101-nope"))["error"] == "NO_SUCH_ENTRY"
+
     def test_reindexing_the_description_keeps_the_star(self, tmp_path):
         d, ws, aid = self._starrable(tmp_path)
         star_artifact(ws, "t", aid, "trigger")
         index_file(ws, "t", "./artifacts/20260101-notes.md", "a new description")
-        assert stars.read(d) == [stars.Star(aid, "trigger")]
+        assert _art(d, aid).star == "trigger"
 
     def test_retiring_drops_the_star_and_returns_its_trigger(self, tmp_path):
         d, ws, aid = self._starrable(tmp_path)
         star_artifact(ws, "t", aid, "trigger")
         assert _reply(retire_artifact(ws, "t", aid, "stale")) == \
             {"id": aid, "star_dropped": "trigger"}
-        assert stars.read(d) == []
+        assert idx.read(d, "artifacts", retired=True)[0].star is None
 
     def test_retiring_an_unstarred_artifact_replies_as_before(self, tmp_path):
         _d, ws, aid = self._starrable(tmp_path)
@@ -1663,9 +1677,9 @@ class TestStars:
         d, ws, aid = self._starrable(tmp_path)
         star_artifact(ws, "t", aid, "trigger")
         assert _reply(retire_artifact(ws, "t", aid, "bogus"))["error"] == "STATE_UNKNOWN"
-        assert stars.read(d) == [stars.Star(aid, "trigger")]
+        assert _art(d, aid).star == "trigger"
 
-    def test_redating_moves_the_star(self, tmp_path):
+    def test_redating_keeps_the_star(self, tmp_path):
         d = _thread(tmp_path)
         ws = str(tmp_path)
         index_file(ws, "t", TestArtifacts()._artifact(d, "orphan.md"))
@@ -1673,7 +1687,7 @@ class TestStars:
         assert aid == "19700101-orphan"
         star_artifact(ws, "t", aid, "trigger")
         index_file(ws, "t", "./artifacts/orphan.md", date="2026-07-27")
-        assert stars.read(d) == [stars.Star("20260727-orphan", "trigger")]
+        assert _art(d, "20260727-orphan").star == "trigger"
 
     def test_unstarring_lists_it_back_under_artifacts(self, tmp_path):
         from ai_workspace.threads.v2.thread import compose
@@ -1683,13 +1697,6 @@ class TestStars:
         unstar_artifact(ws, "t", aid)
         out = compose(d, "t")
         assert "## Artifacts (1)" in out and "Starred artifacts" not in out
-
-    def test_unstar_clears_an_orphan(self, tmp_path):
-        d, ws, _aid = self._starrable(tmp_path)
-        stars.write(d, [stars.Star("20260415-notes-old-plan", "x")])
-        assert _reply(unstar_artifact(ws, "t", "20260415-notes-old-plan"))["id"] \
-            == "20260415-notes-old-plan"
-        assert stars.read(d) == []
 
 
 BROKEN = '{"entries": [\n  {"id": "x",}\n]}\n'
@@ -1745,6 +1752,8 @@ CALLS = [
     ("artifacts-index.json", lambda ws, i: index_directory(ws, "t", "./artifacts")),
     ("artifacts-index.json",
      lambda ws, i: star_artifact(ws, "t", i["artifact"], "x")),
+    ("artifacts-index.json",
+     lambda ws, i: unstar_artifact(ws, "t", i["artifact"])),
     ("artifacts-index.json",
      lambda ws, i: retire_artifact(ws, "t", i["artifact"], "stale")),
     ("artifacts-retired.json",
