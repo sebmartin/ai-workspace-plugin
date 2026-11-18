@@ -28,6 +28,7 @@ from mcp_server import (
     retire_todo,
     save_session,
     set_about,
+    set_parent,
     set_todo_state,
     star_artifact,
     unstar_artifact,
@@ -94,6 +95,7 @@ class TestRefusalOnSchema1:
             retire_todo(ws, "old", "i", "done"),
             set_todo_state(ws, "old", "i", "parked"),
             order_todos(ws, "old", ["i"]),
+            set_parent(ws, "old", ["i"], None),
             log_decision(ws, "old", "t", "s", "b"),
             retire_decision(ws, "old", "i", "superseded"),
             index_file(ws, "old", "./artifacts/x.md"),
@@ -1771,6 +1773,8 @@ CALLS = [
     ("todos-index.json", lambda ws, i: add_todo(ws, "t", "New", "./s.md")),
     ("todos-index.json", lambda ws, i: set_todo_state(ws, "t", i["todo"], "parked")),
     ("todos-index.json", lambda ws, i: order_todos(ws, "t", [i["todo2"]])),
+    ("todos-index.json",
+     lambda ws, i: set_parent(ws, "t", [i["todo2"]], i["todo"])),
     ("todos-index.json", lambda ws, i: retire_todo(ws, "t", i["todo"], "done")),
     ("todos-retired.json", lambda ws, i: retire_todo(ws, "t", i["todo"], "done")),
     ("todos-index.json", lambda ws, i: set_about(ws, "t", "New about.")),
@@ -1910,3 +1914,103 @@ class TestNesting:
 
     def test_parent_is_optional_on_add_todo(self):
         assert inspect.signature(add_todo).parameters["parent"].default is None
+
+    def test_nests_several_todos_in_one_call(self, tmp_path):
+        d, ws, add = self._setup(tmp_path)
+        a, b, c, x = add("A"), add("B"), add("C"), add("X")
+        assert _reply(set_parent(ws, "t", [b, c], a)) == {"moved": [b, c]}
+        top = idx.read(d, "todos")
+        assert [e.id for e in top] == [a, x]
+        assert [k.id for k in top[0].children or []] == [b, c]
+
+    def test_a_nested_todo_goes_last_among_its_new_siblings(self, tmp_path):
+        d, ws, add = self._setup(tmp_path)
+        a = add("A")
+        c1 = add("C1", parent=a)
+        c2 = add("C2", parent=a)
+        x = add("X")
+        set_parent(ws, "t", [x], a)
+        assert [k.id for k in idx.read(d, "todos")[0].children or []] == [c1, c2, x]
+
+    def test_a_todo_already_a_child_of_the_parent_keeps_its_place(self, tmp_path):
+        d, ws, add = self._setup(tmp_path)
+        a = add("A")
+        c1 = add("C1", parent=a)
+        c2 = add("C2", parent=a)
+        assert _reply(set_parent(ws, "t", [c1], a)) == {"moved": []}
+        assert [k.id for k in idx.read(d, "todos")[0].children or []] == [c1, c2]
+
+    def test_moves_a_child_to_another_goal(self, tmp_path):
+        d, ws, add = self._setup(tmp_path)
+        a = add("A")
+        g = add("G")
+        g1 = add("G1", parent=g)
+        c = add("C", parent=a)
+        assert _reply(set_parent(ws, "t", [c], g)) == {"moved": [c]}
+        top = {e.id: e for e in idx.read(d, "todos")}
+        assert top[a].children == []
+        assert [k.id for k in top[g].children or []] == [g1, c]
+
+    def test_none_takes_children_back_after_their_goal(self, tmp_path):
+        d, ws, _add = self._setup(tmp_path)
+        idx.write(d, "todos", [_e("g", children=[_e("c1"), _e("c2")]), _e("x")])
+        out = _reply(set_parent(ws, "t", ["20260101-c2", "20260101-c1"], None))
+        assert out == {"moved": ["20260101-c2", "20260101-c1"]}
+        top = idx.read(d, "todos")
+        assert [e.id for e in top] == ["20260101-g", "20260101-c2", "20260101-c1", "20260101-x"]
+        assert top[0].children == []
+
+    def test_none_on_a_top_level_todo_changes_nothing(self, tmp_path):
+        d, ws, add = self._setup(tmp_path)
+        a, b = add("A"), add("B")
+        before = (d / "todos-index.json").read_bytes()
+        assert _reply(set_parent(ws, "t", [b], None)) == {"moved": []}
+        assert (d / "todos-index.json").read_bytes() == before
+        assert [e.id for e in idx.read(d, "todos")] == [a, b]
+
+    @pytest.mark.parametrize("ids, parent, code", [
+        ([], "a", "IDS_REQUIRED"), (["nope"], "a", "NO_SUCH_ENTRY"),
+        (["b"], "nope", "NO_SUCH_ENTRY"), (["b", "b"], "a", "DUPLICATE_ID"),
+        (["a"], "a", "PARENT_IS_SELF"), (["b"], "c1", "PARENT_IS_CHILD"),
+        (["g"], "a", "TODO_IS_GOAL")])
+    def test_each_refusal_writes_nothing(self, tmp_path, ids, parent, code):
+        d, ws, _add = self._setup(tmp_path)
+        idx.write(d, "todos", [_e("a"), _e("b"), _e("g", children=[_e("c1")])])
+        before = _snapshot(d)
+        full = [f"20260101-{i}" for i in ids]
+        out = _reply(set_parent(ws, "t", full, f"20260101-{parent}"))
+        assert out["error"] == code
+        assert _snapshot(d) == before
+
+    def test_refusal_details(self, tmp_path):
+        d, ws, _add = self._setup(tmp_path)
+        idx.write(d, "todos", [_e("a"), _e("b"), _e("g", children=[_e("c1")])])
+        p = "20260101-"
+        out = _reply(set_parent(ws, "t", [p + "x", p + "b"], p + "y"))
+        assert out["detail"] == f"{p}x, {p}y"
+        out = _reply(set_parent(ws, "t", [p + "b", p + "a", p + "b", p + "a"], p + "g"))
+        assert out == {"error": "DUPLICATE_ID", "detail": f"{p}a, {p}b"}
+        assert _reply(set_parent(ws, "t", [p + "b", p + "g"], p + "a")) == {
+            "error": "TODO_IS_GOAL", "detail": p + "g"}
+
+    def test_an_emptied_goal_stays_a_goal_through_later_writes(self, tmp_path):
+        d, ws, _add = self._setup(tmp_path)
+        idx.write(d, "todos", [_e("g", children=[_e("c")]), _e("x")])
+        set_parent(ws, "t", ["20260101-c"], None)
+        add_todo(ws, "t", "N", "./s.md")
+        set_todo_state(ws, "t", "20260101-x", "started")
+        g = json.loads((d / "todos-index.json").read_text())["entries"]
+        assert next(e for e in g if e["id"] == "20260101-g")["children"] == []
+        out = _reply(set_parent(ws, "t", ["20260101-g"], "20260101-x"))
+        assert out["error"] == "TODO_IS_GOAL"
+        assert _reply(set_parent(ws, "t", ["20260101-c"], "20260101-g")) == {
+            "moved": ["20260101-c"]}
+
+    def test_parent_is_required(self):
+        import asyncio
+
+        from mcp_server import mcp
+        assert inspect.signature(set_parent).parameters["parent"].default \
+            is inspect.Parameter.empty
+        tool = next(t for t in asyncio.run(mcp.list_tools()) if t.name == "set_parent")
+        assert "parent" in tool.input_schema["required"]

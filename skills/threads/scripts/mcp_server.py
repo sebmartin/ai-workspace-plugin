@@ -364,6 +364,43 @@ def order_todos(workspace_dir: str, thread_name: str, todo_ids: list[str],
 
 
 @mcp.tool()
+def set_parent(workspace_dir: str, thread_name: str, todo_ids: list[str],
+               parent: str | None) -> str:
+    """Nest todos under a goal, move them between goals, or take them back out.
+
+    A goal is a top-level todo that holds child todos, one level deep. Pass a
+    goal's id as `parent` to put the todos under it, which makes it a goal if
+    it was a plain todo. `parent` is required so that a forgotten argument
+    cannot un-nest anything: pass `null` to take the todos back to the top
+    level. Giving a list lets a goal and its children be set up in one call.
+
+    Nesting puts each todo last among the parent's children, in the order
+    given, and a todo already under that parent keeps its place. `null` puts
+    a child straight after its old goal in the top-level list, and several
+    from the same goal go in the order given, each after the one before. A
+    todo already at the top level is left alone.
+
+    Returns `{"moved": [ids whose list changed, in the order given]}`, so a
+    call that changed nothing returns `{"moved": []}`. A refusal returns
+    `{"error": CODE, "detail": ...}` and writes nothing, checked in this
+    order: `IDS_REQUIRED` when `todo_ids` is empty; `NO_SUCH_ENTRY` naming
+    the ids that are not todos, `parent` included; `DUPLICATE_ID` naming
+    an id given twice; `PARENT_IS_SELF` when `parent` is one of `todo_ids`;
+    `PARENT_IS_CHILD` when `parent` is itself a child, since a goal holds one
+    level; and `TODO_IS_GOAL` naming todos that are goals, since a goal cannot
+    become a child.
+
+    Args:
+        workspace_dir: The tracked workspace path from session context.
+        thread_name: Name of the thread (kebab-case).
+        todo_ids: Ids of the todos to move, in the order they should come.
+        parent: The id of the top-level todo to put them under, or `null` to
+            take them back to the top level.
+    """
+    return _threads.set_parent(workspace_dir, thread_name, todo_ids, parent)
+
+
+@mcp.tool()
 def log_decision(workspace_dir: str, thread_name: str, title: str, summary: str,
                  body: str, state: str = "proposed",
                  supersedes: list[str] | None = None) -> str:

@@ -535,6 +535,64 @@ def order_todos(thread, todo_ids: list[str], place: str = "") -> str:
 
 
 @idx.refuses_unreadable
+def set_parent(thread, todo_ids: list[str], parent: str | None) -> str:
+    """Nest the named todos under `parent`, or take them back to the top level.
+
+    Moving between goals is the same call as nesting. Refusals are checked in
+    a fixed order so the same mistake always gets the same code.
+    """
+    if not todo_ids:
+        return json.dumps({"error": "IDS_REQUIRED"})
+    if (unwritable := render.blocked(thread.dir)) is not None:
+        return unwritable
+    entries = idx.read(thread.dir, "todos")
+    wanted = [*todo_ids, *([parent] if parent is not None else [])]
+    if missing := [i for i in wanted if todos_mod.locate(entries, i) is None]:
+        return json.dumps({"error": "NO_SUCH_ENTRY", "detail": ", ".join(missing)})
+    if repeated := [i for i in set(todo_ids) if todo_ids.count(i) > 1]:
+        return json.dumps({"error": "DUPLICATE_ID", "detail": ", ".join(sorted(repeated))})
+    goal = None
+    if parent is not None:
+        if parent in todo_ids:
+            return json.dumps({"error": "PARENT_IS_SELF", "detail": parent})
+        found = todos_mod.locate(entries, parent)
+        assert found is not None
+        if found.goal is not None:
+            return json.dumps({"error": "PARENT_IS_CHILD", "detail": parent})
+        goal = found.entry
+        goal_ids = {e.id for e in idx.flatten(entries) if todos_mod.is_goal(e)}
+        goals = [i for i in todo_ids if i in goal_ids]
+        if goals:
+            return json.dumps({"error": "TODO_IS_GOAL", "detail": ", ".join(goals)})
+
+    moved: list[str] = []
+    last_after: dict[str, idx.Entry] = {}  # old goal id -> the entry placed last after it
+    for todo_id in todo_ids:
+        here = todos_mod.locate(entries, todo_id)
+        assert here is not None
+        if goal is not None:
+            if here.goal is goal:
+                continue
+            entry = here.siblings.pop(here.at)
+            if goal.children is None:
+                goal.children = []
+            goal.children.append(entry)
+        else:
+            if here.goal is None:
+                continue
+            entry = here.siblings.pop(here.at)
+            previous = last_after.get(here.goal.id, here.goal)
+            at = next(i for i, e in enumerate(entries) if e is previous)
+            entries.insert(at + 1, entry)
+            last_after[here.goal.id] = entry
+        moved.append(todo_id)
+    if moved:
+        idx.write(thread.dir, "todos", entries)
+        render.render(thread.dir)
+    return json.dumps({"moved": moved})
+
+
+@idx.refuses_unreadable
 def log_decision(thread, title: str, summary: str, body: str,
                  state: str = "proposed",
                  supersedes: list[str] | None = None) -> str:

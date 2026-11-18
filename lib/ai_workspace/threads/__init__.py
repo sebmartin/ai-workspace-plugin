@@ -49,6 +49,7 @@ __all__ = [
     "retire_todo",
     "save_session",
     "set_about",
+    "set_parent",
     "set_todo_state",
     "star_artifact",
     "unstar_artifact",
@@ -289,6 +290,15 @@ def order_todos(workspace_dir: str, thread_name: str, todo_ids: list[str],
     if isinstance(call, str):
         return call
     return call.fn(call.thread, todo_ids, place)
+
+
+def set_parent(workspace_dir: str, thread_name: str, todo_ids: list[str],
+               parent: str | None) -> str:
+    """Nest todos under a goal, move them between goals, or un-nest them."""
+    call = _for(workspace_dir, thread_name, "set_parent")
+    if isinstance(call, str):
+        return call
+    return call.fn(call.thread, todo_ids, parent)
 
 
 def log_decision(workspace_dir: str, thread_name: str, title: str, summary: str,
