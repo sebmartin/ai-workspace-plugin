@@ -67,7 +67,7 @@ my-workspace/
 │       ├── decisions/       # Decisions with context and rationale
 │       ├── attachments/     # Files you bring in (specs, docs, data)
 │       ├── artifacts/       # Files the CLI generates (snapshots, reports, emails)
-│       └── *-index.md       # One line per item; what the assistant reads
+│       └── *-index.json     # One entry per item; what the assistant reads
 └── .claude/
     └── settings.json        # Claude-only permission allowlist
 ```

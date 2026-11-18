@@ -4,6 +4,7 @@ import inspect
 import json
 import re
 import sys
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -13,19 +14,21 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "skills" / "threads" / "sc
 
 from ai_workspace.text import split_frontmatter
 from ai_workspace.threads import marker
+from ai_workspace.threads.v2 import ids as ids_mod
 from ai_workspace.threads.v2 import index as idx
-from ai_workspace.threads.v2 import stars
 from mcp_server import (
     add_todo,
     index_directory,
     index_file,
     log_decision,
     order_todos,
+    resume_thread,
     retire_artifact,
     retire_decision,
     retire_todo,
     save_session,
     set_about,
+    set_parent,
     set_todo_state,
     star_artifact,
     unstar_artifact,
@@ -43,6 +46,12 @@ def _four_todos(ws):
     for title in ("A", "B", "C", "D"):
         ids[title] = json.loads(add_todo(ws, "t", title, "./s.md"))["id"]
     return ids
+
+
+def _e(name, state="active", children=None):
+    """A todo entry whose id is 20260101-<name>."""
+    return idx.Entry(f"20260101-{name}", state, name.upper(), f"./todos/{name}.md",
+                     children=children)
 
 
 def _reply(out):
@@ -86,6 +95,7 @@ class TestRefusalOnSchema1:
             retire_todo(ws, "old", "i", "done"),
             set_todo_state(ws, "old", "i", "parked"),
             order_todos(ws, "old", ["i"]),
+            set_parent(ws, "old", ["i"], None),
             log_decision(ws, "old", "t", "s", "b"),
             retire_decision(ws, "old", "i", "superseded"),
             index_file(ws, "old", "./artifacts/x.md"),
@@ -107,6 +117,13 @@ class TestRefusalOnSchema1:
 
 
 class TestTodos:
+    def test_a_new_todo_never_takes_a_child_s_id(self, tmp_path):
+        d = _thread(tmp_path)
+        clash = ids_mod.make_id(date.today(), "New")
+        idx.write(d, "todos", [idx.Entry("20260101-g", "active", "G", "./s.md",
+                  children=[idx.Entry(clash, "active", "New", "./s.md")])])
+        assert _reply(add_todo(str(tmp_path), "t", "New", "./s.md"))["id"] != clash
+
     def test_add_requires_a_title(self, tmp_path):
         """Stripped to nothing, it renders an empty link label."""
         d = _thread(tmp_path)
@@ -136,25 +153,20 @@ class TestTodos:
         assert _reply(add_todo(str(tmp_path), "t", "A", link))["error"] == "OUTSIDE_THREAD"
         assert idx.read(d, "todos") == []
 
-    def test_two_adds_as_started_leave_one_started(self, tmp_path):
-        """`started` names the one thing being worked on, so a second one
-        leaves the label meaning nothing. `set_todo_state` enforced that and
-        `add_todo` implemented only the placement half of it."""
+    def test_adding_a_started_todo_leaves_the_others_started(self, tmp_path):
         d = _thread(tmp_path)
         add_todo(str(tmp_path), "t", "First", "./todos/a.md", state="started")
         add_todo(str(tmp_path), "t", "Second", "./todos/b.md", state="started")
         states = [(e.title, e.state) for e in idx.read(d, "todos")]
-        assert states == [("Second", "started"), ("First", "active")]
+        assert states == [("Second", "started"), ("First", "started")]
 
-    def test_starting_on_add_takes_the_label_without_taking_the_place(self, tmp_path):
-        """A place that was asked for wins over the one the state implies, so
-        clearing the label cannot be done by moving the new todo to the top."""
+    def test_a_started_add_with_a_place_keeps_the_place_and_the_others(self, tmp_path):
         d = _thread(tmp_path)
         add_todo(str(tmp_path), "t", "First", "./todos/a.md", state="started")
         add_todo(str(tmp_path), "t", "Second", "./todos/b.md", state="started",
                  place="end")
         states = [(e.title, e.state) for e in idx.read(d, "todos")]
-        assert states == [("First", "active"), ("Second", "started")]
+        assert states == [("First", "started"), ("Second", "started")]
 
     def test_an_external_url_is_a_valid_todo_link(self, tmp_path):
         """A todo tracked in an external system links its item there.
@@ -209,54 +221,58 @@ class TestTodos:
         retire_todo(ws, "t", ids[0], "done")
         assert "T5" in (d / "README.md").read_text()
 
-    def test_a_title_that_cannot_be_read_back_is_refused(self, tmp_path):
-        """A `]` ends the title field, so the line written is one the index
-        cannot parse: it reported success and vanished on the next write."""
+    def test_a_title_with_a_bracket_round_trips(self, tmp_path):
         d = _thread(tmp_path)
-        ws = str(tmp_path)
-        out = _reply(add_todo(ws, "t", "Fix [bug] in parser", "./sessions/s.md"))
-        assert out["error"] == "UNREPRESENTABLE"
-        assert out["detail"] == "title cannot be read back from a line"
-        assert idx.read(d, "todos") == []
+        tid = _reply(add_todo(str(tmp_path), "t", "broken ] title", "./s.md"))["id"]
+        found = idx.find(idx.read(d, "todos"), tid)
+        assert found is not None and found.title == "broken ] title"
 
-    def test_a_link_that_cannot_be_read_back_is_refused(self, tmp_path):
-        """An ordinary Wikipedia URL ends the link field."""
+    def test_a_link_with_a_parenthesis_round_trips(self, tmp_path):
+        link = "https://en.wikipedia.org/wiki/Merge_(SQL)"
         d = _thread(tmp_path)
-        ws = str(tmp_path)
-        out = _reply(add_todo(ws, "t", "Read the spec", "https://en.wikipedia.org/wiki/Merge_(SQL)"))
-        assert out["error"] == "UNREPRESENTABLE"
-        assert out["detail"] == "link cannot be read back from a line"
-        assert idx.read(d, "todos") == []
+        add_todo(str(tmp_path), "t", "Read", link)
+        assert idx.read(d, "todos")[0].link == link
 
-    def test_a_newline_in_a_title_is_refused(self, tmp_path):
+    def test_a_title_with_a_line_break_is_stored_and_shown_on_one_line(self, tmp_path):
         d = _thread(tmp_path)
-        ws = str(tmp_path)
-        out = _reply(add_todo(ws, "t", "Two\nlines", "./s.md"))
-        assert out["error"] == "UNREPRESENTABLE"
-        assert idx.read(d, "todos") == []
+        add_todo(str(tmp_path), "t", "one\ntwo", "./s.md")
+        assert idx.read(d, "todos")[0].title == "one\ntwo"
+        assert "[one two](./s.md)" in (d / "README.md").read_text()
 
-    def test_no_line_the_index_cannot_parse_is_ever_written(self, tmp_path):
-        """The invariant the refusal exists to keep: a refused write leaves no
-        line behind, so what is in the file is what reads back."""
+    def test_two_todos_can_be_started_at_once(self, tmp_path):
         d = _thread(tmp_path)
         ws = str(tmp_path)
-        add_todo(ws, "t", "Fix [the] parser", "./sessions/s.md")
-        add_todo(ws, "t", "Fix (bug) in the parser", "./sessions/s.md")
-        written = [ln for ln in idx.index_path(d, "todos").read_text().splitlines() if ln]
-        assert len(written) == len(idx.read(d, "todos")) == 1
-        assert idx.read(d, "todos")[0].title == "Fix (bug) in the parser"
-
-    def test_only_one_todo_is_started_at_a_time(self, tmp_path):
-        """Every description of the state is singular, and a list where
-        everything ever touched is marked started says nothing."""
-        d = _thread(tmp_path)
-        ws = str(tmp_path)
-        ids = {t: json.loads(add_todo(ws, "t", t, "./s.md"))["id"] for t in "ABCD"}
-        set_todo_state(ws, "t", ids["B"], "started")
+        ids = _four_todos(ws)
+        set_todo_state(ws, "t", ids["A"], "started")
         set_todo_state(ws, "t", ids["C"], "started")
         entries = idx.read(d, "todos")
-        assert [(e.title, e.state) for e in entries] == [
-            ("C", "started"), ("B", "active"), ("A", "active"), ("D", "active")]
+        assert [e.id for e in entries][:2] == [ids["C"], ids["A"]]
+        assert {e.id: e.state for e in entries}[ids["A"]] == "started"
+        assert {e.id: e.state for e in entries}[ids["C"]] == "started"
+
+    def test_starting_a_child_puts_it_first_and_its_goal_first(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        idx.write(d, "todos", [_e("x"), _e("g", children=[_e("c1"), _e("c2")])])
+        assert _reply(set_todo_state(ws, "t", "20260101-c2", "started")) == {
+            "id": "20260101-c2", "goal": "20260101-g"}
+        top = idx.read(d, "todos")
+        assert [e.id for e in top] == ["20260101-g", "20260101-x"]
+        assert [c.id for c in top[0].children or []] == ["20260101-c2", "20260101-c1"]
+        assert top[0].state == "active"
+        assert "- 20260101-g:started [G](./todos/g.md)" in (d / "README.md").read_text()
+
+    def test_starting_a_child_of_a_parked_goal_brings_the_goal_back(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        idx.write(d, "todos", [_e("x"), _e("g", "parked", children=[_e("c", "parked")])])
+        set_todo_state(ws, "t", "20260101-c", "started")
+        top = idx.read(d, "todos")
+        assert top[0].state == "active"
+        assert [e.id for e in top] == ["20260101-g", "20260101-x"]
+        text = (d / "README.md").read_text()
+        todos = text.split("## Todos")[1].split("\n## ")[0]
+        assert "20260101-g" in todos and "20260101-c" in todos
 
     def test_retiring_takes_it_out_of_todos(self, tmp_path):
         d = _thread(tmp_path)
@@ -943,50 +959,20 @@ class TestArtifacts:
         index_file(ws, "t", link, "y" * 400)
         assert idx.read(d, "artifacts")[0].description == "A short one."
 
-    def test_an_unreadable_amendment_restores_the_description_it_replaced(self, tmp_path):
-        """A different branch from the one above. The cap is checked before the
-        entry is touched; this one mutates the live entry, tests it, and puts
-        the old value back, so the restore is the only thing standing between a
-        rejected amendment and an index line that cannot be read.
-        """
-        d = _thread(tmp_path)
-        ws = str(tmp_path)
-        link = self._artifact(d)
-        index_file(ws, "t", link, "A short one.")
-        before = idx.index_path(d, "artifacts").read_bytes()
-        out = _reply(index_file(ws, "t", link, "one\ntwo"))
-        assert out["error"] == "UNREPRESENTABLE" and "description" in out["detail"]
-        assert idx.read(d, "artifacts")[0].description == "A short one."
-        assert idx.index_path(d, "artifacts").read_bytes() == before
-
-
 class TestIndexDirectory:
-    def test_a_filename_an_index_line_cannot_hold_is_refused(self, tmp_path):
-        """For an indexed file the link comes from the filename, so the
-        realistic breaker is a name a screenshot tool produced. Every other
-        UNREPRESENTABLE test drives it from caller prose, which leaves the
-        guard on the filename path with no test naming it.
-        """
-        d = self._thread_with(tmp_path, "artifacts", ["20260101-fine.md"])
-        (d / "artifacts" / "20260101-Screenshot (1).md").write_text("x\n")
-        out = _reply(index_file(str(tmp_path), "t",
-                                "./artifacts/20260101-Screenshot (1).md", "A shot."))
-        assert out["error"] == "UNREPRESENTABLE" and "link" in out["detail"]
-        assert idx.read(d, "artifacts") == []
-
-    def test_the_sweep_skips_that_file_and_indexes_its_neighbour(self, tmp_path):
-        d = self._thread_with(tmp_path, "artifacts", ["20260101-fine.md"])
-        (d / "artifacts" / "20260101-Screenshot (1).md").write_text("x\n")
-        out = _reply(index_directory(str(tmp_path), "t", "./artifacts"))
-        assert [e.id for e in idx.read(d, "artifacts")] == ["20260101-fine"]
-        assert "20260101-Screenshot (1).md" in json.dumps(out)
-
     def _thread_with(self, tmp_path, kind, names):
         d = _thread(tmp_path, stubs=False)
         (d / kind).mkdir(parents=True, exist_ok=True)
         for n in names:
             (d / kind / n).write_text("---\nstate: locked\n---\nx\n")
         return d
+
+    def test_a_filename_with_a_parenthesis_is_indexed(self, tmp_path):
+        d = _thread(tmp_path, stubs=False)
+        (d / "artifacts").mkdir(parents=True, exist_ok=True)
+        (d / "artifacts" / "20260101-merge_(sql).md").write_text("x")
+        assert _reply(index_directory(str(tmp_path), "t", "./artifacts")) == {}
+        assert idx.read(d, "artifacts")[0].link == "./artifacts/20260101-merge_(sql).md"
 
     def test_indexes_a_whole_directory_in_one_call(self, tmp_path):
         """Sixty-six sessions was sixty-six round trips before this."""
@@ -1127,17 +1113,20 @@ class TestIndexDirectory:
 
 
 class TestRoundTrip:
-    """Nothing is written that the index cannot read back."""
+    """What goes into an index comes back out of it unchanged."""
 
-    def test_a_description_with_a_line_break_is_refused(self, tmp_path):
-        """The third field on the line, and the one that is free prose. It
-        truncated at the break and orphaned the rest."""
+    def test_a_description_with_a_separator_round_trips(self, tmp_path):
         d = _thread(tmp_path)
         (d / "artifacts" / "20260101-a-note.md").write_text("x")
-        out = _reply(index_file(str(tmp_path), "t", "./artifacts/20260101-a-note.md",
-                                "one\ntwo"))
-        assert out["error"] == "UNREPRESENTABLE" and "description" in out["detail"]
-        assert idx.read(d, "artifacts") == []
+        index_file(str(tmp_path), "t", "./artifacts/20260101-a-note.md", "one -- two")
+        assert idx.read(d, "artifacts")[0].description == "one -- two"
+
+    def test_a_description_with_a_line_break_is_stored(self, tmp_path):
+        d = _thread(tmp_path)
+        (d / "artifacts" / "20260101-a-note.md").write_text("x")
+        out = _reply(index_file(str(tmp_path), "t", "./artifacts/20260101-a-note.md", "one\ntwo"))
+        assert "error" not in out
+        assert idx.read(d, "artifacts")[0].description == "one\ntwo"
 
     def test_a_description_is_stored_without_its_padding(self, tmp_path):
         """Trailing space does not survive a line, and stripping it is right
@@ -1162,24 +1151,6 @@ class TestRoundTrip:
         save_session(str(tmp_path), "t", "my [topic]", "s", "k", body="# x\n",
                      recently=["x"], up_next=[])
         assert len(idx.read(d, "sessions")) == 1
-
-    def test_the_check_follows_the_line_format(self, tmp_path):
-        """Not a second list of characters to keep in step with the pattern:
-        the entry is rendered and read back through the pattern itself."""
-        entry = idx.Entry("20260101-a", "active", "Fine title", "./todos/a.md", "fine")
-        assert idx.unrepresentable(entry) is None
-        entry.description = "one -- two"
-        assert idx.unrepresentable(entry) is None
-        entry.title = "broken ] title"
-        assert idx.unrepresentable(entry) == "title cannot be read back from a line"
-
-    def test_a_field_that_comes_back_changed_counts_as_lost(self, tmp_path):
-        """The line still matches, so matching is not the test: the fields are
-        compared. Trailing space on the last field is eaten by the pattern's
-        own `\\s*$`, which is why the tools strip before they build an entry."""
-        entry = idx.Entry("20260101-a", "active", "T", "./todos/a.md", "padded  ")
-        assert idx.unrepresentable(entry) == "description cannot be read back from a line"
-
 
 class TestRenderedText:
     """User text also has to survive the render, not only the index line.
@@ -1232,7 +1203,7 @@ class TestReadmeShape:
         for i in range(10):
             add_todo(str(tmp_path), "t", f"P{i}", "./s.md", state="parked")
         from ai_workspace.threads.v2 import render
-        assert "1 more and 10 parked in [todos](./todos-index.md)." in render.todos_body(d)
+        assert "1 more and 10 parked in [todos](./todos-index.json)." in render.todos_body(d)
 
     def test_a_v1_readme_is_refused_rather_than_appended_to(self, tmp_path):
         """The Frankenstein case: a real migration hit this and was told it worked.
@@ -1646,6 +1617,12 @@ class TestAbout:
         assert "## Todos" in text and "## Next steps" not in text
 
 
+def _art(d, aid) -> idx.Entry:
+    entry = idx.find(idx.read(d, "artifacts"), aid)
+    assert entry is not None, aid
+    return entry
+
+
 class TestStars:
     def _starrable(self, tmp_path, name="20260101-notes.md"):
         d = _thread(tmp_path)
@@ -1654,38 +1631,40 @@ class TestStars:
 
     def test_star_a_current_artifact(self, tmp_path):
         d, ws, aid = self._starrable(tmp_path)
-        before = (d / "artifacts-index.md").read_bytes()
         assert _reply(star_artifact(ws, "t", aid, "the user asks about tone")) == {"id": aid}
-        assert stars.read(d) == [stars.Star(aid, "the user asks about tone")]
-        assert (d / "artifacts-index.md").read_bytes() == before
+        assert _art(d, aid).star == "the user asks about tone"
+        assert not (d / "artifacts-starred.md").exists()
 
-    def test_restarring_replaces_the_trigger_in_place(self, tmp_path):
-        d, ws, a = self._starrable(tmp_path)
-        index_file(ws, "t", TestArtifacts()._artifact(d, "20260102-other.md"))
-        b = _only_id(d, "artifacts")
-        star_artifact(ws, "t", a, "old a")
-        star_artifact(ws, "t", b, "old b")
-        star_artifact(ws, "t", a, "new")
-        assert stars.read(d) == [stars.Star(a, "new"), stars.Star(b, "old b")]
+    def test_restarring_replaces_the_trigger(self, tmp_path):
+        d, ws, aid = self._starrable(tmp_path)
+        star_artifact(ws, "t", aid, "old")
+        star_artifact(ws, "t", aid, "new")
+        assert _art(d, aid).star == "new"
 
     @pytest.mark.parametrize("when, code", [
-        ("", "WHEN_EMPTY"), ("   ", "WHEN_EMPTY"),
-        ("line one\nline two", "WHEN_HAS_LINE_BREAK"),
-        ("one\x0btwo", "WHEN_HAS_LINE_BREAK"), ("one\u2028two", "WHEN_HAS_LINE_BREAK"),
-        ("x" * 201, "WHEN_TOO_LONG")])
+        ("", "WHEN_EMPTY"), ("   ", "WHEN_EMPTY"), ("x" * 201, "WHEN_TOO_LONG")])
     def test_a_bad_trigger_is_refused_and_writes_nothing(self, tmp_path, when, code):
         d, ws, aid = self._starrable(tmp_path)
+        before = (d / "artifacts-index.json").read_bytes()
         reply = _reply(star_artifact(ws, "t", aid, when))
         assert reply["error"] == code
         if code == "WHEN_TOO_LONG":
             assert reply["detail"] == "200"
-        assert not (d / "artifacts-starred.md").exists()
+        assert (d / "artifacts-index.json").read_bytes() == before
 
-    def test_an_unknown_id_is_refused(self, tmp_path):
+    def test_a_trigger_with_a_line_break_is_stored(self, tmp_path):
+        from ai_workspace.threads.v2.thread import compose
+        d, ws, aid = self._starrable(tmp_path)
+        assert _reply(star_artifact(ws, "t", aid, "line one\nline two")) == {"id": aid}
+        assert _art(d, aid).star == "line one\nline two"
+        assert "Read when: line one line two." in compose(d, "t")
+
+    def test_starring_a_missing_artifact_is_refused(self, tmp_path):
         d, ws, _aid = self._starrable(tmp_path)
+        before = (d / "artifacts-index.json").read_bytes()
         assert _reply(star_artifact(ws, "t", "20260101-nope", "x")) == \
             {"error": "NO_SUCH_ENTRY", "detail": "20260101-nope"}
-        assert not (d / "artifacts-starred.md").exists()
+        assert (d / "artifacts-index.json").read_bytes() == before
 
     def test_a_retired_id_is_refused(self, tmp_path):
         _d, ws, aid = self._starrable(tmp_path)
@@ -1696,27 +1675,34 @@ class TestStars:
         assert inspect.signature(star_artifact).parameters["when"].default \
             is inspect.Parameter.empty
 
-    def test_unstar_removes_the_line(self, tmp_path):
+    def test_unstar_removes_the_field(self, tmp_path):
         d, ws, aid = self._starrable(tmp_path)
         star_artifact(ws, "t", aid, "x")
-        assert _reply(unstar_artifact(ws, "t", aid)) == {"id": aid} and stars.read(d) == []
+        assert _reply(unstar_artifact(ws, "t", aid)) == {"id": aid}
+        doc = json.loads((d / "artifacts-index.json").read_text())
+        assert all("star" not in e for e in doc["entries"])
+        assert _art(d, aid).star is None
 
     def test_unstar_refuses_an_id_with_no_star(self, tmp_path):
         _d, ws, aid = self._starrable(tmp_path)
         assert _reply(unstar_artifact(ws, "t", aid)) == {"error": "NOT_STARRED", "detail": aid}
 
+    def test_unstar_refuses_an_unknown_id(self, tmp_path):
+        _d, ws, _aid = self._starrable(tmp_path)
+        assert _reply(unstar_artifact(ws, "t", "20260101-nope"))["error"] == "NO_SUCH_ENTRY"
+
     def test_reindexing_the_description_keeps_the_star(self, tmp_path):
         d, ws, aid = self._starrable(tmp_path)
         star_artifact(ws, "t", aid, "trigger")
         index_file(ws, "t", "./artifacts/20260101-notes.md", "a new description")
-        assert stars.read(d) == [stars.Star(aid, "trigger")]
+        assert _art(d, aid).star == "trigger"
 
     def test_retiring_drops_the_star_and_returns_its_trigger(self, tmp_path):
         d, ws, aid = self._starrable(tmp_path)
         star_artifact(ws, "t", aid, "trigger")
         assert _reply(retire_artifact(ws, "t", aid, "stale")) == \
             {"id": aid, "star_dropped": "trigger"}
-        assert stars.read(d) == []
+        assert idx.read(d, "artifacts", retired=True)[0].star is None
 
     def test_retiring_an_unstarred_artifact_replies_as_before(self, tmp_path):
         _d, ws, aid = self._starrable(tmp_path)
@@ -1726,9 +1712,9 @@ class TestStars:
         d, ws, aid = self._starrable(tmp_path)
         star_artifact(ws, "t", aid, "trigger")
         assert _reply(retire_artifact(ws, "t", aid, "bogus"))["error"] == "STATE_UNKNOWN"
-        assert stars.read(d) == [stars.Star(aid, "trigger")]
+        assert _art(d, aid).star == "trigger"
 
-    def test_redating_moves_the_star(self, tmp_path):
+    def test_redating_keeps_the_star(self, tmp_path):
         d = _thread(tmp_path)
         ws = str(tmp_path)
         index_file(ws, "t", TestArtifacts()._artifact(d, "orphan.md"))
@@ -1736,7 +1722,7 @@ class TestStars:
         assert aid == "19700101-orphan"
         star_artifact(ws, "t", aid, "trigger")
         index_file(ws, "t", "./artifacts/orphan.md", date="2026-07-27")
-        assert stars.read(d) == [stars.Star("20260727-orphan", "trigger")]
+        assert _art(d, "20260727-orphan").star == "trigger"
 
     def test_unstarring_lists_it_back_under_artifacts(self, tmp_path):
         from ai_workspace.threads.v2.thread import compose
@@ -1747,9 +1733,456 @@ class TestStars:
         out = compose(d, "t")
         assert "## Artifacts (1)" in out and "Starred artifacts" not in out
 
-    def test_unstar_clears_an_orphan(self, tmp_path):
-        d, ws, _aid = self._starrable(tmp_path)
-        stars.write(d, [stars.Star("20260415-notes-old-plan", "x")])
-        assert _reply(unstar_artifact(ws, "t", "20260415-notes-old-plan"))["id"] \
-            == "20260415-notes-old-plan"
-        assert stars.read(d) == []
+
+BROKEN = '{"entries": [\n  {"id": "x",}\n]}\n'
+INDEXES = ["sessions-index.json", "decisions-index.json", "artifacts-index.json",
+           "todos-index.json", "decisions-retired.json", "artifacts-retired.json",
+           "todos-retired.json"]
+
+
+def _snapshot(d):
+    return {p: p.read_bytes() for p in sorted(d.rglob("*")) if p.is_file()}
+
+
+def _populated(tmp_path):
+    """A thread in which all seven index files exist. Returns (d, ws, ids), where
+    ids names the todos, decision and artifacts still in force."""
+    d = _thread(tmp_path)
+    ws = str(tmp_path)
+    ids = {}
+    todo_ids = [_reply(add_todo(ws, "t", title, "./s.md"))["id"]
+                for title in ("One", "Two", "Three")]
+    ids["todo"], ids["todo2"] = todo_ids[0], todo_ids[1]
+    retire_todo(ws, "t", todo_ids[2], "done")
+    first = _reply(log_decision(ws, "t", "First", "s", "b"))["id"]
+    ids["decision"] = _reply(log_decision(ws, "t", "Second", "s", "b"))["id"]
+    log_decision(ws, "t", "Third", "s", "b", supersedes=[first])
+    arts = []
+    for name in ("20260101-a.md", "20260102-b.md", "20260103-c.md"):
+        (d / "artifacts" / name).write_text("x")
+        arts.append(_reply(index_file(ws, "t", f"./artifacts/{name}"))["id"])
+    ids["artifact"], ids["artifact2"] = arts[0], arts[1]
+    retire_artifact(ws, "t", arts[2], "stale")
+    save_session(ws, "t", "first", "s", "k", "# x\n", ["a"], [])
+    for name in INDEXES:
+        assert (d / name).exists(), name
+    return d, ws, ids
+
+
+CALLS = [
+    ("todos-index.json", lambda ws, i: add_todo(ws, "t", "New", "./s.md")),
+    ("todos-index.json", lambda ws, i: set_todo_state(ws, "t", i["todo"], "parked")),
+    ("todos-index.json", lambda ws, i: order_todos(ws, "t", [i["todo2"]])),
+    ("todos-index.json",
+     lambda ws, i: set_parent(ws, "t", [i["todo2"]], i["todo"])),
+    ("todos-index.json", lambda ws, i: retire_todo(ws, "t", i["todo"], "done")),
+    ("todos-retired.json", lambda ws, i: retire_todo(ws, "t", i["todo"], "done")),
+    ("todos-index.json", lambda ws, i: set_about(ws, "t", "New about.")),
+    ("todos-index.json", lambda ws, i: log_decision(ws, "t", "N", "s", "b")),
+    ("decisions-index.json", lambda ws, i: log_decision(ws, "t", "N", "s", "b")),
+    ("decisions-retired.json",
+     lambda ws, i: retire_decision(ws, "t", i["decision"], "withdrawn")),
+    ("artifacts-index.json",
+     lambda ws, i: index_file(ws, "t", "./artifacts/20260105-new.md")),
+    ("artifacts-retired.json",
+     lambda ws, i: index_file(ws, "t", "./artifacts/20260105-new.md")),
+    ("artifacts-index.json", lambda ws, i: index_directory(ws, "t", "./artifacts")),
+    ("artifacts-index.json",
+     lambda ws, i: star_artifact(ws, "t", i["artifact"], "x")),
+    ("artifacts-index.json",
+     lambda ws, i: unstar_artifact(ws, "t", i["artifact"])),
+    ("artifacts-index.json",
+     lambda ws, i: retire_artifact(ws, "t", i["artifact"], "stale")),
+    ("artifacts-retired.json",
+     lambda ws, i: retire_artifact(ws, "t", i["artifact"], "stale")),
+    ("sessions-index.json",
+     lambda ws, i: save_session(ws, "t", "new", "s", "k", "# x\n", ["a"], [])),
+]
+
+
+class TestUnreadableIndex:
+    @pytest.mark.parametrize("name", INDEXES)
+    def test_resume_refuses_as_a_whole(self, tmp_path, name):
+        d, ws, _ = _populated(tmp_path)
+        (d / name).write_text(BROKEN)
+        before = _snapshot(d)
+        r = json.loads(resume_thread(ws, "t"))
+        assert r["error"] == "UNREADABLE_INDEX" and r["file"] == name
+        assert "line 2 column" in r["detail"] and "not delete" in r["fix"]
+        assert _snapshot(d) == before
+
+    @pytest.mark.parametrize("name, call", CALLS)
+    def test_every_tool_refuses_and_writes_nothing(self, tmp_path, name, call):
+        d, ws, ids = _populated(tmp_path)
+        (d / "artifacts" / "20260105-new.md").write_text("x")
+        (d / name).write_text(BROKEN)
+        before = _snapshot(d)
+        r = _reply(call(ws, ids))
+        assert r["error"] == "UNREADABLE_INDEX" and r["file"] == name
+        assert _snapshot(d) == before
+
+    def test_a_wrong_shape_refuses_like_a_parse_error(self, tmp_path):
+        d = _thread(tmp_path)
+        (d / "todos-index.json").write_text('{"entries": null}')
+        r = _reply(add_todo(str(tmp_path), "t", "A", "./s.md"))
+        assert r["error"] == "UNREADABLE_INDEX"
+
+
+class TestNesting:
+    def _setup(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+
+        def add(title, **kw):
+            return _reply(add_todo(ws, "t", title, "./s.md", **kw))["id"]
+
+        return d, ws, add
+
+    def test_adding_under_a_plain_todo_makes_it_a_goal(self, tmp_path):
+        d, _ws, add = self._setup(tmp_path)
+        a = add("A")
+        c = add("C", parent=a)
+        top = idx.read(d, "todos")
+        assert [e.id for e in top] == [a] and [x.id for x in top[0].children or []] == [c]
+
+    def test_a_child_goes_last_among_its_siblings_by_default(self, tmp_path):
+        d, _ws, add = self._setup(tmp_path)
+        a = add("A")
+        c1 = add("C1", parent=a)
+        c2 = add("C2", parent=a)
+        assert [x.id for x in idx.read(d, "todos")[0].children or []] == [c1, c2]
+
+    def test_place_resolves_within_the_goal_s_children(self, tmp_path):
+        d, _ws, add = self._setup(tmp_path)
+        a = add("A")
+        c1 = add("C1", parent=a)
+        c2 = add("C2", parent=a)
+        c3 = add("C3", parent=a, place="top")
+        c4 = add("C4", parent=a, place=f"after:{c1}")
+        assert [x.id for x in idx.read(d, "todos")[0].children or []] == [c3, c1, c4, c2]
+
+    def test_a_top_level_anchor_is_not_in_a_goal_s_list(self, tmp_path):
+        _d, ws, add = self._setup(tmp_path)
+        x = add("X")
+        a = add("A")
+        out = _reply(add_todo(ws, "t", "C", "./s.md", parent=a, place=f"before:{x}"))
+        assert out == {"error": "NO_SUCH_ENTRY", "detail": x}
+
+    def test_a_started_child_sends_its_goal_to_the_top(self, tmp_path):
+        d, _ws, add = self._setup(tmp_path)
+        x = add("X")
+        a = add("A")
+        assert [e.id for e in idx.read(d, "todos")] == [x, a]
+        c1 = add("C1", parent=a)
+        c2 = add("C2", parent=a, state="started")
+        top = idx.read(d, "todos")
+        assert [e.id for e in top] == [a, x]
+        assert [e.id for e in top[0].children or []] == [c2, c1]
+
+    def test_a_started_child_with_a_place_still_sends_its_goal_to_the_top(self, tmp_path):
+        d, _ws, add = self._setup(tmp_path)
+        x = add("X")
+        a = add("A")
+        c1 = add("C1", parent=a)
+        c2 = add("C2", parent=a, state="started", place="end")
+        top = idx.read(d, "todos")
+        assert [e.id for e in top] == [a, x]
+        assert [e.id for e in top[0].children or []] == [c1, c2]
+
+    def test_a_started_child_brings_a_parked_goal_back(self, tmp_path):
+        d, _ws, add = self._setup(tmp_path)
+        a = add("A", state="parked")
+        add("C", parent=a, state="started")
+        assert idx.read(d, "todos")[0].state == "active"
+
+    def test_an_unknown_parent_is_refused_and_writes_nothing(self, tmp_path):
+        d, ws, add = self._setup(tmp_path)
+        add("A")
+        before = _snapshot(d)
+        out = _reply(add_todo(ws, "t", "C", "./s.md", parent="20260101-nope"))
+        assert out == {"error": "NO_SUCH_ENTRY", "detail": "20260101-nope"}
+        assert _snapshot(d) == before
+
+    def test_a_child_cannot_be_a_parent(self, tmp_path):
+        d, ws, add = self._setup(tmp_path)
+        a = add("A")
+        c = add("C", parent=a)
+        before = _snapshot(d)
+        out = _reply(add_todo(ws, "t", "G", "./s.md", parent=c))
+        assert out == {"error": "PARENT_IS_CHILD", "detail": c}
+        assert _snapshot(d) == before
+
+    def test_parent_is_optional_on_add_todo(self):
+        assert inspect.signature(add_todo).parameters["parent"].default is None
+
+    def test_nests_several_todos_in_one_call(self, tmp_path):
+        d, ws, add = self._setup(tmp_path)
+        a, b, c, x = add("A"), add("B"), add("C"), add("X")
+        assert _reply(set_parent(ws, "t", [b, c], a)) == {"moved": [b, c]}
+        top = idx.read(d, "todos")
+        assert [e.id for e in top] == [a, x]
+        assert [k.id for k in top[0].children or []] == [b, c]
+
+    def test_a_nested_todo_goes_last_among_its_new_siblings(self, tmp_path):
+        d, ws, add = self._setup(tmp_path)
+        a = add("A")
+        c1 = add("C1", parent=a)
+        c2 = add("C2", parent=a)
+        x = add("X")
+        set_parent(ws, "t", [x], a)
+        assert [k.id for k in idx.read(d, "todos")[0].children or []] == [c1, c2, x]
+
+    def test_a_todo_already_a_child_of_the_parent_keeps_its_place(self, tmp_path):
+        d, ws, add = self._setup(tmp_path)
+        a = add("A")
+        c1 = add("C1", parent=a)
+        c2 = add("C2", parent=a)
+        assert _reply(set_parent(ws, "t", [c1], a)) == {"moved": []}
+        assert [k.id for k in idx.read(d, "todos")[0].children or []] == [c1, c2]
+
+    def test_moves_a_child_to_another_goal(self, tmp_path):
+        d, ws, add = self._setup(tmp_path)
+        a = add("A")
+        g = add("G")
+        g1 = add("G1", parent=g)
+        c = add("C", parent=a)
+        assert _reply(set_parent(ws, "t", [c], g)) == {"moved": [c]}
+        top = {e.id: e for e in idx.read(d, "todos")}
+        assert top[a].children == []
+        assert [k.id for k in top[g].children or []] == [g1, c]
+
+    def test_none_takes_children_back_after_their_goal(self, tmp_path):
+        d, ws, _add = self._setup(tmp_path)
+        idx.write(d, "todos", [_e("g", children=[_e("c1"), _e("c2")]), _e("x")])
+        out = _reply(set_parent(ws, "t", ["20260101-c2", "20260101-c1"], None))
+        assert out == {"moved": ["20260101-c2", "20260101-c1"]}
+        top = idx.read(d, "todos")
+        assert [e.id for e in top] == ["20260101-g", "20260101-c2", "20260101-c1", "20260101-x"]
+        assert top[0].children == []
+
+    def test_none_on_a_top_level_todo_changes_nothing(self, tmp_path):
+        d, ws, add = self._setup(tmp_path)
+        a, b = add("A"), add("B")
+        before = (d / "todos-index.json").read_bytes()
+        assert _reply(set_parent(ws, "t", [b], None)) == {"moved": []}
+        assert (d / "todos-index.json").read_bytes() == before
+        assert [e.id for e in idx.read(d, "todos")] == [a, b]
+
+    @pytest.mark.parametrize("ids, parent, code", [
+        ([], "a", "IDS_REQUIRED"), (["nope"], "a", "NO_SUCH_ENTRY"),
+        (["b"], "nope", "NO_SUCH_ENTRY"), (["b", "b"], "a", "DUPLICATE_ID"),
+        (["a"], "a", "PARENT_IS_SELF"), (["b"], "c1", "PARENT_IS_CHILD"),
+        (["g"], "a", "TODO_IS_GOAL")])
+    def test_each_refusal_writes_nothing(self, tmp_path, ids, parent, code):
+        d, ws, _add = self._setup(tmp_path)
+        idx.write(d, "todos", [_e("a"), _e("b"), _e("g", children=[_e("c1")])])
+        before = _snapshot(d)
+        full = [f"20260101-{i}" for i in ids]
+        out = _reply(set_parent(ws, "t", full, f"20260101-{parent}"))
+        assert out["error"] == code
+        assert _snapshot(d) == before
+
+    def test_refusal_details(self, tmp_path):
+        d, ws, _add = self._setup(tmp_path)
+        idx.write(d, "todos", [_e("a"), _e("b"), _e("g", children=[_e("c1")])])
+        p = "20260101-"
+        out = _reply(set_parent(ws, "t", [p + "x", p + "b"], p + "y"))
+        assert out["detail"] == f"{p}x, {p}y"
+        out = _reply(set_parent(ws, "t", [p + "b", p + "a", p + "b", p + "a"], p + "g"))
+        assert out == {"error": "DUPLICATE_ID", "detail": f"{p}a, {p}b"}
+        assert _reply(set_parent(ws, "t", [p + "b", p + "g"], p + "a")) == {
+            "error": "TODO_IS_GOAL", "detail": p + "g"}
+
+    def test_an_emptied_goal_stays_a_goal_through_later_writes(self, tmp_path):
+        d, ws, _add = self._setup(tmp_path)
+        idx.write(d, "todos", [_e("g", children=[_e("c")]), _e("x")])
+        set_parent(ws, "t", ["20260101-c"], None)
+        add_todo(ws, "t", "N", "./s.md")
+        set_todo_state(ws, "t", "20260101-x", "started")
+        g = json.loads((d / "todos-index.json").read_text())["entries"]
+        assert next(e for e in g if e["id"] == "20260101-g")["children"] == []
+        out = _reply(set_parent(ws, "t", ["20260101-g"], "20260101-x"))
+        assert out["error"] == "TODO_IS_GOAL"
+        assert _reply(set_parent(ws, "t", ["20260101-c"], "20260101-g")) == {
+            "moved": ["20260101-c"]}
+
+    def test_parent_is_required(self):
+        import asyncio
+
+        from mcp_server import mcp
+        assert inspect.signature(set_parent).parameters["parent"].default \
+            is inspect.Parameter.empty
+        tool = next(t for t in asyncio.run(mcp.list_tools()) if t.name == "set_parent")
+        assert "parent" in tool.input_schema["required"]
+
+    def test_children_reorder_within_their_goal(self, tmp_path):
+        d, ws, _add = self._setup(tmp_path)
+        idx.write(d, "todos", [_e("g", children=[_e("c1"), _e("c2"), _e("c3")]), _e("x")])
+        p = "20260101-"
+        assert _reply(order_todos(ws, "t", [p + "c3"])) == {"ordered": 1}
+        top = idx.read(d, "todos")
+        assert [e.id for e in top] == [p + "g", p + "x"]
+        assert [k.id for k in top[0].children or []] == [p + "c3", p + "c1", p + "c2"]
+
+    def test_ids_from_different_lists_are_refused(self, tmp_path):
+        d, ws, _add = self._setup(tmp_path)
+        idx.write(d, "todos", [_e("g", children=[_e("c1")]), _e("x")])
+        before = _snapshot(d)
+        out = _reply(order_todos(ws, "t", ["20260101-x", "20260101-c1"]))
+        assert out == {"error": "NOT_SAME_LIST", "detail": "20260101-x, 20260101-c1"}
+        assert _snapshot(d) == before
+
+    def test_children_of_two_goals_are_different_lists(self, tmp_path):
+        d, ws, _add = self._setup(tmp_path)
+        idx.write(d, "todos", [_e("g1", children=[_e("a")]), _e("g2", children=[_e("b")])])
+        before = _snapshot(d)
+        out = _reply(order_todos(ws, "t", ["20260101-a", "20260101-b"]))
+        assert out["error"] == "NOT_SAME_LIST"
+        assert _snapshot(d) == before
+
+    def test_an_anchor_outside_the_list_is_refused(self, tmp_path):
+        d, ws, _add = self._setup(tmp_path)
+        idx.write(d, "todos", [_e("g", children=[_e("c1"), _e("c2")]), _e("x")])
+        before = _snapshot(d)
+        x = "20260101-x"
+        out = _reply(order_todos(ws, "t", ["20260101-c2"], place=f"before:{x}"))
+        assert out == {"error": "NO_SUCH_ENTRY", "detail": x}
+        assert _snapshot(d) == before
+
+    def test_moving_a_goal_moves_its_children(self, tmp_path):
+        d, ws, _add = self._setup(tmp_path)
+        idx.write(d, "todos", [_e("g", children=[_e("c1"), _e("c2")]), _e("x")])
+        p = "20260101-"
+        assert _reply(order_todos(ws, "t", [p + "g"], place="end")) == {"ordered": 1}
+        top = idx.read(d, "todos")
+        assert [e.id for e in top] == [p + "x", p + "g"]
+        assert [k.id for k in top[1].children or []] == [p + "c1", p + "c2"]
+
+    def _retire_setup(self, tmp_path, entries, slugs):
+        d = _thread(tmp_path)
+        idx.write(d, "todos", entries)
+        for slug in slugs:
+            (d / "todos" / f"{slug}.md").write_text("---\nstate: active\n---\n")
+        return d
+
+    def test_retiring_a_goal_with_children_is_refused(self, tmp_path):
+        d = self._retire_setup(
+            tmp_path, [_e("g", children=[_e("c1"), _e("c2")])], ["g", "c1", "c2"])
+        before = _snapshot(d)
+        out = _reply(retire_todo(str(tmp_path), "t", "20260101-g", "done"))
+        assert out == {"error": "GOAL_HAS_OPEN_CHILDREN",
+                       "detail": "20260101-c1, 20260101-c2"}
+        assert _snapshot(d) == before
+
+    def test_retiring_a_child_records_its_goal(self, tmp_path):
+        d = self._retire_setup(
+            tmp_path, [_e("g", children=[_e("c1"), _e("c2")])], ["g", "c1", "c2"])
+        out = _reply(retire_todo(str(tmp_path), "t", "20260101-c1", "done"))
+        assert out == {"id": "20260101-c1", "goal": {"id": "20260101-g", "open": 1}}
+        gone = idx.read(d, "todos", retired=True)
+        assert [e.id for e in gone] == ["20260101-c1"]
+        assert gone[0].state == "done" and gone[0].parent == "20260101-g"
+        raw = json.loads((d / "todos-retired.json").read_text())
+        assert raw["entries"][0]["parent"] == "20260101-g"
+        assert [c.id for c in idx.read(d, "todos")[0].children or []] == ["20260101-c2"]
+
+    def test_the_last_child_retired_leaves_an_empty_goal(self, tmp_path):
+        d = self._retire_setup(tmp_path, [_e("g", children=[_e("c")])], ["g", "c"])
+        out = _reply(retire_todo(str(tmp_path), "t", "20260101-c", "done"))
+        assert out["goal"] == {"id": "20260101-g", "open": 0}
+        assert idx.read(d, "todos")[0].children == []
+        raw = json.loads((d / "todos-index.json").read_text())
+        assert raw["entries"][0]["children"] == []
+        line = "- 20260101-g:active [G](./todos/g.md)\n"
+        readme = (d / "README.md").read_text()
+        assert line in readme
+        assert not readme.split(line, 1)[1].startswith(" ")
+
+    def test_an_empty_goal_can_be_retired(self, tmp_path):
+        d = self._retire_setup(tmp_path, [_e("g", children=[_e("c")])], ["g", "c"])
+        retire_todo(str(tmp_path), "t", "20260101-c", "done")
+        out = _reply(retire_todo(str(tmp_path), "t", "20260101-g", "done"))
+        assert out == {"id": "20260101-g"}
+        raw = json.loads((d / "todos-retired.json").read_text())
+        assert "20260101-g" in [e["id"] for e in raw["entries"]]
+        assert idx.read(d, "todos") == []
+
+    def test_retiring_a_child_syncs_its_file(self, tmp_path):
+        d = self._retire_setup(tmp_path, [_e("g", children=[_e("c")])], ["g", "c"])
+        retire_todo(str(tmp_path), "t", "20260101-c", "dropped")
+        meta, _body = split_frontmatter((d / "todos" / "c.md").read_text())
+        assert meta["state"] == "dropped"
+
+
+class TestNestingParking:
+    P = "20260101-"
+
+    def _write(self, d, entries, files):
+        idx.write(d, "todos", entries)
+        for slug in files:
+            (d / "todos" / f"{slug}.md").write_text("---\nstate: active\n---\n")
+
+    def _states(self, d):
+        return {e.id.removeprefix(self.P): e.state for e in idx.flatten(idx.read(d, "todos"))}
+
+    def _file_state(self, d, slug):
+        meta, _body = split_frontmatter((d / "todos" / f"{slug}.md").read_text())
+        return meta["state"]
+
+    def _set(self, tmp_path, name, state):
+        return _reply(set_todo_state(str(tmp_path), "t", self.P + name, state))
+
+    def test_parking_a_goal_parks_its_open_children(self, tmp_path):
+        d = _thread(tmp_path)
+        self._write(d, [_e("g", children=[_e("c1"), _e("c2", "started"), _e("c3", "parked")])],
+                    ["g", "c1", "c2", "c3"])
+        out = self._set(tmp_path, "g", "parked")
+        assert out == {"id": self.P + "g"}
+        assert self._states(d) == {"g": "parked", "c1": "parked", "c2": "parked", "c3": "parked"}
+        assert self._file_state(d, "c1") == "parked"
+        assert self._file_state(d, "c2") == "parked"
+
+    def test_unparking_a_goal_unparks_every_child_and_goes_to_the_end(self, tmp_path):
+        d = _thread(tmp_path)
+        self._write(d, [_e("g", "parked", [_e("c1", "parked"), _e("c2", "parked")]), _e("x")],
+                    ["g", "c1", "c2", "x"])
+        self._set(tmp_path, "g", "active")
+        assert self._states(d) == {"x": "active", "g": "active", "c1": "active", "c2": "active"}
+        assert [e.id for e in idx.read(d, "todos")] == [self.P + "x", self.P + "g"]
+        assert self._file_state(d, "c2") == "active"
+
+    def test_parking_a_child_parks_only_that_child(self, tmp_path):
+        d = _thread(tmp_path)
+        self._write(d, [_e("g", children=[_e("c1"), _e("c2")])], ["g", "c1", "c2"])
+        self._set(tmp_path, "c1", "parked")
+        assert self._states(d) == {"g": "active", "c1": "parked", "c2": "active"}
+
+    def test_unparking_a_child_sends_it_to_the_end_of_its_goal(self, tmp_path):
+        d = _thread(tmp_path)
+        self._write(d, [_e("g", children=[_e("c1", "parked"), _e("c2"), _e("c3")])],
+                    ["g", "c1", "c2", "c3"])
+        self._set(tmp_path, "c1", "active")
+        kids = idx.read(d, "todos")[0].children or []
+        assert [k.id for k in kids] == [self.P + n for n in ("c2", "c3", "c1")]
+
+    def test_unparking_a_child_of_a_parked_goal_brings_the_goal_back(self, tmp_path):
+        d = _thread(tmp_path)
+        self._write(d, [_e("g", "parked", [_e("c", "parked")]), _e("x")], ["g", "c", "x"])
+        self._set(tmp_path, "c", "active")
+        assert self._states(d) == {"g": "active", "c": "active", "x": "active"}
+        assert [e.id for e in idx.read(d, "todos")] == [self.P + "g", self.P + "x"]
+        assert self._file_state(d, "g") == "active"
+
+    def test_a_cascaded_file_that_cannot_be_updated_is_named(self, tmp_path):
+        d = _thread(tmp_path)
+        self._write(d, [_e("g", children=[_e("c1"), _e("c2")])], ["g", "c1", "c2"])
+        (d / "todos" / "c1.md").write_text("---\ntitle: no state here\n---\n")
+        out = self._set(tmp_path, "g", "parked")
+        assert out["files_unchanged"] == ["./todos/c1.md"]
+        assert "file_unchanged" not in out
+        assert self._file_state(d, "c2") == "parked"
+
+    def test_a_state_change_on_a_child_names_its_goal(self, tmp_path):
+        d = _thread(tmp_path)
+        self._write(d, [_e("g", children=[_e("c1")])], ["g", "c1"])
+        assert self._set(tmp_path, "c1", "parked")["goal"] == self.P + "g"

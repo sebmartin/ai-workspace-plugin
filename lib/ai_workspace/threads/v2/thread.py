@@ -11,7 +11,7 @@ from ai_workspace.text import split_frontmatter
 from ai_workspace.threads import marker
 from ai_workspace.threads.v1.header import section as _section
 from ai_workspace.threads.v2 import index as idx
-from ai_workspace.threads.v2 import ops, stars
+from ai_workspace.threads.v2 import ops
 from ai_workspace.threads.v2 import todos as todos_mod
 
 # What resume spends on session bodies, in tokens. The newest sessions are shown
@@ -45,6 +45,11 @@ CHARS_PER_TOKEN = 3.5
 def _sentence(text: str) -> str:
     """The text as a sentence: a full stop unless it already ends in one."""
     return text if text.endswith((".", "!", "?")) else text + "."
+
+
+def _one_line(text: str) -> str:
+    """Line breaks as spaces, so a field cannot split the line it is shown on."""
+    return " ".join(text.splitlines())
 
 
 def _header(text: str) -> str:
@@ -97,9 +102,19 @@ def create(thread, about: str = "") -> str | dict:
 _OLD_ABOUT_PLACEHOLDER = "What this thread is about, and what it is for."
 
 
-def resume(thread) -> str:
-    """The composed payload, built from the indexes rather than the README."""
-    return compose(thread.dir, thread.name)
+def resume(thread) -> str | dict:
+    """The composed payload, built from the indexes rather than the README.
+
+    A dict only for the refusal: an index that does not parse. The three
+    retired indexes are read too, though compose shows none of them, so that a
+    damaged one is found here and not in the middle of a retire.
+    """
+    try:
+        for kind in idx.RETIRED_TYPES:
+            idx.read(thread.dir, kind, retired=True)
+        return compose(thread.dir, thread.name)
+    except idx.UnreadableIndex as exc:
+        return exc.payload()
 
 
 def about(thread) -> str:
@@ -136,18 +151,15 @@ def compose(thread_dir: Path, thread_name: str) -> str:
         notice = _memory_notice(len(memory))
         out.append(f"## Thread memory\n\n{memory}\n" + (f"\n{notice}\n" if notice else ""))
 
-    starred = stars.read(thread_dir)
     artifacts = idx.read(thread_dir, "artifacts")
+    starred = [e for e in artifacts if e.star]
     if starred:
-        by_id = {e.id: e for e in artifacts}
         out.append(f"## Starred artifacts ({len(starred)})\n")
-        for star in starred:
-            when = f"Read when: {_sentence(star.when)}"
-            if (entry := by_id.get(star.id)) is None:
-                out.append(f"- {star.id} (not found). {when}")
-                continue
-            described = f"{_sentence(entry.description)} " if entry.description else ""
-            out.append(f"- [{star.id}]({entry.link}) -- {described}{when}")
+        for entry in starred:
+            when = f"Read when: {_sentence(_one_line(entry.star or ''))}"
+            described = (f"{_sentence(_one_line(entry.description))} "
+                         if entry.description else "")
+            out.append(f"- [{entry.id}]({entry.link}) -- {described}{when}")
         out.append("")
 
     out.append(_header(text))
@@ -158,17 +170,17 @@ def compose(thread_dir: Path, thread_name: str) -> str:
     out.append("\n## Status\n\n" + (status or "(empty)"))
 
     todos = idx.read(thread_dir, "todos")
-    active, parked = todos_mod.next_up(todos), todos_mod.parked(todos)
-    shown = todos_mod.window(todos)
+    shown = todos_mod.shown_lines(todos)
+    parked = todos_mod.parked_lines(todos)
     # Every count, because the section is bounded and each number answers a
     # different question: what is on screen, how much is waiting behind it, and
     # how much was set aside. Without the last two an empty list cannot be told
     # from a thread that is finished with.
     out.append(
-        f"\n## Todos ({len(shown)} of {len(active)} active, "
-        f"{len(parked)} parked)\n"
+        f"\n## Todos ({len(shown)} of {todos_mod.active_count(todos)} active, "
+        f"{todos_mod.parked_count(todos)} parked)\n"
     )
-    out.extend(e.render() for e in shown)
+    out.extend(shown)
     if not shown:
         out.append("- None")
 
@@ -177,7 +189,7 @@ def compose(thread_dir: Path, thread_name: str) -> str:
     # already said are not next.
     if parked:
         out.append("\n## Parked\n")
-        out.extend(e.render() for e in parked)
+        out.extend(parked)
 
     decisions = idx.read(thread_dir, "decisions")
     out.append(f"\n## Decisions in force ({len(decisions)})\n")
@@ -187,8 +199,7 @@ def compose(thread_dir: Path, thread_name: str) -> str:
             summary = "(frontmatter is not valid YAML, so no summary; worth fixing)"
         out.append(entry.render() + (f"\n  {summary}" if summary else ""))
 
-    starred_ids = {s.id for s in starred}
-    artifacts = [e for e in artifacts if e.id not in starred_ids]
+    artifacts = [e for e in artifacts if not e.star]
     out.append(f"\n## Artifacts ({len(artifacts)})\n")
     out.extend(e.render() for e in artifacts)
 
@@ -326,7 +337,7 @@ def _full_count(newest_first, budget_chars: int) -> int:
 def _file_inside(thread_dir: Path, link: str) -> Path | None:
     """The file an index link names, only if it is a file inside this thread.
 
-    An index line can be edited by hand or copied from elsewhere, so a link
+    An index entry can be edited by hand or copied from elsewhere, so a link
     with `..` segments, or a symlink leading out, must not make resume embed
     a file that is not part of the thread.
     """

@@ -323,7 +323,9 @@ threads/{thread-name}/
 ├── sessions/           # Session logs (one per conversation)
 ├── decisions/          # ADRs (YYYYMMDD-kebab-title.md)
 ├── attachments/        # Input files
-└── artifacts/          # Output files (snapshots, reports)
+├── artifacts/          # Output files (snapshots, reports)
+├── *-index.json        # JSON indexes; written only by the tools
+└── *-retired.json      # Retired entries; written only by the tools
 ```
 
 ### Server dependencies

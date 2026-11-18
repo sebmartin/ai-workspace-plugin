@@ -49,6 +49,7 @@ __all__ = [
     "retire_todo",
     "save_session",
     "set_about",
+    "set_parent",
     "set_todo_state",
     "star_artifact",
     "unstar_artifact",
@@ -219,7 +220,11 @@ def resume(workspace_dir: str, thread_name: str) -> str:
     call = _for(workspace_dir, thread_name, "resume")
     if isinstance(call, str):
         return call
-    return _focus(call.thread, call.fn(call.thread) + _linked_threads(call.thread))
+    body = call.fn(call.thread)
+    if isinstance(body, dict):
+        # A refusal is the whole reply: no headers, no linked threads.
+        return json.dumps(body)
+    return _focus(call.thread, body + _linked_threads(call.thread))
 
 
 def create(workspace_dir: str, thread_name: str, about: str = "") -> str:
@@ -253,12 +258,13 @@ def create(workspace_dir: str, thread_name: str, about: str = "") -> str:
 
 
 def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
-             state: str = "active", place: str = "") -> str:
-    """Add a todo at a chosen place in the thread's list."""
+             state: str = "active", place: str = "",
+             parent: str | None = None) -> str:
+    """Add a todo at a chosen place in the thread's list, or under a goal."""
     call = _for(workspace_dir, thread_name, "add_todo")
     if isinstance(call, str):
         return call
-    return call.fn(call.thread, title, link, state, place)
+    return call.fn(call.thread, title, link, state, place, parent)
 
 
 def retire_todo(workspace_dir: str, thread_name: str, todo_id: str, state: str) -> str:
@@ -284,6 +290,15 @@ def order_todos(workspace_dir: str, thread_name: str, todo_ids: list[str],
     if isinstance(call, str):
         return call
     return call.fn(call.thread, todo_ids, place)
+
+
+def set_parent(workspace_dir: str, thread_name: str, todo_ids: list[str],
+               parent: str | None) -> str:
+    """Nest todos under a goal, move them between goals, or un-nest them."""
+    call = _for(workspace_dir, thread_name, "set_parent")
+    if isinstance(call, str):
+        return call
+    return call.fn(call.thread, todo_ids, parent)
 
 
 def log_decision(workspace_dir: str, thread_name: str, title: str, summary: str,

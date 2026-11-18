@@ -1,6 +1,7 @@
 """Schema 2 primitives: schema detection, indexes, rendering, sessions, dates."""
 
 import json
+import os
 import re
 import sys
 from datetime import date
@@ -12,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
 sys.path.insert(0, str(Path(__file__).parent.parent / "skills" / "threads" / "scripts"))
 
 from ai_workspace.threads import marker, schema
-from ai_workspace.threads.v2 import ids, render, session, stars
+from ai_workspace.threads.v2 import ids, render, session
 from ai_workspace.threads.v2 import index as idx
 from ai_workspace.threads.v2 import thread as v2
 from ai_workspace.threads.v2 import todos as todos_mod
@@ -285,16 +286,6 @@ class TestIndex:
         idx.add(d, "todos", idx.Entry("20260101-a", "active", "A", "./todos/a.md"))
         assert idx.index_path(d, "todos").exists()
 
-    def test_a_description_round_trips(self, tmp_path):
-        """Only artifacts carry one, and the line is its only home."""
-        d = _v2_thread(tmp_path)
-        idx.add(d, "artifacts", idx.Entry(
-            "20260316-notes", "current", "20260316-notes",
-            "./artifacts/20260316-notes.md", "What the auth flow does"))
-        line = idx.index_path(d, "artifacts").read_text().strip()
-        assert line.endswith(" -- What the auth flow does")
-        assert idx.read(d, "artifacts")[0].description == "What the auth flow does"
-
     def test_a_line_without_one_reads_as_no_description(self, tmp_path):
         d = _v2_thread(tmp_path)
         idx.add(d, "decisions", idx.Entry("20260101-a", "locked", "A", "./decisions/a.md"))
@@ -308,26 +299,173 @@ class TestIndex:
         assert [(e.id, e.state, e.title) for e in entries] == [
             ("20260101-a", "locked", "A"), ("20260102-b", "proposed", "B")]
 
-    def test_id_grep_is_exact_because_colon_terminates_it(self, tmp_path):
+    def test_the_file_is_json_with_named_fields(self, tmp_path):
         d = _v2_thread(tmp_path)
-        idx.add(d, "decisions", idx.Entry("20260101-prep", "locked", "P", "./decisions/p.md"))
-        idx.add(d, "decisions", idx.Entry("20260101-prep-ladder", "locked", "PL", "./decisions/pl.md"))
-        text = idx.index_path(d, "decisions").read_text()
-        assert text.count("- 20260101-prep:") == 1
+        idx.add(d, "artifacts", idx.Entry("20260316-notes", "current", "20260316-notes",
+                "./artifacts/20260316-notes.md", "What -- the auth flow does"))
+        p = idx.index_path(d, "artifacts")
+        assert p.name == "artifacts-index.json"
+        assert json.loads(p.read_text()) == {"entries": [{
+            "id": "20260316-notes", "state": "current", "title": "20260316-notes",
+            "link": "./artifacts/20260316-notes.md", "description": "What -- the auth flow does"}]}
 
-    def test_sessions_have_no_state(self, tmp_path):
+    def test_retired_files_are_json_too(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        assert idx.index_path(d, "todos", retired=True).name == "todos-retired.json"
+
+    def test_a_session_entry_has_no_state_key(self, tmp_path):
         d = _v2_thread(tmp_path)
         idx.add(d, "sessions", idx.Entry("20260101-s", None, "S", "./sessions/s.md"))
-        assert ":" not in idx.index_path(d, "sessions").read_text().split("[")[0]
-        entries = idx.read(d, "sessions")
-        assert entries[0].state is None
+        assert "state" not in json.loads(idx.index_path(d, "sessions").read_text())["entries"][0]
+        assert idx.read(d, "sessions")[0].state is None
+
+    @pytest.mark.parametrize("title, link, description", [
+        ("broken ] title", "./todos/a.md", ""),
+        ("T", "https://en.wikipedia.org/wiki/Merge_(SQL)", ""),
+        ("T", "./artifacts/a.md", "one -- two"),
+        ("line\nbreak", "./todos/a.md", "padded  "),
+    ])
+    def test_any_text_round_trips(self, tmp_path, title, link, description):
+        d = _v2_thread(tmp_path)
+        idx.write(d, "todos", [idx.Entry("20260101-a", "active", title, link, description)])
+        e = idx.read(d, "todos")[0]
+        assert (e.title, e.link, e.description) == (title, link, description)
+
+    def test_non_ascii_text_is_stored_as_written(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        path = idx.index_path(d, "todos")
+        idx.write(d, "todos", [idx.Entry("20260101-a", "active", "Réno 🛠", "./todos/a.md")])
+        assert "Réno 🛠" in path.read_text(encoding="utf-8")
+        assert idx.read(d, "todos")[0].title == "Réno 🛠"
+
+    def test_empty_title_and_link_round_trip(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        idx.write(d, "todos", [idx.Entry("20260101-a", "active", "", "")])
+        e = idx.read(d, "todos")[0]
+        assert (e.title, e.link, e.state) == ("", "", "active")
+
+    def test_children_round_trip_and_an_empty_list_is_kept(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        path = idx.index_path(d, "todos")
+        child = idx.Entry("20260101-c", "started", "C", "./todos/c.md")
+        idx.write(d, "todos", [
+            idx.Entry("20260101-g", "active", "G", "./todos/g.md", children=[child]),
+            idx.Entry("20260101-e", "active", "E", "./todos/e.md", children=[])])
+        g, e = idx.read(d, "todos")
+        assert [(c.id, c.state) for c in g.children or []] == [("20260101-c", "started")]
+        assert e.children == []
+        assert json.loads(path.read_text())["entries"][1]["children"] == []
+
+    def test_star_and_parent_round_trip(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        idx.write(d, "artifacts", [idx.Entry("20260101-a", "current", "A", "./artifacts/a.md", star="the user asks")])
+        idx.write(d, "todos", [idx.Entry("20260101-c", "done", "C", "./todos/c.md", parent="20260101-g")], retired=True)
+        assert idx.read(d, "artifacts")[0].star == "the user asks"
+        assert idx.read(d, "todos", retired=True)[0].parent == "20260101-g"
+
+    def test_unknown_keys_survive_a_write(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        path = idx.index_path(d, "todos")
+        path.write_text(json.dumps({"meta": {"k": 1}, "entries": [
+            {"id": "20260101-g", "state": "active", "title": "G", "link": "./todos/g.md", "owner": "seb",
+             "children": [{"id": "20260101-c", "state": "active", "title": "C",
+                           "link": "./todos/c.md", "due": "2026-12-01"}]}]}))
+        idx.write(d, "todos", idx.read(d, "todos"))
+        doc = json.loads(path.read_text())
+        assert doc["meta"] == {"k": 1}
+        assert doc["entries"][0]["owner"] == "seb"
+        assert doc["entries"][0]["children"][0]["due"] == "2026-12-01"
+
+    def test_every_entry_and_child_sits_on_its_own_line(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        path = idx.index_path(d, "todos")
+        ids = ["20260101-g", "20260101-c1", "20260101-c2", "20260101-x"]
+        idx.write(d, "todos", [
+            idx.Entry(ids[0], "active", "G", "./g.md", children=[
+                idx.Entry(ids[1], "active", "C1", "./c1.md"), idx.Entry(ids[2], "active", "C2", "./c2.md")]),
+            idx.Entry(ids[3], "active", "X", "./x.md")])
+        lines = path.read_text().splitlines()
+        for i in ids:
+            assert sum(f'"{i}"' in line for line in lines) == 1
+        assert all(sum(f'"{i}"' in line for i in ids) <= 1 for line in lines)
+
+    def test_a_file_that_does_not_parse_raises_with_its_position(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        path = idx.index_path(d, "todos")
+        path.write_text('{"entries": [\n  {"id": "x",}\n]}\n')
+        with pytest.raises(idx.UnreadableIndex) as e:
+            idx.read(d, "todos")
+        assert e.value.file == "todos-index.json"
+        assert "line 2" in e.value.detail and "column" in e.value.detail
+        assert e.value.payload()["error"] == "UNREADABLE_INDEX"
+
+    @pytest.mark.parametrize("text", ["", "  \n"])
+    def test_an_empty_file_is_unreadable_not_empty(self, tmp_path, text):
+        d = _v2_thread(tmp_path)
+        idx.index_path(d, "todos").write_text(text)
+        with pytest.raises(idx.UnreadableIndex):
+            idx.read(d, "todos")
+
+    @pytest.mark.parametrize("text", [
+        "[]", '{"entries": null}', '{"entries": ["x"]}',
+        '{"entries": [{"title": "T", "link": "./x.md"}]}',
+        '{"entries": [{"id": "a", "title": "T", "link": "./x.md", "children": {}}]}'])
+    def test_a_document_of_the_wrong_shape_is_unreadable(self, tmp_path, text):
+        d = _v2_thread(tmp_path)
+        idx.index_path(d, "todos").write_text(text)
+        with pytest.raises(idx.UnreadableIndex) as e:
+            idx.read(d, "todos")
+        assert e.value.detail
+
+    def test_a_write_never_overwrites_a_file_that_does_not_parse(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        path = idx.index_path(d, "todos")
+        path.write_text("{broken")
+        with pytest.raises(idx.UnreadableIndex):
+            idx.write(d, "todos", [])
+        assert path.read_text() == "{broken"
+
+    def test_writes_are_atomic(self, tmp_path, monkeypatch):
+        d = _v2_thread(tmp_path)
+        path = idx.index_path(d, "todos")
+        calls, real = [], os.replace
+        monkeypatch.setattr(idx.os, "replace", lambda s, t: (calls.append((Path(s), Path(t))), real(s, t))[1])
+        idx.write(d, "todos", [])
+        [(src, dst)] = calls
+        assert dst == path and src.parent == dst.parent and src != dst
+
+    def test_a_failed_write_leaves_the_old_file_and_no_temp(self, tmp_path, monkeypatch):
+        d = _v2_thread(tmp_path)
+        path = idx.index_path(d, "todos")
+        idx.write(d, "todos", [idx.Entry("20260101-a", "active", "A", "./a.md")])
+        before, names = path.read_bytes(), set(os.listdir(d))
+
+        def boom(*_):
+            raise OSError("disk full")
+        monkeypatch.setattr(idx.os, "replace", boom)
+        with pytest.raises(OSError):
+            idx.write(d, "todos", [])
+        assert path.read_bytes() == before and set(os.listdir(d)) == names
+
+    def test_render_collapses_line_breaks(self):
+        e = idx.Entry("20260101-a", "active", "one\ntwo", "./a.md", "x\r\ny")
+        assert e.render() == "- 20260101-a:active [one two](./a.md) -- x y"
+
+    def test_render_can_show_another_state(self):
+        e = idx.Entry("20260101-g", "active", "G", "./g.md")
+        assert e.render(state="started") == "- 20260101-g:started [G](./g.md)"
+
+    def test_the_line_format_is_gone(self):
+        assert not hasattr(idx, "unrepresentable") and not hasattr(idx, "_LINE_RE")
 
     def test_a_newer_entry_goes_on_the_end(self, tmp_path):
         d = _v2_thread(tmp_path)
         idx.add(d, "decisions", idx.Entry("20260101-a", "locked", "A", "./decisions/a.md"))
-        first = idx.index_path(d, "decisions").read_text()
+        first = idx.index_path(d, "decisions").read_text().splitlines()[1]
         idx.add(d, "decisions", idx.Entry("20260102-b", "locked", "B", "./decisions/b.md"))
-        assert idx.index_path(d, "decisions").read_text().startswith(first)
+        lines = idx.index_path(d, "decisions").read_text().splitlines()
+        assert lines[1].rstrip(",") == first.rstrip(",")
+        assert '"20260102-b"' in lines[2]
 
     def test_a_retired_todo_goes_where_its_date_puts_it(self, tmp_path):
         """The live list is written whole, by the tool that knows the order.
@@ -348,87 +486,6 @@ class TestIndex:
         entries = idx.read(d, "sessions")
         assert [e.id for e in entries] == [
             "20260103-s", "20260104-late", "20260105-s"]
-
-    def test_a_legacy_window_becomes_the_order_it_stood_for(self, tmp_path):
-        """Indexes written before the list carried its own order open with a
-        `windows:` block naming the todos Next steps showed. That is a priority
-        the user set, so it survives as line order rather than being dropped."""
-        d = _v2_thread(tmp_path)
-        _todos(d, ("a", "active"), ("b", "active"), ("c", "active"))
-        path = idx.index_path(d, "todos")
-        path.write_text(
-            "---\nwindows:\n  next_steps: [20260101-c, 20260101-a]\n---\n"
-            + path.read_text())
-        assert [e.id for e in idx.read(d, "todos")] == [
-            "20260101-c", "20260101-a", "20260101-b"]
-
-    def test_a_legacy_window_naming_one_id_twice_yields_one_entry(self, tmp_path):
-        """`set_window` checked that every id was known and never that they
-        were distinct, so a stored block can name one twice. Read as written
-        that put the same entry in the list twice, and because an index is
-        rendered whole rather than edited, the next write made the duplicate
-        permanent and retiring one left the other."""
-        d = _v2_thread(tmp_path)
-        _todos(d, ("a", "active"), ("b", "active"))
-        path = idx.index_path(d, "todos")
-        path.write_text(
-            "---\nwindows:\n  next_steps: [20260101-b, 20260101-b, 20260101-a]\n---\n"
-            + path.read_text())
-        assert [e.id for e in idx.read(d, "todos")] == ["20260101-b", "20260101-a"]
-
-    def test_a_legacy_window_survives_a_tab_no_parser_accepts(self, tmp_path):
-        """One real thread's block is indented with a tab, which is why this is
-        read with a pattern rather than a YAML parser."""
-        d = _v2_thread(tmp_path)
-        _todos(d, ("a", "active"), ("b", "active"))
-        path = idx.index_path(d, "todos")
-        path.write_text("---\nwindows:\n\tnext_steps: [20260101-b]\n---\n"
-                        + path.read_text())
-        assert [e.id for e in idx.read(d, "todos")] == ["20260101-b", "20260101-a"]
-
-    def test_the_next_write_leaves_the_block_behind(self, tmp_path):
-        d = _v2_thread(tmp_path)
-        _todos(d, ("a", "active"))
-        path = idx.index_path(d, "todos")
-        path.write_text("---\nwindows:\n  next_steps: [20260101-a]\n---\n"
-                        + path.read_text())
-        idx.write(d, "todos", idx.read(d, "todos"))
-        assert "windows" not in path.read_text()
-
-    def test_only_a_live_todo_index_is_reordered_by_a_block(self, tmp_path):
-        """Nothing ever wrote one anywhere else, and a retired index is a
-        chronology, so reordering it would be wrong wherever it came from."""
-        d = _v2_thread(tmp_path)
-        idx.write(d, "todos", [
-            idx.Entry("20260101-a", "done", "A", "./todos/a.md"),
-            idx.Entry("20260102-b", "done", "B", "./todos/b.md"),
-        ], retired=True)
-        path = idx.index_path(d, "todos", retired=True)
-        path.write_text("---\nwindows:\n  next_steps: [20260102-b]\n---\n"
-                        + path.read_text())
-        assert [e.id for e in idx.read(d, "todos", retired=True)] == [
-            "20260101-a", "20260102-b"]
-
-    def test_only_an_ordered_kind_is_reordered_by_a_block(self, tmp_path):
-        d = _v2_thread(tmp_path)
-        idx.write(d, "decisions", [
-            idx.Entry("20260101-a", "locked", "A", "./decisions/a.md"),
-            idx.Entry("20260102-b", "locked", "B", "./decisions/b.md"),
-        ])
-        path = idx.index_path(d, "decisions")
-        path.write_text("---\nwindows:\n  next_steps: [20260102-b]\n---\n"
-                        + path.read_text())
-        assert [e.id for e in idx.read(d, "decisions")] == [
-            "20260101-a", "20260102-b"]
-
-    def test_a_window_naming_a_todo_that_is_gone_is_skipped(self, tmp_path):
-        d = _v2_thread(tmp_path)
-        _todos(d, ("a", "active"))
-        path = idx.index_path(d, "todos")
-        path.write_text(
-            "---\nwindows:\n  next_steps: [20260101-retired, 20260101-a]\n---\n"
-            + path.read_text())
-        assert [e.id for e in idx.read(d, "todos")] == ["20260101-a"]
 
     def test_retire_moves_the_line_and_sets_state(self, tmp_path):
         d = _v2_thread(tmp_path)
@@ -532,7 +589,7 @@ class TestRender:
         render.render(d)
         body = (d / "README.md").read_text()
         assert "- None" in body
-        assert "7 parked in [todos](./todos-index.md)." in body
+        assert "7 parked in [todos](./todos-index.json)." in body
 
     def test_nothing_is_said_when_everything_is_shown(self, tmp_path):
         d = _v2_thread(tmp_path)
@@ -569,7 +626,9 @@ class TestRender:
         d = _v2_thread(tmp_path)
         render.render(d)
         render.render(d)
-        assert (d / "README.md").read_text().count("**Indexes**:") == 1
+        text = (d / "README.md").read_text()
+        assert text.count("**Indexes**:") == 1
+        assert "(./todos-index.json)" in text and "-index.md" not in text
 
 
 class TestSessionFile:
@@ -855,63 +914,6 @@ def test_schema_1_is_readable_but_has_no_create():
     assert "create" not in v1.__all__ and not hasattr(v1, "create")
 
 
-class TestStarFile:
-    def test_missing_file_is_nothing_starred(self, tmp_path):
-        d = _v2_thread(tmp_path)
-        assert stars.read(d) == [] and not (d / "artifacts-starred.md").exists()
-
-    def test_round_trip(self, tmp_path):
-        d = _v2_thread(tmp_path)
-        s = stars.Star("20260801-guide-style", "the user asks about formatting or tone")
-        stars.write(d, [s])
-        assert (d / "artifacts-starred.md").read_text() == \
-            "- 20260801-guide-style -- when: the user asks about formatting or tone\n"
-        assert stars.read(d) == [s]
-
-    def test_a_line_that_is_not_a_star_is_skipped(self, tmp_path):
-        d = _v2_thread(tmp_path)
-        (d / "artifacts-starred.md").write_text(
-            "- 20260101-a -- when: x\nhand-written note\n")
-        assert stars.read(d) == [stars.Star("20260101-a", "x")]
-
-    def test_an_empty_list_leaves_an_empty_file(self, tmp_path):
-        d = _v2_thread(tmp_path)
-        stars.write(d, [])
-        assert (d / "artifacts-starred.md").read_text() == ""
-
-    def test_unrepresentable_names_the_field(self):
-        assert stars.unrepresentable(stars.Star("a", "x\ny")) is not None
-        assert stars.unrepresentable(stars.Star("a b", "x")) is not None
-        assert stars.unrepresentable(stars.Star("a", "fine")) is None
-
-    @pytest.mark.parametrize("sep", ["\x0b", "\x0c", "\x1c", "\x85", "\u2028", "\u2029"])
-    def test_a_break_that_splitlines_honours_is_unrepresentable(self, sep):
-        assert stars.unrepresentable(stars.Star("a", f"x{sep}y")) is not None
-        assert stars.unrepresentable(stars.Star(f"a{sep}b", "x")) is not None
-
-    def test_drop_returns_the_star_and_writes_nothing_when_absent(self, tmp_path):
-        d = _v2_thread(tmp_path)
-        assert stars.drop(d, "a") is None
-        assert not (d / "artifacts-starred.md").exists()
-        stars.write(d, [stars.Star("a", "x"), stars.Star("b", "y")])
-        assert stars.drop(d, "a") == stars.Star("a", "x")
-        assert stars.read(d) == [stars.Star("b", "y")]
-
-    def test_drop_removes_every_line_for_the_id(self, tmp_path):
-        d = _v2_thread(tmp_path)
-        stars.write(d, [stars.Star("a", "x"), stars.Star("b", "y"), stars.Star("a", "z")])
-        assert stars.drop(d, "a") == stars.Star("a", "x")
-        assert stars.read(d) == [stars.Star("b", "y")]
-
-    def test_rekey_moves_in_place_and_ignores_an_unstarred_id(self, tmp_path):
-        d = _v2_thread(tmp_path)
-        stars.write(d, [stars.Star("a", "x"), stars.Star("b", "y")])
-        stars.rekey(d, "a", "c")
-        assert stars.read(d) == [stars.Star("c", "x"), stars.Star("b", "y")]
-        stars.rekey(d, "zzz", "q")
-        assert stars.read(d) == [stars.Star("c", "x"), stars.Star("b", "y")]
-
-
 class TestStarredInPayload:
     GUIDE = idx.Entry("20260801-guide-style", "current", "20260801-guide-style",
                       "./artifacts/20260801-guide-style.md",
@@ -919,45 +921,50 @@ class TestStarredInPayload:
     OTHER = idx.Entry("20260802-notes-other", "current", "20260802-notes-other",
                       "./artifacts/20260802-notes-other.md", "Other notes.")
 
-    def _thread(self, tmp_path, *entries, starred=()):
+    def _thread(self, tmp_path, *entries):
         d = _v2_thread(tmp_path)
         for e in entries:
             idx.add(d, "artifacts", e)
-        if starred:
-            stars.write(d, list(starred))
         return d
 
+    @staticmethod
+    def _starred(entry, when):
+        return idx.Entry(entry.id, entry.state, entry.title, entry.link,
+                         entry.description, star=when)
+
     def test_link_description_and_trigger(self, tmp_path):
-        d = self._thread(tmp_path, self.GUIDE, starred=[
-            stars.Star("20260801-guide-style", "the user asks about formatting or tone")])
-        out = v2.compose(d, "t")
+        guide = self._starred(self.GUIDE, "the user asks about formatting or tone")
+        out = v2.compose(self._thread(tmp_path, guide), "t")
         assert ("## Starred artifacts (1)\n\n- [20260801-guide-style](./artifacts/20260801-guide-style.md)"
                 " -- House style for everything written in this thread. Read when: the user asks"
                 " about formatting or tone.") in out
 
     def test_a_starred_artifact_leaves_the_artifacts_list(self, tmp_path):
-        d = self._thread(tmp_path, self.GUIDE, self.OTHER,
-                         starred=[stars.Star(self.GUIDE.id, "x")])
+        d = self._thread(tmp_path, self._starred(self.GUIDE, "x"), self.OTHER)
         out = v2.compose(d, "t")
         assert "## Artifacts (1)" in out
         assert self.GUIDE.render() not in out
         assert self.OTHER.render() in out
 
-    def test_an_orphaned_star_shows_not_found(self, tmp_path):
-        d = self._thread(tmp_path, starred=[
-            stars.Star("20260415-notes-old-plan", "the user asks about the original plan")])
-        out = v2.compose(d, "t")
-        assert ("- 20260415-notes-old-plan (not found). Read when: the user asks about"
-                " the original plan.") in out
+    def test_starred_artifacts_come_in_index_order(self, tmp_path):
+        a = idx.Entry("20260801-a", "current", "20260801-a", "./artifacts/a.md", star="first")
+        b = idx.Entry("20260802-b", "current", "20260802-b", "./artifacts/b.md", star="second")
+        out = v2.compose(self._thread(tmp_path, a, b), "t")
+        assert out.index("[20260801-a]") < out.index("[20260802-b]")
+
+    def test_a_line_break_in_a_trigger_collapses_to_a_space(self, tmp_path):
+        d = self._thread(tmp_path, self._starred(self.GUIDE, "one\ntwo"))
+        assert "Read when: one two." in v2.compose(d, "t")
 
     def test_no_description_leaves_it_out(self, tmp_path):
-        bare = idx.Entry("20260803-bare", "current", "20260803-bare", "./artifacts/20260803-bare.md")
-        d = self._thread(tmp_path, bare, starred=[stars.Star(bare.id, "needed!")])
+        bare = idx.Entry("20260803-bare", "current", "20260803-bare",
+                         "./artifacts/20260803-bare.md", star="needed!")
+        d = self._thread(tmp_path, bare)
         assert "- [20260803-bare](./artifacts/20260803-bare.md) -- Read when: needed!" \
             in v2.compose(d, "t")
 
     def test_after_memory_before_the_header(self, tmp_path):
-        d = self._thread(tmp_path, self.GUIDE, starred=[stars.Star(self.GUIDE.id, "x")])
+        d = self._thread(tmp_path, self._starred(self.GUIDE, "x"))
         (d / "memory.md").write_text("- a rule\n")
         out = v2.compose(d, "t")
         assert out.index("## Thread memory") < out.index("## Starred artifacts") < out.index("**Started**")
@@ -966,14 +973,19 @@ class TestStarredInPayload:
         d = self._thread(tmp_path, self.GUIDE)
         assert "Starred artifacts" not in v2.compose(d, "t")
 
-    def test_an_index_with_no_star_file_renders_as_before(self, tmp_path):
+    def test_an_index_with_no_star_renders_as_before(self, tmp_path):
         d = self._thread(tmp_path, self.GUIDE, self.OTHER)
         out = v2.compose(d, "t")
         assert "## Artifacts (2)" in out and all(e.render() in out for e in idx.read(d, "artifacts"))
 
+    def test_the_star_module_is_gone(self):
+        import importlib.util
+        assert importlib.util.find_spec("ai_workspace.threads.v2.stars") is None
+
     def test_sentence_adds_a_full_stop_unless_one_is_there(self):
         assert v2._sentence("a") == "a."
         assert [v2._sentence(t) for t in ("a.", "a!", "a?")] == ["a.", "a!", "a?"]
+
 
 
 class TestMemoryBudget:
@@ -1010,3 +1022,98 @@ class TestMemoryBudget:
         before = (d / "memory.md").read_bytes()
         out = v2.compose(d, "t")
         assert (d / "memory.md").read_bytes() == before and "LAST" in out
+
+
+def _e(slug, state="active", children=None):
+    return idx.Entry(f"20260101-{slug}", state, slug.upper(), f"./todos/{slug}.md", children=children)
+
+
+class TestNesting:
+    def test_flatten_lists_each_goal_then_its_children(self):
+        assert [e.id for e in idx.flatten([_e("g", children=[_e("c1"), _e("c2")]), _e("x")])] == \
+            ["20260101-g", "20260101-c1", "20260101-c2", "20260101-x"]
+
+    def test_locate_a_top_level_todo(self):
+        entries = [_e("a"), _e("b")]
+        loc = todos_mod.locate(entries, "20260101-b")
+        assert loc is not None
+        assert loc.siblings is entries and loc.at == 1 and loc.goal is None and loc.entry.id == "20260101-b"
+
+    def test_locate_a_child(self):
+        g = _e("g", children=[_e("c")])
+        loc = todos_mod.locate([g], "20260101-c")
+        assert loc is not None
+        assert loc.siblings is g.children and loc.at == 0 and loc.goal is g
+
+    def test_locate_an_unknown_id_is_none(self):
+        assert todos_mod.locate([_e("a")], "20260101-zzz") is None
+
+    def test_a_goal_is_a_shape(self):
+        assert todos_mod.is_goal(_e("g", children=[])) and not todos_mod.is_goal(_e("a"))
+
+    def test_a_child_id_is_taken(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        idx.write(d, "todos", [_e("g", children=[_e("c")])])
+        assert "20260101-c" in idx.taken_ids(d, "todos")
+
+
+class TestNestedDisplay:
+    def test_children_are_indented_under_their_goal(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        idx.write(d, "todos", [_e("g", children=[_e("c1"), _e("c2")]), _e("x")])
+        block = ("- 20260101-g:active [G](./todos/g.md)\n"
+                 "  - 20260101-c1:active [C1](./todos/c1.md)\n"
+                 "  - 20260101-c2:active [C2](./todos/c2.md)\n"
+                 "- 20260101-x:active [X](./todos/x.md)\n")
+        assert render.todos_body(d).startswith(block)
+        assert block in v2.compose(d, "t")
+
+    def test_a_goal_shows_started_when_a_child_is(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        idx.write(d, "todos", [_e("g", children=[_e("c", "started")])])
+        assert "- 20260101-g:started [G](./todos/g.md)" in render.todos_body(d)
+        assert idx.read(d, "todos")[0].state == "active"
+
+    def test_the_window_never_splits_a_goal(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        idx.write(d, "todos", [_e("a"), _e("b"), _e("c"),
+                               _e("g", children=[_e("g1"), _e("g2"), _e("g3")]), _e("z")])
+        out = v2.compose(d, "t")
+        assert "20260101-g3" in out.split("## Decisions")[0].split("## Todos")[1]
+        assert "20260101-z" not in out
+        assert "## Todos (7 of 8 active, 0 parked)" in out
+
+    def test_a_goal_larger_than_the_window_shows_whole(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        idx.write(d, "todos", [_e("g", children=[_e(f"c{n}") for n in range(8)]), _e("z")])
+        body = render.todos_body(d)
+        assert all(f"20260101-c{n}" in body for n in range(8))
+        assert "20260101-z" not in body and "1 more" in body
+
+    def test_the_window_stops_once_five_lines_are_out(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        idx.write(d, "todos", [_e("g", children=[_e(f"c{n}") for n in range(4)]), _e("z")])
+        assert "20260101-z" not in render.todos_body(d)
+
+    def test_counts_include_children(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        idx.write(d, "todos", [_e("g", children=[_e("c1"), _e("c2", "parked")]), _e("p", "parked")])
+        assert "## Todos (2 of 2 active, 2 parked)" in v2.compose(d, "t")
+
+    def test_a_parked_child_of_an_active_goal_is_listed_under_parked_with_its_goal(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        idx.write(d, "todos", [_e("g", children=[_e("c1"), _e("c2", "parked")])])
+        out = v2.compose(d, "t")
+        assert "## Parked\n\n- 20260101-c2:parked [C2](./todos/c2.md) (G)" in out
+        assert "  - 20260101-c2" not in out
+
+    def test_a_parked_goal_is_listed_whole_under_parked(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        idx.write(d, "todos", [_e("g", "parked", children=[_e("c", "parked")])])
+        assert ("## Parked\n\n- 20260101-g:parked [G](./todos/g.md)\n"
+                "  - 20260101-c:parked [C](./todos/c.md)") in v2.compose(d, "t")
+
+    def test_an_empty_goal_shows_as_a_plain_line(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        idx.write(d, "todos", [_e("g", children=[])])
+        assert render.todos_body(d).startswith("- 20260101-g:active [G](./todos/g.md)\n")

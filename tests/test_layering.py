@@ -451,7 +451,7 @@ def test_the_skill_describes_the_resume_this_plugin_returns():
     assert "## Next steps" not in skill
     assert "14 days" not in SERVER.read_text()
     assert "in full" in SERVER.read_text()
-    assert "artifacts-starred.md" in skill and "star_artifact" in skill
+    assert "artifacts-starred.md" not in skill and "star_artifact" in skill
     assert "star_dropped" in SERVER.read_text()
     assert "a standing instruction for this thread" not in skill
     assert "what a session needs in hand before it starts" in skill
@@ -465,7 +465,26 @@ def test_the_skill_describes_the_resume_this_plugin_returns():
 
     for manifest in (".claude-plugin/plugin.json", ".codex-plugin/plugin.json"):
         version = json.loads((REPO / manifest).read_text())["version"]
-        assert tuple(int(n) for n in version.split(".")) >= (3, 4, 0), version
+        assert tuple(int(n) for n in version.split(".")) >= (3, 5, 0), version
+
+
+def test_no_line_format_index_is_named_anywhere():
+    pattern = re.compile(r"-(index|retired)\.md\b|artifacts-starred")
+    files = [*(REPO / "lib").rglob("*.py"), *(REPO / "skills").rglob("*.md"),
+             SERVER, REPO / "AGENTS.md", REPO / "README.md"]
+    files = [p for p in files if "v1" not in p.relative_to(REPO).parts]
+    offenders = [str(p.relative_to(REPO)) for p in files if pattern.search(p.read_text())]
+    assert offenders == []
+    assert not any('"UNREPRESENTABLE"' in p.read_text() for p in (REPO / "lib").rglob("*.py"))
+
+
+def test_the_skill_describes_goals_and_started():
+    skill = (REPO / "skills" / "threads" / "SKILL.md").read_text()
+    for phrase in ("`set_parent`", "goal", "`UNREADABLE_INDEX`", "(started)",
+                   "Work on it has begun", "propose the next child", "jq"):
+        assert phrase in skill, phrase
+    for manifest in (".claude-plugin/plugin.json", ".codex-plugin/plugin.json"):
+        assert json.loads((REPO / manifest).read_text())["version"] == "3.5.0"
 
 
 def test_writes_to_another_thread_go_through_the_thread_writer():
@@ -556,3 +575,20 @@ def test_no_schema_module_reaches_outside_its_own_thread():
                     ):
                         problems.append(f"{rel}:{node.lineno} leaves the thread directory")
     assert not problems, "\n  ".join(["", *problems])
+
+
+def test_every_v2_operation_turns_an_unreadable_index_into_a_refusal():
+    from ai_workspace.threads import v2
+    from ai_workspace.threads.v2 import ops
+
+    for name in v2.__all__:
+        fn = getattr(v2, name)
+        if getattr(fn, "__module__", "") == ops.__name__:
+            assert hasattr(fn, "__wrapped__"), (
+                f"{name} is not wrapped in idx.refuses_unreadable")
+
+
+def test_no_tool_says_starting_a_todo_clears_another():
+    text = SERVER.read_text()
+    for phrase in ("clears the label", "being worked on now", "the one thing being worked on"):
+        assert phrase not in text, phrase

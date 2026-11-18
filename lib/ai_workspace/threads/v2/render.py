@@ -53,9 +53,9 @@ def _find(text: str) -> tuple[re.Pattern[str] | None, str | None]:
 def _links_line(thread_dir: Path) -> str:
     parts = []
     for kind in idx.TYPES:
-        entry = f"[{kind}](./{kind}-index.md)"
+        entry = f"[{kind}](./{kind}-index.json)"
         if kind in idx.RETIRED_TYPES:
-            entry += f" ([retired](./{kind}-retired.md))"
+            entry += f" ([retired](./{kind}-retired.json))"
         parts.append(entry)
     return "**Indexes**: " + " · ".join(parts)
 
@@ -68,19 +68,18 @@ def todos_body(thread_dir: Path) -> str:
     worse for the person reading it than one that points at the index.
     """
     entries = idx.read(thread_dir, "todos")
-    active = todos_mod.next_up(entries)
-    shown = todos_mod.window(entries)
-    lines = [e.render() for e in shown] or ["- None"]
+    shown = todos_mod.shown_lines(entries)
+    lines = shown or ["- None"]
     # Both, when both are true. Either one alone leaves the other hidden in
     # silence, and with nothing active `- None` on its own reads as a thread
     # with nothing left to do, where everything was set aside on purpose.
     notes = []
-    if hidden := len(active) - len(shown):
+    if hidden := todos_mod.active_count(entries) - len(shown):
         notes.append(f"{hidden} more")
-    if parked := len(todos_mod.parked(entries)):
+    if parked := todos_mod.parked_count(entries):
         notes.append(f"{parked} parked")
     if notes:
-        lines.append(f"\n{' and '.join(notes)} in [todos](./todos-index.md).")
+        lines.append(f"\n{' and '.join(notes)} in [todos](./todos-index.json).")
     return "\n".join(lines) + "\n"
 
 
@@ -89,7 +88,11 @@ def blocked(thread_dir: Path) -> str | None:
 
     Asked before anything mutates, so a refusal leaves nothing behind and a
     retry after fixing the README is clean rather than a second entry.
+
+    The todos index is read first, since every render reads it: one that does
+    not parse raises `UnreadableIndex` here, before anything is written.
     """
+    idx.read(thread_dir, "todos")
     readme = thread_dir / "README.md"
     text = readme.read_text() if readme.exists() else ""
     pattern, ambiguous = _find(text)

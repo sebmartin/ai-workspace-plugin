@@ -112,6 +112,15 @@ def _indexed_targets(thread_dir: Path, kind: str) -> set[str]:
 
 
 def audit(original: Path, converted: Path) -> str:
+    """Compare the original tree against the converted copy, or refuse with
+    `UNREADABLE_INDEX` when one of the converted indexes does not parse."""
+    try:
+        return _audit(original, converted)
+    except idx.UnreadableIndex as exc:
+        return json.dumps(exc.payload())
+
+
+def _audit(original: Path, converted: Path) -> str:
     """Compare the original tree against the converted copy.
 
     Deterministic on purpose: files present in one and not the other, entries
@@ -149,7 +158,7 @@ def audit(original: Path, converted: Path) -> str:
 
     for kind in idx.TYPES:
         entries = idx.read(converted, kind)
-        for entry in entries:
+        for entry in idx.flatten(entries):
             if idx.external(entry.link):
                 continue
             if not (converted / entry.link.lstrip("./")).exists():
@@ -176,7 +185,7 @@ def audit(original: Path, converted: Path) -> str:
 
     unknown = sum(
         1 for kind in idx.TYPES
-        for e in idx.read(converted, kind)
+        for e in idx.flatten(idx.read(converted, kind))
         if e.id.startswith(ids.UNKNOWN)
     )
 

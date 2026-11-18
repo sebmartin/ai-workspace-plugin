@@ -48,11 +48,13 @@ def resume_thread(workspace_dir: str, thread_name: str) -> str:
 
     On a schema 2 thread the reply is composed rather than read from a file:
     `memory.md` in full if there is one (a line on its size follows it when it
-    has grown large), then starred artifacts, each with its
-    description and when to read it (an id whose artifact is no longer in force
-    shows `(not found)`), then the header, About, Status, the
-    Todos window (top five of the todo list in priority order, its heading
-    counting shown, active and parked), any parked todos, every in-force
+    has grown large), then starred artifacts in artifact index order, each with
+    its description and when to read it, then the header, About, Status, the
+    Todos window (goals shown whole with their children indented, taken in
+    priority order until at least five lines are out, so a goal is never split;
+    a goal shows started when a child is; the heading counts lines shown, active
+    and parked todos, and the counts include children), any parked todos
+    (a parked child of a goal that is not parked names its goal), every in-force
     decision with its `summary:`, the artifacts index (starred artifacts are left
     out of it), and the recent sessions:
     the full log of the newest ones, as many as fit a fixed allowance and
@@ -72,6 +74,9 @@ def resume_thread(workspace_dir: str, thread_name: str) -> str:
     "schema": <n>, "reads": [<low>, <high>]}`: `SCHEMA_TOO_NEW` (upgrade the
     plugin), `SCHEMA_RETIRED` (migrate it with a version that still reads it),
     or `UNREADABLE_SCHEMA` (its marker file is not an integer).
+
+    An index that does not parse returns `{"error": "UNREADABLE_INDEX", "file",
+    "detail", "fix"}` instead of the thread.
 
     Args:
         workspace_dir: Directory hint for locating the workspace; typically the
@@ -192,7 +197,8 @@ def list_archived_threads(workspace_dir: str) -> str:
 
 @mcp.tool()
 def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
-             state: str = "active", place: str = "") -> str:
+             state: str = "active", place: str = "",
+             parent: str | None = None) -> str:
     """Add a todo to the thread's Todos list.
 
     Every todo is read on every resume and commits the user to something, so
@@ -227,10 +233,9 @@ def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
     neither a `./` path under the thread nor an `http(s)` URL,
     `MISSING` for a `./` path with no file behind it, whose `detail` is the
     link: write the file first,
-    `NO_SUCH_ENTRY` naming an anchor that is not in the list,
-    and `UNREPRESENTABLE` when a field would not survive an index line, whose
-    `detail` names the field. Reword that field; a title cannot contain `]`, a
-    link cannot contain `)`, and nothing may contain a line break.
+    `NO_SUCH_ENTRY` naming an anchor that is not in the list, or a `parent`
+    that is not a todo, and `PARENT_IS_CHILD` when `parent` is itself a child,
+    since a goal holds one level of children.
 
     Args:
         workspace_dir: The tracked workspace path from session context.
@@ -243,16 +248,25 @@ def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
             is not mounted at the same place on every machine that resumes the
             thread, so an absolute path, a `~` and a bare relative path all
             resolve to nothing on the next one.
-        state: `active`, `started` for what is being worked on now, which
-            puts it at the top, or `parked` for deliberately not now.
+        state: `active`, `started` once work on it has begun, which matters
+            more than todos not yet started and puts it at the top. It stays
+            until the todo is retired, parked or set back to `active` by hand,
+            and leaves any other started todo as it is. `parked` is for
+            deliberately not now.
         place: Where it goes. `top` for something to do next, such as a piece
             of the task in hand. `before:<todo id>` or `after:<todo id>` for
             something that belongs beside a particular todo. `end`, or leave it
             out, for everything else. `top` and `end` are read off the list as
             it is now, so they are right even if you have not looked at it,
-            where an id you believe is first may have been overtaken.
+            where an id you believe is first may have been overtaken. With
+            `parent`, it resolves within that goal's children, so an anchor
+            must be one of them.
+        parent: The id of a top-level todo to put this one under. It becomes
+            a goal if it was a plain todo. Leave it out for a top-level todo,
+            which is the usual case. A started child also moves its goal to
+            the top of the list. A parked goal is allowed.
     """
-    return _threads.add_todo(workspace_dir, thread_name, title, link, state, place)
+    return _threads.add_todo(workspace_dir, thread_name, title, link, state, place, parent)
 
 
 @mcp.tool()
@@ -263,13 +277,21 @@ def retire_todo(workspace_dir: str, thread_name: str, todo_id: str, state: str) 
     match, so a finished todo found by grep does not still read
     `state: active`.
 
+    Retire a child on its own: a goal that still has children is refused. A
+    retired child keeps its goal in a `parent` field, so the goal's history
+    shows what was under it.
+
     Returns `{"id": ...}`, plus `file_unchanged` naming that file when its
     `state:` line could not be found. The index and the file then disagree,
     and the file is the copy a reader finds by grep. Nothing else reports it,
-    so say so and name the file.
+    so say so and name the file. For a child it also returns
+    `"goal": {"id": ..., "open": N}`, the goal and how many children it still
+    has. At `open` 0 the goal is empty, so offer to retire it too.
 
     A refusal returns `{"error": CODE, ...}` and writes nothing:
-    `STATE_UNKNOWN` with the `allowed` states, or `NO_SUCH_ENTRY`.
+    `STATE_UNKNOWN` with the `allowed` states, `NO_SUCH_ENTRY`, or
+    `GOAL_HAS_OPEN_CHILDREN` with the open children's ids in `detail`. Retire
+    those first.
 
     Args:
         workspace_dir: The tracked workspace path from session context.
@@ -284,20 +306,31 @@ def retire_todo(workspace_dir: str, thread_name: str, todo_id: str, state: str) 
 def set_todo_state(workspace_dir: str, thread_name: str, todo_id: str, state: str) -> str:
     """Start, park or unpark a todo without retiring it.
 
-    Two of the states move the todo as well as labelling it. `started` sends it
-    to the top of the list and clears the label from whatever held it before,
-    since it names the one thing being worked on; call it when the user asks to
-    start or resume a todo. Unparking sends it to the end, because parked meant
-    for later.
+    Two of the states move the todo as well as labelling it. `started` means work
+    on the todo has begun, so it matters more than todos not yet started. It
+    stays until the todo is retired, parked or set back to `active` by hand, and
+    several todos can be started at once. Starting moves the todo to the top of
+    its list; for a child, its goal also goes to the top of the list, and a
+    parked goal becomes active. Call it when the user asks to start or resume a
+    todo. Unparking sends it to the end of its list, because parked meant for
+    later.
+
+    Parking a goal parks its open children too. Unparking a goal unparks every
+    parked child and sends the goal to the end of the list. A child moves
+    alone: parking it leaves its goal and siblings as they are, and unparking
+    it sends it to the end of its goal's children, and makes its goal active
+    if the goal was parked, so the child is visible.
 
     When the todo's link names a file, its `state:` line is rewritten to
     match, so a parked todo found by grep does not still read `state: active`.
 
-    Returns `{"id": ...}`, with `active` carrying the count when unparking is
+    Returns `{"id": ...}`, with `goal` carrying the goal's id when the todo is
+    a child, `active` carrying the count when unparking is
     what takes the list past five, and `file_unchanged` naming the todo's file
-    when its `state:` line could not be found. The index and the file then
-    disagree, and the file is the copy a reader finds by grep. Nothing else
-    reports it, so say so and name the file.
+    when its `state:` line could not be found, and `files_unchanged` listing
+    the same for any other todo the change cascaded to, only when there are
+    some. The index and the file then disagree, and the file is the copy a
+    reader finds by grep. Nothing else reports it, so say so and name the files.
 
     A refusal returns
     `{"error": "STATE_UNKNOWN", "allowed": [...]}` or
@@ -307,7 +340,7 @@ def set_todo_state(workspace_dir: str, thread_name: str, todo_id: str, state: st
         workspace_dir: The tracked workspace path from session context.
         thread_name: Name of the thread (kebab-case).
         todo_id: The id from the index line.
-        state: `started` for what is being worked on now, `parked` for
+        state: `started` once work on it has begun, `parked` for
             deliberately not now, `active` for anything else.
     """
     return _threads.set_todo_state(workspace_dir, thread_name, todo_id, state)
@@ -318,8 +351,11 @@ def order_todos(workspace_dir: str, thread_name: str, todo_ids: list[str],
                 place: str = "") -> str:
     """Move the named todos together, in the order given.
 
-    Everything else keeps its relative order, so naming the two that matter
-    leaves the rest alone. The order is the user's, so propose one and call
+    Every id must be in one list: all top-level todos, or all children of one
+    goal. `place` resolves in that list, so an anchor from another list is not
+    found. Everything else keeps its relative order, so naming the two that
+    matter leaves the rest alone, and moving a goal moves its children with it.
+    The order is the user's, so propose one and call
     this once they agree.
 
     This is also how what the README's Todos section shows changes, because what it shows is
@@ -329,6 +365,8 @@ def order_todos(workspace_dir: str, thread_name: str, todo_ids: list[str],
     Returns `{"ordered": <how many were named>}`. A refusal returns
     `{"error": CODE, "detail": ...}` and writes nothing: `NO_SUCH_ENTRY`
     naming the ids that are not in the list, including the anchor;
+    `NOT_SAME_LIST` when the ids are not all in one list, whose `detail` is
+    the ids given: order them in separate calls;
     `PLACE_UNKNOWN` with the `allowed` forms; `DUPLICATE_ID` naming one given
     twice; `ANCHOR_IS_MOVING` when the anchor is one of the todos being moved,
     so its place is the thing in question; and `IDS_REQUIRED` when no ids were
@@ -343,6 +381,43 @@ def order_todos(workspace_dir: str, thread_name: str, todo_ids: list[str],
             `top`, which is what reordering is usually for.
     """
     return _threads.order_todos(workspace_dir, thread_name, todo_ids, place)
+
+
+@mcp.tool()
+def set_parent(workspace_dir: str, thread_name: str, todo_ids: list[str],
+               parent: str | None) -> str:
+    """Nest todos under a goal, move them between goals, or take them back out.
+
+    A goal is a top-level todo that holds child todos, one level deep. Pass a
+    goal's id as `parent` to put the todos under it, which makes it a goal if
+    it was a plain todo. `parent` is required so that a forgotten argument
+    cannot un-nest anything: pass `null` to take the todos back to the top
+    level. Giving a list lets a goal and its children be set up in one call.
+
+    Nesting puts each todo last among the parent's children, in the order
+    given, and a todo already under that parent keeps its place. `null` puts
+    a child straight after its old goal in the top-level list, and several
+    from the same goal go in the order given, each after the one before. A
+    todo already at the top level is left alone.
+
+    Returns `{"moved": [ids whose list changed, in the order given]}`, so a
+    call that changed nothing returns `{"moved": []}`. A refusal returns
+    `{"error": CODE, "detail": ...}` and writes nothing, checked in this
+    order: `IDS_REQUIRED` when `todo_ids` is empty; `NO_SUCH_ENTRY` naming
+    the ids that are not todos, `parent` included; `DUPLICATE_ID` naming
+    an id given twice; `PARENT_IS_SELF` when `parent` is one of `todo_ids`;
+    `PARENT_IS_CHILD` when `parent` is itself a child, since a goal holds one
+    level; and `TODO_IS_GOAL` naming todos that are goals, since a goal cannot
+    become a child.
+
+    Args:
+        workspace_dir: The tracked workspace path from session context.
+        thread_name: Name of the thread (kebab-case).
+        todo_ids: Ids of the todos to move, in the order they should come.
+        parent: The id of the top-level todo to put them under, or `null` to
+            take them back to the top level.
+    """
+    return _threads.set_parent(workspace_dir, thread_name, todo_ids, parent)
 
 
 @mcp.tool()
@@ -438,8 +513,6 @@ def index_directory(workspace_dir: str, thread_name: str, link: str) -> str:
       `detail` is what it declared, so replace that value. This is the file's
       fault, where `STATE_UNKNOWN` is the caller's.
     - `UNREADABLE` — the file could not be opened.
-    - `UNREPRESENTABLE` — the filename carries a character an index line cannot
-      hold, so the entry could not be read back. Rename the file.
 
     A bad request returns `{"error": CODE, "detail": ...}` and indexes nothing:
     `OUTSIDE_THREAD`, `NOT_INDEXABLE`, or `NO_SUCH_DIRECTORY` when the kind is
@@ -481,15 +554,14 @@ def index_file(workspace_dir: str, thread_name: str, link: str,
     codes as index_directory, plus `MISSING` when the link resolves to nothing,
     `METADATA` for a dotfile, which is never content,
     `DESCRIPTION_TOO_LONG`, whose `detail` is the limit in characters,
-    `UNREPRESENTABLE` when the link or the description would not survive an
-    index line, whose `detail` names the field, and `DATE_INVALID`.
+    and `DATE_INVALID`.
 
     Args:
         workspace_dir: The tracked workspace path from session context.
         thread_name: Name of the thread (kebab-case).
         link: Path relative to the thread, e.g. ./artifacts/20260813-notes-x.md.
         description: One sentence saying what an artifact contains, refused
-            beyond 200 characters or if it carries a line break. Artifacts
+            beyond 200 characters. Artifacts
             only; decisions and sessions carry a `summary:` in their own
             frontmatter. It is read on every resume.
         date: `YYYY-MM-DD`, when the file is from. Only read when the filename
@@ -537,10 +609,8 @@ def star_artifact(workspace_dir: str, thread_name: str, artifact_id: str,
     Starring an artifact that is already starred replaces its trigger.
 
     Returns `{"id": ...}`. A refusal returns `{"error": CODE, ...}` and writes
-    nothing: `WHEN_EMPTY`, `WHEN_HAS_LINE_BREAK`, `WHEN_TOO_LONG` with `detail`
-    the limit, `NO_SUCH_ENTRY` with `detail` the id (it is not a current
-    artifact), or `UNREPRESENTABLE` with `detail` the field that cannot be
-    stored.
+    nothing: `WHEN_EMPTY`, `WHEN_TOO_LONG` with `detail` the limit, or
+    `NO_SUCH_ENTRY` with `detail` the id (it is not a current artifact).
 
     Args:
         workspace_dir: The tracked workspace path from session context.
@@ -557,11 +627,9 @@ def star_artifact(workspace_dir: str, thread_name: str, artifact_id: str,
 def unstar_artifact(workspace_dir: str, thread_name: str, artifact_id: str) -> str:
     """Remove an artifact's star.
 
-    Works on a star whose artifact is retired or missing, which resume shows as
-    `(not found)`.
-
-    Returns `{"id": ...}`. A refusal returns `{"error": "NOT_STARRED", "detail":
-    the id}` and writes nothing.
+    Returns `{"id": ...}`. A refusal returns `{"error": CODE, "detail": the id}`
+    and writes nothing: `NO_SUCH_ENTRY` (the id is not a current artifact) or
+    `NOT_STARRED`.
 
     Args:
         workspace_dir: The tracked workspace path from session context.

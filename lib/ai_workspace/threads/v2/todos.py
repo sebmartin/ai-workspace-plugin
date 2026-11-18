@@ -1,6 +1,6 @@
 """The todo list: which todos are next, and in what order.
 
-Order is the order of the lines in `todos-index.md`. Nothing names a subset, so
+Order is the order of the lines in `todos-index.json`. Nothing names a subset, so
 every active todo is a next step and no todo can be in the list but absent from
 the order.
 
@@ -24,25 +24,115 @@ PARKED = "parked"
 COMFORTABLE = 5
 
 
+class Located(NamedTuple):
+    """Where a todo sits: the list holding it, its position, and its goal."""
+
+    siblings: list[Entry]  # the top-level list or goal.children
+    at: int  # its position in siblings
+    goal: Entry | None  # its goal, or None at top level
+
+    @property
+    def entry(self) -> Entry:
+        return self.siblings[self.at]
+
+
+def locate(entries: list[Entry], todo_id: str) -> Located | None:
+    """Find a todo at the top level or one level down, or None."""
+    for i, entry in enumerate(entries):
+        if entry.id == todo_id:
+            return Located(entries, i, None)
+        for j, child in enumerate(entry.children or []):
+            if child.id == todo_id:
+                assert entry.children is not None
+                return Located(entry.children, j, entry)
+    return None
+
+
+def is_goal(entry: Entry) -> bool:
+    """A goal is a todo with a children list, even an empty one."""
+    return entry.children is not None
+
+
 def next_up(entries: list[Entry]) -> list[Entry]:
     """Every todo that is still a next step, in order."""
     return [e for e in entries if e.state != PARKED]
 
 
-def parked(entries: list[Entry]) -> list[Entry]:
-    return [e for e in entries if e.state == PARKED]
+def shown_state(entry: Entry) -> str | None:
+    """The state to show for a todo. A goal whose own state is active shows
+    started when a child is, so work under it is visible from the top level
+    without storing a second copy of the fact."""
+    if entry.state == ACTIVE and any(c.state == STARTED for c in entry.children or []):
+        return STARTED
+    return entry.state
+
+
+def lines(entry: Entry) -> list[str]:
+    """A todo's display lines: itself, then each child that is not parked,
+    indented. A parked child is listed under Parked instead."""
+    out = [entry.render(shown_state(entry))]
+    out.extend("  " + c.render() for c in entry.children or [] if c.state != PARKED)
+    return out
 
 
 def window(entries: list[Entry]) -> list[Entry]:
     """What the Todos section shows: the top of the list, bounded.
 
-    A slice rather than a stored subset. There is nothing to drift from the
-    list it is drawn from, nothing to refill when a todo is retired, since the
-    sixth moves up by itself, and the README keeps its size as the thread runs
-    for months. Changing what is shown is changing the order, which is one
-    gesture rather than two.
+    Whole goals are taken in order until `COMFORTABLE` lines or more are out,
+    so a goal is never split and one larger than the window shows in full. A
+    slice rather than a stored subset: nothing drifts from the list it is drawn
+    from, nothing refills when a todo is retired, and the README keeps its size
+    as the thread runs for months. Changing what is shown is changing the
+    order, which is one gesture rather than two.
     """
-    return next_up(entries)[:COMFORTABLE]
+    out: list[Entry] = []
+    count = 0
+    for entry in next_up(entries):
+        if count >= COMFORTABLE:
+            break
+        out.append(entry)
+        count += len(lines(entry))
+    return out
+
+
+def shown_lines(entries: list[Entry]) -> list[str]:
+    return [line for entry in window(entries) for line in lines(entry)]
+
+
+def active_count(entries: list[Entry]) -> int:
+    """Every todo that is not parked, children included. The children of a
+    parked goal are parked with it."""
+    total = 0
+    for e in entries:
+        if e.state != PARKED:
+            total += 1 + sum(1 for c in e.children or [] if c.state != PARKED)
+    return total
+
+
+def parked_count(entries: list[Entry]) -> int:
+    """Every todo that is parked, or whose goal is."""
+    total = 0
+    for e in entries:
+        if e.state == PARKED:
+            total += 1 + len(e.children or [])
+        else:
+            total += sum(1 for c in e.children or [] if c.state == PARKED)
+    return total
+
+
+def parked_lines(entries: list[Entry]) -> list[str]:
+    """The Parked section, in file order. A parked goal is listed whole. A
+    parked child of a goal that is not parked names its goal, since nothing
+    above it says whose it is."""
+    out: list[str] = []
+    for e in entries:
+        if e.state == PARKED:
+            out.append(e.render())
+            out.extend("  " + c.render() for c in e.children or [])
+        else:
+            goal = " ".join(e.title.split())
+            out.extend(f"{c.render()} ({goal})" for c in e.children or [] if c.state == PARKED)
+    return out
 
 
 def crowded(entries: list[Entry]) -> int:
@@ -50,7 +140,7 @@ def crowded(entries: list[Entry]) -> int:
 
     Presence is the signal, so a comfortable list costs its caller nothing.
     """
-    waiting = len(next_up(entries))
+    waiting = active_count(entries)
     return waiting if waiting > COMFORTABLE else 0
 
 
@@ -113,40 +203,89 @@ def spot(entries: list[Entry], place: str) -> Spot:
     return Spot(found if sense == "before" else found + 1)
 
 
-def only_started(entries: list[Entry], entry_id: str) -> None:
-    """Take the started label off every other todo, leaving places alone.
+def start(entries: list[Entry], todo_id: str) -> list[Entry]:
+    """Put a todo that has been started at the top of its own list.
 
-    Exactly one, because the state names what is being worked on now. A second
-    one leaves the label meaning nothing once a few sessions have each marked
-    something. The others keep their place and lose only the label.
+    Several todos can be started at once, so nothing is taken off any other.
+    For a child the goal goes to the top of `entries` as well, so the work is
+    first at both levels, and a parked goal is made active, since work under it
+    has begun. Returns the entries other than the todo whose state this
+    changed: the goal, or nothing.
     """
-    for entry in entries:
-        if entry.id != entry_id and entry.state == STARTED:
-            entry.state = ACTIVE
-
-
-def start(entries: list[Entry], entry_id: str) -> None:
-    """Make this the started todo, and the only one, and put it on top."""
-    only_started(entries, entry_id)
-    to_top(entries, entry_id)
-
-
-def to_top(entries: list[Entry], entry_id: str) -> None:
-    """Move one todo to the front of the list."""
-    _move(entries, entry_id, top=True)
-
-
-def to_end(entries: list[Entry], entry_id: str) -> None:
-    _move(entries, entry_id, top=False)
-
-
-def _move(entries: list[Entry], entry_id: str, top: bool) -> None:
-    """Take the todo out and put it back at one end. Unknown ids do nothing."""
-    found = index_of(entries, entry_id)
+    found = locate(entries, todo_id)
     if found is None:
-        return
-    entry = entries.pop(found)
-    entries.insert(0 if top else len(entries), entry)
+        return []
+    found.siblings.insert(0, found.siblings.pop(found.at))
+    if found.goal is None:
+        return []
+    return raise_goal(entries, found.goal)
+
+
+def raise_goal(entries: list[Entry], goal: Entry) -> list[Entry]:
+    """Send a goal whose child has been started to the top of `entries`, and
+    make it active if it was parked. Returns [goal] when its state changed."""
+    entries.insert(0, entries.pop(entries.index(goal)))
+    if goal.state == PARKED:
+        goal.state = ACTIVE
+        return [goal]
+    return []
+
+
+def apply_state(entries: list[Entry], todo_id: str, state: str) -> list[Entry]:
+    """Set a todo's state with every move and cascade it implies.
+
+    Parking a goal parks its children, and unparking it unparks them all and
+    sends the goal to the end. A child parks and unparks alone, and unparking
+    one under a parked goal brings the goal back, in its place, so the child is
+    visible. Returns the named todo first, then each other entry whose state
+    changed, so the caller can sync their files. An unknown id returns [].
+    """
+    found = locate(entries, todo_id)
+    if found is None:
+        return []
+    entry = found.entry
+    was, entry.state = entry.state, state
+    changed = [entry]
+    if state == STARTED:
+        changed += start(entries, todo_id)
+    if was == PARKED and state != PARKED:
+        if is_goal(entry):
+            for child in entry.children or []:
+                if child.state == PARKED:
+                    child.state = ACTIVE
+                    changed.append(child)
+            if state == ACTIVE:
+                to_end(entries, todo_id)
+        else:
+            if state == ACTIVE:
+                to_end(found.siblings, todo_id)
+            if found.goal is not None and found.goal.state == PARKED:
+                found.goal.state = ACTIVE
+                changed.append(found.goal)
+    elif state == PARKED and is_goal(entry):
+        for child in entry.children or []:
+            if child.state != PARKED:
+                child.state = PARKED
+                changed.append(child)
+    return changed
+
+
+def to_end(entries: list[Entry], todo_id: str) -> None:
+    """Move a todo to the end of its own list. An unknown id does nothing."""
+    found = locate(entries, todo_id)
+    if found is not None:
+        found.siblings.append(found.siblings.pop(found.at))
+
+
+def same_list(entries: list[Entry], ids: list[str]) -> list[Entry] | None:
+    """The list object (top-level or one goal's children) holding every id, or
+    None when they are spread over several lists or any is unknown."""
+    lists = [entries] + [e.children for e in entries if e.children is not None]
+    wanted = set(ids)
+    for candidate in lists:
+        if wanted <= {e.id for e in candidate}:
+            return candidate
+    return None
 
 
 def staying(entries: list[Entry], ids: list[str]) -> list[Entry]:

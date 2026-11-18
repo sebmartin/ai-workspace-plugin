@@ -84,14 +84,14 @@ threads/{name}/
 ├── schema-version           "2"
 ├── README.md                for the human
 ├── memory.md                for you (optional; absent until there is something in it)
-├── sessions/     + sessions-index.md
-├── decisions/    + decisions-index.md, decisions-retired.md
-├── artifacts/    + artifacts-index.md, artifacts-retired.md, artifacts-starred.md
+├── sessions/     + sessions-index.json
+├── decisions/    + decisions-index.json, decisions-retired.json
+├── artifacts/    + artifacts-index.json, artifacts-retired.json
 ├── attachments/  (no index; scan the directory when you need to know)
-└── todos/        + todos-index.md, todos-retired.md
+└── todos/        + todos-index.json, todos-retired.json
 ```
 
-An artifact carries a one-line description on its index line. Nothing else does: a decision and a session keep their `summary:` in their own frontmatter.
+An artifact carries a one-line description on its index entry. Nothing else does: a decision and a session keep their `summary:` in their own frontmatter.
 
 These directories are the whole of a thread's layout. **Never add a top-level folder
 inside a thread.** Anything you produce, an analysis, a spec, a model, a collection of
@@ -101,14 +101,14 @@ plugin introduces or retires are its call.
 
 ### Reading another thread
 
-Read its files directly, whenever another thread holds something you need. Do not resume it: resuming makes it your active thread, and you do not need a composed payload to answer one question about someone else's work.
+Read its files directly, whenever another thread holds something you need. Do not resume it: resuming makes it your active thread, and you do not need a composed payload to answer one question about someone else's work. The indexes are JSON: open the `.json` files directly. `jq` helps if it is installed, but don't assume it is.
 
 | To learn | Open |
 |---|---|
 | where it stands, and what it is for | `README.md`, which is short |
-| what it settled | `decisions-index.md` for ids and titles, then the decision file for its `summary:` and argument |
-| what happened, and when | `sessions-index.md` |
-| what it produced | `artifacts-index.md`, which carries a description per line |
+| what it settled | `decisions-index.json` for ids and titles, then the decision file for its `summary:` and argument |
+| what happened, and when | `sessions-index.json` |
+| what it produced | `artifacts-index.json`, which carries a description per entry |
 
 A schema 1 thread keeps all of that inline in its README, so one read covers it.
 
@@ -120,7 +120,17 @@ A schema 1 thread keeps all of that inline in its README, so one read covers it.
 
 **Print About, Status and Todos**, in that order, with the counts from the Todos heading. Everything else is context you hold, not output. A list of thirty-five decisions is for you, not for the screen. Counts are not stored anywhere, so say them from what you read.
 
-**Print each todo as a markdown link on its title**, so the user can open what it points at rather than asking you for it. An external URL goes as it is. Drop the id, which is for your calls rather than the screen, and name a state only when it is not `active`.
+**Print each todo as a markdown link on its title**, so the user can open what it points at rather than asking you for it. An external URL goes as it is. Drop the id, which is for your calls rather than the screen, and name a state only when it is not `active`. The state is a suffix in parentheses, `(started)` or `(parked)`, with no other markers or symbols. Children are indented two spaces under their goal, and a goal shows `(started)` when it is started or any of its children is:
+
+```
+- Release 3 (started)
+  - v3 blocker: simplify the schema 1 migration (started)
+  - v3 blocker: release cleanup
+  - v3 blocker: ship release 3
+- Keep durable knowledge out of todos
+```
+
+**A todo with children is a goal**, one level deep. Set one up with `set_parent`, or pass `parent` to `add_todo`. A goal with children cannot be retired until they are. The pointer rule: when you retire a child, open the goal and propose the next child (its first remaining child), or propose retiring the goal when none are left. When you start a child, say which goal it belongs to.
 
 The payload carries the full text of the newest sessions, then summaries of the few before them, and the heading says how many it is not holding. Before answering a question about earlier work from memory, search `sessions/`, whose files carry `summary:` and `keywords:` frontmatter.
 
@@ -134,7 +144,7 @@ The payload carries the full text of the newest sessions, then summaries of the 
 
 **Say "saved", not "archived", when you have written a file.** Archiving is a different operation in this plugin: it retires a whole thread from the active list. Calling a save an archive tells the user their work was put away.
 
-Never hand-edit an index, `artifacts-starred.md` or the README's Todos section. The indexes and the Todos section are rendered from what the tools write, and the tools are the only writers of the star file, which they rewrite whole, so a hand edit to any of them will be overwritten or lost. Status is written only by `save_session`, on every save; never edit it by hand, since the next save overwrites it, except when migrating a thread as `migrate-from-v1.md` describes. About is written by `set_about`, never by hand. The header fields and `memory.md` have no tool; edit them directly.
+Never hand-edit an index or the README's Todos section. The tools are the only writers of the indexes, and the Todos section is rendered from them, so a hand edit to either will be overwritten or lost. There is one exception: when a tool returns `UNREADABLE_INDEX`, repair that file by hand so it parses, then retry. Never delete or recreate it, since that loses every entry in it. Status is written only by `save_session`, on every save; never edit it by hand, since the next save overwrites it, except when migrating a thread as `migrate-from-v1.md` describes. About is written by `set_about`, never by hand. The header fields and `memory.md` have no tool; edit them directly.
 
 A render replaces `## Todos` down to the next `##`, so never leave it as the last section of a README. Anything below it is swallowed without a word.
 
@@ -145,7 +155,7 @@ id's date comes from the filename, so a name without one is indexed as undated
 unless you pass `date`.
 
 **Starring an artifact.** A star marks an artifact you need to know when to read.
-Its line and trigger load on every resume, and its body only on demand. Star an
+Its entry and trigger load on every resume, and its body only on demand. Star an
 artifact that matters too much to be one line among many but is too long to hold
 in memory. Star with `star_artifact`. Every star carries a trigger, one sentence on when
 to read it, because a star without one tells you nothing. Propose stars and unstars, typically when
@@ -174,11 +184,11 @@ can be written to at all. Fetch
 
 **A decision is a choice that was made.** Its summary loads on every resume, so do not even propose one whose rejected alternative you cannot name, or that dies with this task; that is a session log entry.
 
-**The README's Todos section is the top of the todo list, bounded to five.** Parking takes a todo off the list, so it is the top five of what is active. The rest of the list is in `todos-index.md`, and resume counts it for you. Nothing promotes anything: retire the first todo and the sixth becomes fifth by itself.
+**The README's Todos section is the top of the todo list, bounded to five.** Parking takes a todo off the list, so it is the top five of what is active. The rest of the list is in `todos-index.json`, and resume counts it for you. A goal is shown whole, so the window can run past five lines. Nothing promotes anything: retire the first todo and the sixth becomes fifth by itself.
 
 **The order is the user's.** Propose one and apply it once they agree, and say where you put a new todo so they can move it.
 
-**Starting on a todo marks it started, and nothing more.** Any request to start or resume a todo, in whatever words, first sets it to `started` with `set_todo_state`, and you tell the user you did. Then give a short summary of where it stands, propose a first or next step if one is clear, and stop until they say which step to take. Picking one from a list, naming it, and handing it to another skill to design or build all count as starting; the hand-off is the step they asked for.
+**Starting on a todo marks it started, and nothing more.** `started` means work on it has begun. Work on it has begun, so it matters more than todos that have not been started. It stays `started` until the todo is retired, parked or set back by hand; it does not mean a session is on it right now, and nothing clears it. Several todos can be started at once. Any request to start or resume a todo, in whatever words, first sets it to `started` with `set_todo_state`, and you tell the user you did. Then give a short summary of where it stands, propose a first or next step if one is clear, and stop until they say which step to take. Picking one from a list, naming it, and handing it to another skill to design or build all count as starting; the hand-off is the step they asked for.
 
 ### Memory
 

@@ -1,14 +1,14 @@
 """Write operations on a schema 2 thread.
 
-Each one appends or moves a single line and then re-renders, so the README's
+Each one appends or moves a single entry and then re-renders, so the README's
 derived section always equals the projection of its index. The assistant
-supplies fields; this module owns the line format and id uniqueness, which is
-what keeps `^- <id>:` lookups reliable.
+supplies fields; this module owns id uniqueness.
 
 None of these carries a large payload, so none of them can be defeated by the
 model's per-response output cap.
 """
 
+import copy
 import json
 from datetime import date
 from pathlib import Path, PurePosixPath
@@ -17,7 +17,7 @@ from typing import NamedTuple
 from ai_workspace.text import set_frontmatter_field, split_frontmatter, yaml_value
 from ai_workspace.threads.v2 import ids as ids_mod
 from ai_workspace.threads.v2 import index as idx
-from ai_workspace.threads.v2 import render, session, stars
+from ai_workspace.threads.v2 import render, session
 from ai_workspace.threads.v2 import todos as todos_mod
 
 
@@ -49,8 +49,7 @@ _FILE_KINDS = {
 # thread's payload. This refuses rather than truncating: a slug cut short is
 # still an identifier, where a sentence cut short reads as whole and the reader
 # cannot tell. Refusing also reaches the only party that can fix it, since the
-# caller wrote the sentence and is still holding it. The same field is checked
-# against the line format, which is what a line break in it defeats.
+# caller wrote the sentence and is still holding it.
 MAX_DESCRIPTION = 200
 
 
@@ -134,7 +133,7 @@ def _redate(thread_dir: Path, kind: str, entry, entries: list,
     """Give an indexed file a new date, and with it a new id.
 
     The only repair for an entry that landed on the epoch, since a filename is
-    never renamed and an index line is never hand-edited. The id changes, so
+    never renamed and an index entry is never hand-edited. The id changes, so
     the reply has to say so: ids are what order_todos and the retire tools
     take, and the caller is holding the old one.
 
@@ -151,8 +150,6 @@ def _redate(thread_dir: Path, kind: str, entry, entries: list,
     if entry.title == was:
         entry.title = entry.id
     idx.add(thread_dir, kind, entry, retired)
-    if kind == "artifacts":
-        stars.rekey(thread_dir, was, entry.id)
     return entry.id, was
 
 
@@ -203,10 +200,7 @@ def _index_one(thread, link: str, description: str = "",
         # boundary. Without it, re-indexing to correct a link would silently
         # erase the sentence.
         if description and takes_description and entry.description != description:
-            was, entry.description = entry.description, description
-            if (unreadable := idx.unrepresentable(entry)) is not None:
-                entry.description = was
-                return Indexed(""), Refusal("UNREPRESENTABLE", unreadable)
+            entry.description = description
             idx.write(thread.dir, kind, entries, retired)
         if when is None:
             return Indexed(entry.id), None
@@ -228,12 +222,11 @@ def _index_one(thread, link: str, description: str = "",
         entry_id, state, entry_id, f"./{relative}",
         description if takes_description else "",
     )
-    if (unreadable := idx.unrepresentable(entry)) is not None:
-        return Indexed(""), Refusal("UNREPRESENTABLE", unreadable)
     idx.add(thread.dir, kind, entry)
     return Indexed(entry_id), None
 
 
+@idx.refuses_unreadable
 def index_file(thread, link: str, description: str = "",
                when: str | None = None) -> str:
     """Index a file that is already in the thread.
@@ -267,6 +260,7 @@ def index_file(thread, link: str, description: str = "",
     return json.dumps(reply)
 
 
+@idx.refuses_unreadable
 def index_directory(thread, link: str) -> str:
     """Index every top-level entry in one directory that is not indexed yet.
 
@@ -346,15 +340,21 @@ def _unplaceable(where) -> str:
     return json.dumps(reply)
 
 
+@idx.refuses_unreadable
 def add_todo(thread, title: str, link: str, state: str = "active",
-             place: str = "") -> str:
-    """Add a todo at a chosen place in the list.
+             place: str = "", parent: str | None = None) -> str:
+    """Add a todo at a chosen place in the list, or under a goal.
 
     The caller places it because only the caller knows what the todo is for:
     a piece of the current task goes above it, something that has to follow
     another goes below that one, and anything else goes at the end. One thing
-    places itself: `started` means this is what is being worked on, so it goes
-    to the top unless a place was named.
+    places itself: `started` means work on it has begun, so it goes to the top
+    unless a place was named. Other started todos keep their state.
+
+    With `parent` the todo is a child of that todo, which becomes a goal if it
+    was a plain todo. `place` and the default position then resolve within the
+    goal's children. A started child also sends its goal to the top of the
+    list, whether or not a place was named. A child cannot be a parent.
     """
     if state not in idx.IN_FORCE["todos"]:
         allowed = list(idx.IN_FORCE["todos"])
@@ -378,24 +378,36 @@ def add_todo(thread, title: str, link: str, state: str = "active",
         return unwritable
 
     entries = idx.read(thread.dir, "todos")
+    goal = None
+    target = entries
+    if parent is not None:
+        found = todos_mod.locate(entries, parent)
+        if found is None:
+            return json.dumps({"error": "NO_SUCH_ENTRY", "detail": parent})
+        if found.goal is not None:
+            return json.dumps({"error": "PARENT_IS_CHILD", "detail": parent})
+        goal = found.entry
+        target = goal.children if goal.children is not None else []
     # A place that was asked for wins over the one the state implies.
-    at = 0 if state == todos_mod.STARTED else len(entries)
+    at = 0 if state == todos_mod.STARTED else len(target)
     if place := place.strip():
-        where = todos_mod.spot(entries, place)
+        where = todos_mod.spot(target, place)
         if where.at is None:
             return _unplaceable(where)
         at = where.at
 
     todo_id = _new_id(thread.dir, "todos", title)
     entry = idx.Entry(todo_id, state, title.strip(), link)
-    if (unreadable := idx.unrepresentable(entry)) is not None:
-        return json.dumps({"error": "UNREPRESENTABLE", "detail": unreadable})
-    was = list(entries)
-    entries.insert(at, entry)
-    if state == todos_mod.STARTED:
-        # The label, not the placement: `at` above already honoured `place`.
-        todos_mod.only_started(entries, todo_id)
+    was = copy.deepcopy(entries)
+    target.insert(at, entry)
+    moved: list = []
+    if goal is not None:
+        goal.children = target
+        if state == todos_mod.STARTED:
+            moved = todos_mod.raise_goal(entries, goal)
     idx.write(thread.dir, "todos", entries)
+    for changed in moved:
+        _sync_file_state(thread.dir, changed, changed.state)
     render.render(thread.dir)
     reply: dict = {"id": todo_id}
     if waiting := todos_mod.just_crowded(was, entries):
@@ -403,17 +415,39 @@ def add_todo(thread, title: str, link: str, state: str = "active",
     return json.dumps(reply)
 
 
+@idx.refuses_unreadable
 def retire_todo(thread, todo_id: str, state: str) -> str:
+    if state not in idx.RETIRED["todos"]:
+        return json.dumps({"error": "STATE_UNKNOWN", "detail": state,
+                           "allowed": list(idx.RETIRED["todos"])})
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
-    entry = idx.find(idx.read(thread.dir, "todos"), todo_id)
-    if error := idx.retire(thread.dir, "todos", todo_id, state):
-        return json.dumps(error)
-    stale = _sync_file_state(thread.dir, entry, state) if entry else ""
+    entries = idx.read(thread.dir, "todos")
+    # Read before the live index is written, so a retired index that does not
+    # parse stops this before it has moved anything.
+    idx.read(thread.dir, "todos", retired=True)
+    found = todos_mod.locate(entries, todo_id)
+    if found is None:
+        return json.dumps({"error": "NO_SUCH_ENTRY", "detail": todo_id})
+    entry, goal = found.entry, found.goal
+    if entry.children:
+        return json.dumps({"error": "GOAL_HAS_OPEN_CHILDREN",
+                           "detail": ", ".join(c.id for c in entry.children)})
+    found.siblings.remove(entry)
+    entry.state = state
+    if goal is not None:
+        # The retired entry keeps its goal, so the goal's history shows what
+        # was under it.
+        entry.parent = goal.id
+    idx.write(thread.dir, "todos", entries)
+    idx.add(thread.dir, "todos", entry, retired=True)
+    stale = _sync_file_state(thread.dir, entry, state)
     render.render(thread.dir)
     reply: dict = {"id": todo_id}
     if stale:
         reply["file_unchanged"] = stale
+    if goal is not None:
+        reply["goal"] = {"id": goal.id, "open": len(goal.children or [])}
     return json.dumps(reply)
 
 
@@ -436,13 +470,19 @@ def _sync_file_state(thread_dir: Path, entry, state: str) -> str:
         return entry.link
 
 
+@idx.refuses_unreadable
 def set_state(thread, kind: str, entry_id: str, state: str) -> str:
     """Move an entry between in-force states, e.g. parking or starting a todo.
 
     Two of the todo states carry a position as well as a name, and both are
-    applied here rather than left to a second call: `started` means this is
-    what is being worked on, and `active` after `parked` means it is wanted
-    again but behind whatever became current while it was away.
+    applied here rather than left to a second call: `started` means work on it
+    has begun, and puts it at the top of its list (and a child's goal at the
+    top of the list, made active if it was parked). `active` after `parked`
+    means it is wanted again but behind whatever became current while it was
+    away. Starting one todo leaves every other started todo as it is. Parking
+    a goal parks its open children, and unparking one unparks every parked
+    child. A child parks and unparks alone, and unparking one under a parked
+    goal makes the goal active again, in its place.
     """
     if state not in idx.IN_FORCE[kind]:
         return json.dumps({"error": "STATE_UNKNOWN", "detail": state,
@@ -450,40 +490,53 @@ def set_state(thread, kind: str, entry_id: str, state: str) -> str:
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
     entries = idx.read(thread.dir, kind)
-    entry = idx.find(entries, entry_id)
+    goal = None
+    if kind == "todos":
+        located = todos_mod.locate(entries, entry_id)
+        entry = located.entry if located else None
+        goal = located.goal if located else None
+    else:
+        entry = idx.find(entries, entry_id)
     if entry is None:
         return json.dumps({"error": "NO_SUCH_ENTRY", "detail": entry_id})
-    before = [idx.Entry(e.id, e.state, e.title, e.link, e.description) for e in entries]
-    was, entry.state = entry.state, state
+    before = copy.deepcopy(entries)
+    changed = [entry]
     if kind == "todos":
-        if state == todos_mod.STARTED:
-            todos_mod.start(entries, entry_id)
-        elif state == todos_mod.ACTIVE and was == todos_mod.PARKED:
-            todos_mod.to_end(entries, entry_id)
+        changed = todos_mod.apply_state(entries, entry_id, state)
+    else:
+        entry.state = state
     idx.write(thread.dir, kind, entries)
     stale = _sync_file_state(thread.dir, entry, state)
+    others = [link for c in changed[1:] if (link := _sync_file_state(thread.dir, c, c.state or state))]
     render.render(thread.dir)
     reply: dict = {"id": entry_id}
+    if goal is not None:
+        reply["goal"] = goal.id
     if stale:
         reply["file_unchanged"] = stale
+    if others:
+        reply["files_unchanged"] = others
     if kind == "todos" and (waiting := todos_mod.just_crowded(before, entries)):
         reply["active"] = waiting
     return json.dumps(reply)
 
 
+@idx.refuses_unreadable
 def order_todos(thread, todo_ids: list[str], place: str = "") -> str:
     """Move the named todos together, in the order given.
 
-    Everything else keeps its relative order, so moving the two items that
-    matter does not disturb the rest of the list. The default place is the
-    top, which is what reordering is usually for.
+    Every id must be in one list: all top-level, or all children of one goal.
+    `place` resolves in that list. Everything else keeps its relative order, so
+    moving the two items that matter does not disturb the rest of the list, and
+    a goal moves with its children. The default place is the top, which is what
+    reordering is usually for.
     """
     if not todo_ids:
         return json.dumps({"error": "IDS_REQUIRED"})
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
     entries = idx.read(thread.dir, "todos")
-    known = {e.id for e in entries}
+    known = {e.id for e in idx.flatten(entries)}
     if missing := [i for i in todo_ids if i not in known]:
         return json.dumps({"error": "NO_SUCH_ENTRY", "detail": ", ".join(missing)})
     # Refused rather than de-duplicated: collapsing a repeat would produce an
@@ -491,20 +544,83 @@ def order_todos(thread, todo_ids: list[str], place: str = "") -> str:
     if repeated := [i for i in set(todo_ids) if todo_ids.count(i) > 1]:
         return json.dumps({"error": "DUPLICATE_ID", "detail": ", ".join(sorted(repeated))})
 
+    siblings = todos_mod.same_list(entries, todo_ids)
+    if siblings is None:
+        return json.dumps({"error": "NOT_SAME_LIST", "detail": ", ".join(todo_ids)})
+
     # Resolved against the list the movers have been taken out of, which is
     # also what makes an anchor that is itself moving impossible to resolve.
-    staying = todos_mod.staying(entries, todo_ids)
+    staying = todos_mod.staying(siblings, todo_ids)
     where = todos_mod.spot(staying, place) if place.strip() else todos_mod.Spot(0)
     if where.at is None:
         if where.error == "NO_SUCH_ENTRY" and where.detail in todo_ids:
             return json.dumps({"error": "ANCHOR_IS_MOVING", "detail": where.detail})
         return _unplaceable(where)
-    idx.write(thread.dir, "todos",
-              todos_mod.reordered(entries, todo_ids, where.at))
+    siblings[:] = todos_mod.reordered(siblings, todo_ids, where.at)
+    idx.write(thread.dir, "todos", entries)
     render.render(thread.dir)
     return json.dumps({"ordered": len(todo_ids)})
 
 
+@idx.refuses_unreadable
+def set_parent(thread, todo_ids: list[str], parent: str | None) -> str:
+    """Nest the named todos under `parent`, or take them back to the top level.
+
+    Moving between goals is the same call as nesting. Refusals are checked in
+    a fixed order so the same mistake always gets the same code.
+    """
+    if not todo_ids:
+        return json.dumps({"error": "IDS_REQUIRED", "detail": "todo_ids is empty"})
+    if (unwritable := render.blocked(thread.dir)) is not None:
+        return unwritable
+    entries = idx.read(thread.dir, "todos")
+    wanted = [*todo_ids, *([parent] if parent is not None else [])]
+    if missing := [i for i in wanted if todos_mod.locate(entries, i) is None]:
+        return json.dumps({"error": "NO_SUCH_ENTRY", "detail": ", ".join(missing)})
+    if repeated := [i for i in set(todo_ids) if todo_ids.count(i) > 1]:
+        return json.dumps({"error": "DUPLICATE_ID", "detail": ", ".join(sorted(repeated))})
+    goal = None
+    if parent is not None:
+        if parent in todo_ids:
+            return json.dumps({"error": "PARENT_IS_SELF", "detail": parent})
+        found = todos_mod.locate(entries, parent)
+        assert found is not None
+        if found.goal is not None:
+            return json.dumps({"error": "PARENT_IS_CHILD", "detail": parent})
+        goal = found.entry
+        goal_ids = {e.id for e in idx.flatten(entries) if todos_mod.is_goal(e)}
+        goals = [i for i in todo_ids if i in goal_ids]
+        if goals:
+            return json.dumps({"error": "TODO_IS_GOAL", "detail": ", ".join(goals)})
+
+    moved: list[str] = []
+    last_after: dict[str, idx.Entry] = {}  # old goal id -> the entry placed last after it
+    for todo_id in todo_ids:
+        here = todos_mod.locate(entries, todo_id)
+        assert here is not None
+        if goal is not None:
+            if here.goal is goal:
+                continue
+            entry = here.siblings.pop(here.at)
+            if goal.children is None:
+                goal.children = []
+            goal.children.append(entry)
+        else:
+            if here.goal is None:
+                continue
+            entry = here.siblings.pop(here.at)
+            previous = last_after.get(here.goal.id, here.goal)
+            at = next(i for i, e in enumerate(entries) if e is previous)
+            entries.insert(at + 1, entry)
+            last_after[here.goal.id] = entry
+        moved.append(todo_id)
+    if moved:
+        idx.write(thread.dir, "todos", entries)
+        render.render(thread.dir)
+    return json.dumps({"moved": moved})
+
+
+@idx.refuses_unreadable
 def log_decision(thread, title: str, summary: str, body: str,
                  state: str = "proposed",
                  supersedes: list[str] | None = None) -> str:
@@ -550,6 +666,7 @@ def log_decision(thread, title: str, summary: str, body: str,
     return json.dumps(reply)
 
 
+@idx.refuses_unreadable
 def retire_decision(thread, decision_id: str, state: str) -> str:
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
@@ -565,53 +682,53 @@ def retire_decision(thread, decision_id: str, state: str) -> str:
     return json.dumps(reply)
 
 
+@idx.refuses_unreadable
 def retire_artifact(thread, artifact_id: str, state: str) -> str:
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
+    entry = idx.find(idx.read(thread.dir, "artifacts"), artifact_id)
+    dropped = entry.star if entry else None
     if error := idx.retire(thread.dir, "artifacts", artifact_id, state):
         return json.dumps(error)
-    dropped = stars.drop(thread.dir, artifact_id)
     render.render(thread.dir)
     reply: dict = {"id": artifact_id}
     if dropped:
-        reply["star_dropped"] = dropped.when
+        reply["star_dropped"] = dropped
     return json.dumps(reply)
 
 
+@idx.refuses_unreadable
 def star_artifact(thread, artifact_id: str, when: str) -> str:
     """Star a current artifact, or replace the trigger of one already starred.
 
-    Every refusal is decided before the star file is written. The README is
+    Every refusal is decided before the index is written. The README is
     untouched, so `render.blocked` has nothing to protect here.
     """
     when = when.strip()
     if not when:
         return json.dumps({"error": "WHEN_EMPTY"})
-    if stars.has_line_break(when):
-        return json.dumps({"error": "WHEN_HAS_LINE_BREAK"})
     if len(when) > MAX_DESCRIPTION:
         return json.dumps({"error": "WHEN_TOO_LONG", "detail": str(MAX_DESCRIPTION)})
-    live = idx.read(thread.dir, "artifacts")
-    entry = idx.find(live, artifact_id)
-    if entry is None or entry.state not in idx.IN_FORCE["artifacts"]:
+    entries = idx.read(thread.dir, "artifacts")
+    entry = idx.find(entries, artifact_id)
+    if entry is None:
         return json.dumps({"error": "NO_SUCH_ENTRY", "detail": artifact_id})
-    star = stars.Star(artifact_id, when)
-    if broken := stars.unrepresentable(star):
-        return json.dumps({"error": "UNREPRESENTABLE", "detail": broken})
-    current = stars.read(thread.dir)
-    if any(s.id == artifact_id for s in current):
-        current = [star if s.id == artifact_id else s for s in current]
-    else:
-        current.append(star)
-    stars.write(thread.dir, current)
+    entry.star = when
+    idx.write(thread.dir, "artifacts", entries)
     return json.dumps({"id": artifact_id})
 
 
+@idx.refuses_unreadable
 def unstar_artifact(thread, artifact_id: str) -> str:
-    """Remove a star. The index is never consulted, so a star whose artifact is
-    retired or missing can still be cleared."""
-    if stars.drop(thread.dir, artifact_id) is None:
+    """Remove a star from a current artifact."""
+    entries = idx.read(thread.dir, "artifacts")
+    entry = idx.find(entries, artifact_id)
+    if entry is None:
+        return json.dumps({"error": "NO_SUCH_ENTRY", "detail": artifact_id})
+    if entry.star is None:
         return json.dumps({"error": "NOT_STARRED", "detail": artifact_id})
+    entry.star = None
+    idx.write(thread.dir, "artifacts", entries)
     return json.dumps({"id": artifact_id})
 
 
@@ -634,6 +751,7 @@ def _status_items(field: str, items: list[str]) -> list[str] | dict:
     return out
 
 
+@idx.refuses_unreadable
 def set_about(thread, text: str) -> str:
     """Replace the README's About section, held to 50 words."""
     from ai_workspace.threads.v2 import readme as readme_mod
@@ -647,6 +765,7 @@ def set_about(thread, text: str) -> str:
     return json.dumps({"words": len(text.split())})
 
 
+@idx.refuses_unreadable
 def save_session(thread, slug: str, summary: str, keywords: str, body: str,
                  recently: list[str], up_next: list[str]) -> str:
     """Everything a save does that is not synthesis.
@@ -675,6 +794,7 @@ def save_session(thread, slug: str, summary: str, keywords: str, body: str,
         resolved[field] = got
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
+    idx.read(thread.dir, "sessions")
     session_id, _ = session.save(thread.dir, slug, summary, keywords, body)
     readme_mod.write_status(thread.dir, resolved["recently"], resolved["up_next"])
     readme_mod.touch_dates(thread.dir)
