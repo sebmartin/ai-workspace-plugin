@@ -1,9 +1,8 @@
 """Write operations on a schema 2 thread.
 
-Each one appends or moves a single line and then re-renders, so the README's
+Each one appends or moves a single entry and then re-renders, so the README's
 derived section always equals the projection of its index. The assistant
-supplies fields; this module owns the line format and id uniqueness, which is
-what keeps `^- <id>:` lookups reliable.
+supplies fields; this module owns id uniqueness.
 
 None of these carries a large payload, so none of them can be defeated by the
 model's per-response output cap.
@@ -49,8 +48,7 @@ _FILE_KINDS = {
 # thread's payload. This refuses rather than truncating: a slug cut short is
 # still an identifier, where a sentence cut short reads as whole and the reader
 # cannot tell. Refusing also reaches the only party that can fix it, since the
-# caller wrote the sentence and is still holding it. The same field is checked
-# against the line format, which is what a line break in it defeats.
+# caller wrote the sentence and is still holding it.
 MAX_DESCRIPTION = 200
 
 
@@ -203,10 +201,7 @@ def _index_one(thread, link: str, description: str = "",
         # boundary. Without it, re-indexing to correct a link would silently
         # erase the sentence.
         if description and takes_description and entry.description != description:
-            was, entry.description = entry.description, description
-            if (unreadable := idx.unrepresentable(entry)) is not None:
-                entry.description = was
-                return Indexed(""), Refusal("UNREPRESENTABLE", unreadable)
+            entry.description = description
             idx.write(thread.dir, kind, entries, retired)
         if when is None:
             return Indexed(entry.id), None
@@ -228,8 +223,6 @@ def _index_one(thread, link: str, description: str = "",
         entry_id, state, entry_id, f"./{relative}",
         description if takes_description else "",
     )
-    if (unreadable := idx.unrepresentable(entry)) is not None:
-        return Indexed(""), Refusal("UNREPRESENTABLE", unreadable)
     idx.add(thread.dir, kind, entry)
     return Indexed(entry_id), None
 
@@ -388,8 +381,6 @@ def add_todo(thread, title: str, link: str, state: str = "active",
 
     todo_id = _new_id(thread.dir, "todos", title)
     entry = idx.Entry(todo_id, state, title.strip(), link)
-    if (unreadable := idx.unrepresentable(entry)) is not None:
-        return json.dumps({"error": "UNREPRESENTABLE", "detail": unreadable})
     was = list(entries)
     entries.insert(at, entry)
     if state == todos_mod.STARTED:

@@ -209,42 +209,23 @@ class TestTodos:
         retire_todo(ws, "t", ids[0], "done")
         assert "T5" in (d / "README.md").read_text()
 
-    def test_a_title_that_cannot_be_read_back_is_refused(self, tmp_path):
-        """A `]` ends the title field, so the line written is one the index
-        cannot parse: it reported success and vanished on the next write."""
+    def test_a_title_with_a_bracket_round_trips(self, tmp_path):
         d = _thread(tmp_path)
-        ws = str(tmp_path)
-        out = _reply(add_todo(ws, "t", "Fix [bug] in parser", "./sessions/s.md"))
-        assert out["error"] == "UNREPRESENTABLE"
-        assert out["detail"] == "title cannot be read back from a line"
-        assert idx.read(d, "todos") == []
+        tid = _reply(add_todo(str(tmp_path), "t", "broken ] title", "./s.md"))["id"]
+        found = idx.find(idx.read(d, "todos"), tid)
+        assert found is not None and found.title == "broken ] title"
 
-    def test_a_link_that_cannot_be_read_back_is_refused(self, tmp_path):
-        """An ordinary Wikipedia URL ends the link field."""
+    def test_a_link_with_a_parenthesis_round_trips(self, tmp_path):
+        link = "https://en.wikipedia.org/wiki/Merge_(SQL)"
         d = _thread(tmp_path)
-        ws = str(tmp_path)
-        out = _reply(add_todo(ws, "t", "Read the spec", "https://en.wikipedia.org/wiki/Merge_(SQL)"))
-        assert out["error"] == "UNREPRESENTABLE"
-        assert out["detail"] == "link cannot be read back from a line"
-        assert idx.read(d, "todos") == []
+        add_todo(str(tmp_path), "t", "Read", link)
+        assert idx.read(d, "todos")[0].link == link
 
-    def test_a_newline_in_a_title_is_refused(self, tmp_path):
+    def test_a_title_with_a_line_break_is_stored_and_shown_on_one_line(self, tmp_path):
         d = _thread(tmp_path)
-        ws = str(tmp_path)
-        out = _reply(add_todo(ws, "t", "Two\nlines", "./s.md"))
-        assert out["error"] == "UNREPRESENTABLE"
-        assert idx.read(d, "todos") == []
-
-    def test_no_line_the_index_cannot_parse_is_ever_written(self, tmp_path):
-        """The invariant the refusal exists to keep: a refused write leaves no
-        line behind, so what is in the file is what reads back."""
-        d = _thread(tmp_path)
-        ws = str(tmp_path)
-        add_todo(ws, "t", "Fix [the] parser", "./sessions/s.md")
-        add_todo(ws, "t", "Fix (bug) in the parser", "./sessions/s.md")
-        written = [ln for ln in idx.index_path(d, "todos").read_text().splitlines() if ln]
-        assert len(written) == len(idx.read(d, "todos")) == 1
-        assert idx.read(d, "todos")[0].title == "Fix (bug) in the parser"
+        add_todo(str(tmp_path), "t", "one\ntwo", "./s.md")
+        assert idx.read(d, "todos")[0].title == "one\ntwo"
+        assert "[one two](./s.md)" in (d / "README.md").read_text()
 
     def test_only_one_todo_is_started_at_a_time(self, tmp_path):
         """Every description of the state is singular, and a list where
@@ -943,50 +924,20 @@ class TestArtifacts:
         index_file(ws, "t", link, "y" * 400)
         assert idx.read(d, "artifacts")[0].description == "A short one."
 
-    def test_an_unreadable_amendment_restores_the_description_it_replaced(self, tmp_path):
-        """A different branch from the one above. The cap is checked before the
-        entry is touched; this one mutates the live entry, tests it, and puts
-        the old value back, so the restore is the only thing standing between a
-        rejected amendment and an index line that cannot be read.
-        """
-        d = _thread(tmp_path)
-        ws = str(tmp_path)
-        link = self._artifact(d)
-        index_file(ws, "t", link, "A short one.")
-        before = idx.index_path(d, "artifacts").read_bytes()
-        out = _reply(index_file(ws, "t", link, "one\ntwo"))
-        assert out["error"] == "UNREPRESENTABLE" and "description" in out["detail"]
-        assert idx.read(d, "artifacts")[0].description == "A short one."
-        assert idx.index_path(d, "artifacts").read_bytes() == before
-
-
 class TestIndexDirectory:
-    def test_a_filename_an_index_line_cannot_hold_is_refused(self, tmp_path):
-        """For an indexed file the link comes from the filename, so the
-        realistic breaker is a name a screenshot tool produced. Every other
-        UNREPRESENTABLE test drives it from caller prose, which leaves the
-        guard on the filename path with no test naming it.
-        """
-        d = self._thread_with(tmp_path, "artifacts", ["20260101-fine.md"])
-        (d / "artifacts" / "20260101-Screenshot (1).md").write_text("x\n")
-        out = _reply(index_file(str(tmp_path), "t",
-                                "./artifacts/20260101-Screenshot (1).md", "A shot."))
-        assert out["error"] == "UNREPRESENTABLE" and "link" in out["detail"]
-        assert idx.read(d, "artifacts") == []
-
-    def test_the_sweep_skips_that_file_and_indexes_its_neighbour(self, tmp_path):
-        d = self._thread_with(tmp_path, "artifacts", ["20260101-fine.md"])
-        (d / "artifacts" / "20260101-Screenshot (1).md").write_text("x\n")
-        out = _reply(index_directory(str(tmp_path), "t", "./artifacts"))
-        assert [e.id for e in idx.read(d, "artifacts")] == ["20260101-fine"]
-        assert "20260101-Screenshot (1).md" in json.dumps(out)
-
     def _thread_with(self, tmp_path, kind, names):
         d = _thread(tmp_path, stubs=False)
         (d / kind).mkdir(parents=True, exist_ok=True)
         for n in names:
             (d / kind / n).write_text("---\nstate: locked\n---\nx\n")
         return d
+
+    def test_a_filename_with_a_parenthesis_is_indexed(self, tmp_path):
+        d = _thread(tmp_path, stubs=False)
+        (d / "artifacts").mkdir(parents=True, exist_ok=True)
+        (d / "artifacts" / "20260101-merge_(sql).md").write_text("x")
+        assert _reply(index_directory(str(tmp_path), "t", "./artifacts")) == {}
+        assert idx.read(d, "artifacts")[0].link == "./artifacts/20260101-merge_(sql).md"
 
     def test_indexes_a_whole_directory_in_one_call(self, tmp_path):
         """Sixty-six sessions was sixty-six round trips before this."""
@@ -1127,17 +1078,20 @@ class TestIndexDirectory:
 
 
 class TestRoundTrip:
-    """Nothing is written that the index cannot read back."""
+    """What goes into an index comes back out of it unchanged."""
 
-    def test_a_description_with_a_line_break_is_refused(self, tmp_path):
-        """The third field on the line, and the one that is free prose. It
-        truncated at the break and orphaned the rest."""
+    def test_a_description_with_a_separator_round_trips(self, tmp_path):
         d = _thread(tmp_path)
         (d / "artifacts" / "20260101-a-note.md").write_text("x")
-        out = _reply(index_file(str(tmp_path), "t", "./artifacts/20260101-a-note.md",
-                                "one\ntwo"))
-        assert out["error"] == "UNREPRESENTABLE" and "description" in out["detail"]
-        assert idx.read(d, "artifacts") == []
+        index_file(str(tmp_path), "t", "./artifacts/20260101-a-note.md", "one -- two")
+        assert idx.read(d, "artifacts")[0].description == "one -- two"
+
+    def test_a_description_with_a_line_break_is_stored(self, tmp_path):
+        d = _thread(tmp_path)
+        (d / "artifacts" / "20260101-a-note.md").write_text("x")
+        out = _reply(index_file(str(tmp_path), "t", "./artifacts/20260101-a-note.md", "one\ntwo"))
+        assert "error" not in out
+        assert idx.read(d, "artifacts")[0].description == "one\ntwo"
 
     def test_a_description_is_stored_without_its_padding(self, tmp_path):
         """Trailing space does not survive a line, and stripping it is right
@@ -1162,24 +1116,6 @@ class TestRoundTrip:
         save_session(str(tmp_path), "t", "my [topic]", "s", "k", body="# x\n",
                      recently=["x"], up_next=[])
         assert len(idx.read(d, "sessions")) == 1
-
-    def test_the_check_follows_the_line_format(self, tmp_path):
-        """Not a second list of characters to keep in step with the pattern:
-        the entry is rendered and read back through the pattern itself."""
-        entry = idx.Entry("20260101-a", "active", "Fine title", "./todos/a.md", "fine")
-        assert idx.unrepresentable(entry) is None
-        entry.description = "one -- two"
-        assert idx.unrepresentable(entry) is None
-        entry.title = "broken ] title"
-        assert idx.unrepresentable(entry) == "title cannot be read back from a line"
-
-    def test_a_field_that_comes_back_changed_counts_as_lost(self, tmp_path):
-        """The line still matches, so matching is not the test: the fields are
-        compared. Trailing space on the last field is eaten by the pattern's
-        own `\\s*$`, which is why the tools strip before they build an entry."""
-        entry = idx.Entry("20260101-a", "active", "T", "./todos/a.md", "padded  ")
-        assert idx.unrepresentable(entry) == "description cannot be read back from a line"
-
 
 class TestRenderedText:
     """User text also has to survive the render, not only the index line.
@@ -1232,7 +1168,7 @@ class TestReadmeShape:
         for i in range(10):
             add_todo(str(tmp_path), "t", f"P{i}", "./s.md", state="parked")
         from ai_workspace.threads.v2 import render
-        assert "1 more and 10 parked in [todos](./todos-index.md)." in render.todos_body(d)
+        assert "1 more and 10 parked in [todos](./todos-index.json)." in render.todos_body(d)
 
     def test_a_v1_readme_is_refused_rather_than_appended_to(self, tmp_path):
         """The Frankenstein case: a real migration hit this and was told it worked.
@@ -1654,10 +1590,10 @@ class TestStars:
 
     def test_star_a_current_artifact(self, tmp_path):
         d, ws, aid = self._starrable(tmp_path)
-        before = (d / "artifacts-index.md").read_bytes()
+        before = (d / "artifacts-index.json").read_bytes()
         assert _reply(star_artifact(ws, "t", aid, "the user asks about tone")) == {"id": aid}
         assert stars.read(d) == [stars.Star(aid, "the user asks about tone")]
-        assert (d / "artifacts-index.md").read_bytes() == before
+        assert (d / "artifacts-index.json").read_bytes() == before
 
     def test_restarring_replaces_the_trigger_in_place(self, tmp_path):
         d, ws, a = self._starrable(tmp_path)

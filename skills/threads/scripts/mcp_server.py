@@ -227,10 +227,7 @@ def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
     neither a `./` path under the thread nor an `http(s)` URL,
     `MISSING` for a `./` path with no file behind it, whose `detail` is the
     link: write the file first,
-    `NO_SUCH_ENTRY` naming an anchor that is not in the list,
-    and `UNREPRESENTABLE` when a field would not survive an index line, whose
-    `detail` names the field. Reword that field; a title cannot contain `]`, a
-    link cannot contain `)`, and nothing may contain a line break.
+    and `NO_SUCH_ENTRY` naming an anchor that is not in the list.
 
     Args:
         workspace_dir: The tracked workspace path from session context.
@@ -438,8 +435,6 @@ def index_directory(workspace_dir: str, thread_name: str, link: str) -> str:
       `detail` is what it declared, so replace that value. This is the file's
       fault, where `STATE_UNKNOWN` is the caller's.
     - `UNREADABLE` — the file could not be opened.
-    - `UNREPRESENTABLE` — the filename carries a character an index line cannot
-      hold, so the entry could not be read back. Rename the file.
 
     A bad request returns `{"error": CODE, "detail": ...}` and indexes nothing:
     `OUTSIDE_THREAD`, `NOT_INDEXABLE`, or `NO_SUCH_DIRECTORY` when the kind is
@@ -481,15 +476,14 @@ def index_file(workspace_dir: str, thread_name: str, link: str,
     codes as index_directory, plus `MISSING` when the link resolves to nothing,
     `METADATA` for a dotfile, which is never content,
     `DESCRIPTION_TOO_LONG`, whose `detail` is the limit in characters,
-    `UNREPRESENTABLE` when the link or the description would not survive an
-    index line, whose `detail` names the field, and `DATE_INVALID`.
+    and `DATE_INVALID`.
 
     Args:
         workspace_dir: The tracked workspace path from session context.
         thread_name: Name of the thread (kebab-case).
         link: Path relative to the thread, e.g. ./artifacts/20260813-notes-x.md.
         description: One sentence saying what an artifact contains, refused
-            beyond 200 characters or if it carries a line break. Artifacts
+            beyond 200 characters. Artifacts
             only; decisions and sessions carry a `summary:` in their own
             frontmatter. It is read on every resume.
         date: `YYYY-MM-DD`, when the file is from. Only read when the filename

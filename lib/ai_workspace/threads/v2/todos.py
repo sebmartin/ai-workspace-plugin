@@ -1,6 +1,6 @@
 """The todo list: which todos are next, and in what order.
 
-Order is the order of the lines in `todos-index.md`. Nothing names a subset, so
+Order is the order of the lines in `todos-index.json`. Nothing names a subset, so
 every active todo is a next step and no todo can be in the list but absent from
 the order.
 

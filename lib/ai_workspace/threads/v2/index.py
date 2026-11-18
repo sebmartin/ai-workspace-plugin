@@ -4,32 +4,47 @@ An index sits beside its directory rather than inside it, so a directory scan
 never picks up its own index and `decisions/*.md` keeps meaning exactly
 "decisions".
 
-Line format, written only here and never by hand:
+Each index is a JSON document, `{"entries": [...]}`, written only here and
+never by hand unless it no longer parses. An entry has named fields: `id`,
+`state`, `title`, `link`, `description`, `star`, `children` and `parent`. A
+field is written only when it is set, except that `children` is written
+whenever it is not None, so an empty list stays an empty list. Sessions carry
+no `state`.
 
-    - 20260723-prep-ladder:locked [Interview prep ladder](./decisions/20260723-prep-ladder.md)
-    - 20260316-notes:current [20260316-notes](./artifacts/20260316-notes.md) -- what it contains
+Keys this module does not know are kept, on entries, on their children and at
+the top of the document, and are written back unchanged. Every entry and every
+child sits on its own line, so a diff and a grep both see one entry at a time.
 
-`id:state`, a linked title, then an optional description. `^- <id>:` is an exact
-match because the colon terminates the id. Sessions carry a bare id with no
-state.
+A file that does not parse raises `UnreadableIndex`. It is never read as empty
+and never overwritten, because an empty index is valid and the next write
+would lose the record.
+
+The one-line `- id:state [title](link) -- description` form survives only as
+`Entry.render`, a display rendering that is never read back.
 
 A decision's or a session's `summary:` never appears here. It is already in the
 file, so a copy would drift the moment anyone edits it, which the log-decision
 command explicitly invites.
 
 That argument does not reach artifacts. They have no template, no required
-frontmatter, and can be a PDF or a directory, so the line is the only home a
+frontmatter, and can be a PDF or a directory, so the entry is the only home a
 description has and there is no second copy to drift from. Artifacts are the
 only kind that carries one.
 """
 
-import re
+import contextlib
+import json
+import os
+import tempfile
 from pathlib import Path
+
+FIX = ("Repair this file by hand so it parses, then retry. Do not delete or "
+       "recreate it: an empty index reads as valid and loses the record.")
 
 TYPES = ("sessions", "decisions", "artifacts", "todos")
 RETIRED_TYPES = ("decisions", "artifacts", "todos")
 
-# Kinds whose line order is a priority the user set rather than a chronology.
+# Kinds whose entry order is a priority the user set rather than a chronology.
 # Nothing may re-sort one, and the migration audit must not expect dates in it.
 # `add` is not involved: the tool that knows the order writes the whole list,
 # and the only index `add` touches for an ORDERED kind is the retired one,
@@ -49,89 +64,97 @@ RETIRED = {
     "sessions": (),
 }
 
-_LINE_RE = re.compile(
-    r"^- (?P<id>[^\s:]+)(?::(?P<state>[^\s]+))? "
-    r"\[(?P<title>[^\]]*)\]\((?P<link>[^)]*)\)"
-    r"(?: -- (?P<description>.*?))?\s*$"
-)
+
+class UnreadableIndex(Exception):
+    """An index file that does not parse or is not the shape described above."""
+
+    def __init__(self, file: str, detail: str) -> None:
+        super().__init__(f"{file}: {detail}")
+        self.file, self.detail = file, detail
+
+    def payload(self) -> dict:
+        return {"error": "UNREADABLE_INDEX", "file": self.file,
+                "detail": self.detail, "fix": FIX}
+
+
+_STRINGS = ("state", "description", "star", "parent")
+_KNOWN = frozenset(("id", "title", "link", "children", *_STRINGS))
+
+
+def _one_line(value: str) -> str:
+    return " ".join(value.splitlines())
 
 
 class Entry:
-    """One indexed thing. Both tails are optional, and per kind rather than per
-    entry: sessions never carry a state, only artifacts carry a description."""
+    """One indexed thing. Fields are optional per kind rather than per entry:
+    sessions never carry a state, only artifacts carry a description or a star,
+    only a todo carries children or a parent."""
 
-    __slots__ = ("description", "id", "link", "state", "title")
+    __slots__ = ("children", "description", "extra", "id", "link", "parent",
+                 "star", "state", "title")
 
     def __init__(self, id: str, state: str | None, title: str, link: str,
-                 description: str = ""):
+                 description: str = "", *, star: str | None = None,
+                 children: "list[Entry] | None" = None,
+                 parent: str | None = None,
+                 extra: dict | None = None) -> None:
         self.id, self.state, self.title, self.link = id, state, title, link
-        self.description = description
+        self.description, self.star = description, star
+        self.children, self.parent = children, parent
+        self.extra = {} if extra is None else extra
 
-    def render(self) -> str:
-        state = f":{self.state}" if self.state else ""
-        tail = f" -- {self.description}" if self.description else ""
-        return f"- {self.id}{state} [{self.title}]({self.link}){tail}"
+    def render(self, state: str | None = None) -> str:
+        """The display line. `state` shows in place of the stored one."""
+        shown = state or self.state
+        mark = f":{shown}" if shown else ""
+        tail = f" -- {_one_line(self.description)}" if self.description else ""
+        return (f"- {_one_line(self.id)}{mark} "
+                f"[{_one_line(self.title)}]({_one_line(self.link)}){tail}")
+
+    def _known(self) -> dict:
+        """The fields that are set, without `children` or unknown keys."""
+        out: dict = {"id": self.id}
+        for name in ("state", "title", "link", "description", "star", "parent"):
+            value = getattr(self, name)
+            if value is not None and value != "":
+                out[name] = value
+        return out
+
+    def to_json(self) -> dict:
+        out = self._known()
+        if self.children is not None:
+            out["children"] = [c.to_json() for c in self.children]
+        out.update(self.extra)
+        return out
+
+    @classmethod
+    def from_json(cls, obj: object) -> "Entry":
+        if not isinstance(obj, dict):
+            raise ValueError("not an object")
+        for name in ("id", "title", "link"):
+            if not isinstance(obj.get(name), str):
+                raise ValueError(f"{name} is missing or not a string")
+        for name in _STRINGS:
+            if name in obj and not isinstance(obj[name], str):
+                raise ValueError(f"{name} is not a string")
+        children = None
+        if "children" in obj:
+            raw = obj["children"]
+            if not isinstance(raw, list):
+                raise ValueError("children is not a list")
+            children = []
+            for n, child in enumerate(raw, 1):
+                try:
+                    children.append(cls.from_json(child))
+                except ValueError as err:
+                    raise ValueError(f"child {n}: {err}") from None
+        return cls(obj["id"], obj.get("state"), obj["title"], obj["link"],
+                   obj.get("description", ""), star=obj.get("star"),
+                   children=children, parent=obj.get("parent"),
+                   extra={k: v for k, v in obj.items() if k not in _KNOWN})
 
     def __repr__(self) -> str:
         return f"Entry({self.id!r}, {self.state!r}, {self.title!r})"
-
-
-def _parts(entry: Entry) -> dict[str, str]:
-    """The entry's fields by the name `_LINE_RE` gives each group."""
-    return {"id": entry.id, "state": entry.state or "", "title": entry.title,
-            "link": entry.link, "description": entry.description}
-
-
-def _with(entry: Entry, field: str, value: str) -> Entry:
-    parts = _parts(entry)
-    parts[field] = value
-    return Entry(**parts)
-
-
-def _round_trips(entry: Entry) -> bool:
-    """Whether reading this entry's own line back gives the entry again."""
-    hit = _LINE_RE.match(entry.render())
-    if hit is None:
-        return False
-    return all((hit[field] or "") == value for field, value in _parts(entry).items())
-
-
-def unrepresentable(entry: Entry) -> str | None:
-    r"""Which of this entry's fields would not survive a line, or None.
-
-    A field that ends its own delimiter writes a line `_LINE_RE` reads back
-    differently or not at all. A title carrying "]" and a link carrying ")"
-    lose the entry outright; a description carrying a line break truncates and
-    orphans the rest. `Merge_(SQL)` is an ordinary Wikipedia URL, so none of
-    this needs trying.
-
-    Rendered and read back rather than screened against a list of characters,
-    so the check cannot disagree with the pattern that does the reading: it is
-    that pattern. A field added to the line later is covered without anyone
-    remembering to extend a table.
-
-    The line-break test is separate because `read` splits the file into lines
-    before matching, so a break inside a field makes a line the pattern never
-    sees, and `[^\]]` matches a newline in any case.
-
-    Refused rather than escaped, for the reason an over-long description is:
-    the caller wrote the text and is still holding it, so it is the only party
-    that can fix it, and an escape scheme is a second parser to keep in
-    agreement with the first.
-    """
-    for field, value in _parts(entry).items():
-        if value and ("\n" in value or "\r" in value):
-            return f"{field} contains a line break"
-    if _round_trips(entry):
-        return None
-    # Name the field at fault by putting a value known to be safe in its place.
-    # The one whose replacement makes the line read back is the one that broke
-    # it, and asking the pattern is the only way to find out that cannot
-    # disagree with the pattern.
-    for field, value in _parts(entry).items():
-        if value and _round_trips(_with(entry, field, "x")):
-            return f"{field} cannot be read back from a line"
-    return "the line it makes cannot be read back"
 
 
 def external(link: str) -> bool:
@@ -165,35 +188,30 @@ def is_content(path: Path) -> bool:
 
 def index_path(thread_dir: Path, kind: str, retired: bool = False) -> Path:
     suffix = "retired" if retired else "index"
-    return thread_dir / f"{kind}-{suffix}.md"
+    return thread_dir / f"{kind}-{suffix}.json"
 
 
-# The ids a `windows:` frontmatter block names. Indexes written before a todo
-# list carried its own order open with one, naming the todos Next steps showed.
-# Matched with a pattern rather than read with a YAML parser because one real
-# block is indented with a tab, which no parser accepts, and because the block
-# is the only thing in it anything still wants.
-_LEGACY_WINDOW = re.compile(r"(?m)^\s*next_steps:\s*\[([^\]]*)\]")
-
-
-def _window_first(text: str, entries: list[Entry]) -> list[Entry]:
-    """Entries with the todos that block named first, in the order it gave.
-
-    That order is a priority the user set, so it becomes line order, which is
-    where this schema keeps priority. The next write makes it permanent and
-    the block goes. An id the block names that is no longer in the index was
-    retired in between, and is skipped.
-    """
-    found = _LEGACY_WINDOW.search(text)
-    if not found:
-        return entries
-    # Deduplicated first-seen: `set_window` validated that every id was known
-    # and never that they were distinct, so a stored block may name one twice.
-    named = list(dict.fromkeys(
-        i.strip() for i in found.group(1).split(",") if i.strip()))
-    by_id = {e.id: e for e in entries}
-    first = [by_id[i] for i in named if i in by_id]
-    return first + [e for e in entries if e.id not in set(named)]
+def _load(path: Path) -> tuple[dict, list[Entry]]:
+    """The whole document and its entries. A file that is not the shape this
+    module writes raises `UnreadableIndex`, naming the fault."""
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as err:
+        raise UnreadableIndex(path.name, str(err)) from None
+    except UnicodeDecodeError as err:
+        raise UnreadableIndex(path.name, f"not UTF-8 text: {err}") from None
+    if not isinstance(doc, dict):
+        raise UnreadableIndex(path.name, "the document is not an object")
+    raw = doc.get("entries")
+    if not isinstance(raw, list):
+        raise UnreadableIndex(path.name, 'the document has no "entries" list')
+    entries = []
+    for n, item in enumerate(raw, 1):
+        try:
+            entries.append(Entry.from_json(item))
+        except ValueError as err:
+            raise UnreadableIndex(path.name, f"entry {n}: {err}") from None
+    return doc, entries
 
 
 def read(thread_dir: Path, kind: str, retired: bool = False) -> list[Entry]:
@@ -201,36 +219,77 @@ def read(thread_dir: Path, kind: str, retired: bool = False) -> list[Entry]:
 
     Nothing pre-creates index files, so absence is normal rather than an error:
     they appear the first time something is written to them. That is only safe
-    because the shape marker is its own file — were absence of an index the
+    because the shape marker is its own file: were absence of an index the
     sentinel, tolerating a missing one would be indistinguishable from schema 1.
 
-    Lines are matched rather than parsed around, so anything that is not an
-    entry is skipped. The one thing read out of what is left is a `windows:`
-    block, whose order this schema keeps as line order instead.
+    A file that exists but does not parse raises `UnreadableIndex`, and that
+    includes an empty or whitespace-only one.
     """
     path = index_path(thread_dir, kind, retired)
     if not path.exists():
         return []
-    text = path.read_text()
-    entries = []
-    for line in text.splitlines():
-        hit = _LINE_RE.match(line)
-        if hit:
-            entries.append(Entry(hit["id"], hit["state"], hit["title"], hit["link"],
-                                 hit["description"] or ""))
-    # Only where one was ever written, and only where order means anything: a
-    # retired index is a chronology, so a block in one would be reordering a
-    # record of what happened.
-    if kind in ORDERED and not retired:
-        return _window_first(text, entries)
-    return entries
+    return _load(path)[1]
+
+
+def _dumps(value: object) -> str:
+    return json.dumps(value, ensure_ascii=False)
+
+
+def _lines(entry: Entry, depth: int) -> list[str]:
+    """The entry as lines, the last without a trailing comma. A goal spreads
+    over several so that each child has a line of its own."""
+    pad = "  " * depth
+    if not entry.children:
+        return [pad + _dumps(entry.to_json())]
+    out = [f'{pad}{_dumps(entry._known())[:-1]}, "children": [']
+    kids = [_lines(child, depth + 1) for child in entry.children]
+    for kid in kids[:-1]:
+        kid[-1] += ","
+    for kid in kids:
+        out.extend(kid)
+    extra = "".join(f", {_dumps(k)}: {_dumps(v)}" for k, v in entry.extra.items())
+    out.append(f"{pad}]{extra}}}")
+    return out
 
 
 def write(thread_dir: Path, kind: str, entries: list[Entry],
           retired: bool = False) -> Path:
+    """Write the whole list, atomically.
+
+    A file already there is parsed first, so one that does not parse is never
+    overwritten, and its other top-level keys are written back unchanged. The
+    new content goes to a temp file beside it and `os.replace` swaps it in, so
+    a reader sees the old file or the new one and a failure leaves the old.
+    """
     path = index_path(thread_dir, kind, retired)
-    lines = [e.render() for e in entries]
-    path.write_text("\n".join(lines) + ("\n" if lines else ""))
+    others: dict = {}
+    mode = 0o644
+    if path.exists():
+        doc, _ = _load(path)
+        others = {k: v for k, v in doc.items() if k != "entries"}
+        mode = path.stat().st_mode & 0o777
+    rows: list[str] = []
+    for i, e in enumerate(entries):
+        lines = _lines(e, 2)
+        if i < len(entries) - 1:
+            lines[-1] += ","
+        rows.extend(lines)
+    tail = "".join(f", {_dumps(k)}: {_dumps(v)}" for k, v in others.items())
+    if rows:
+        text = "\n".join(['{"entries": [', *rows, "  ]" + tail + "}"]) + "\n"
+    else:
+        text = '{"entries": []' + tail + "}\n"
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.",
+                               suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(text)
+        os.chmod(tmp, mode)
+        os.replace(tmp, path)
+    except BaseException:
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(tmp)
+        raise
     return path
 
 

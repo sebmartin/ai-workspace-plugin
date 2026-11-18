@@ -1,6 +1,7 @@
 """Schema 2 primitives: schema detection, indexes, rendering, sessions, dates."""
 
 import json
+import os
 import re
 import sys
 from datetime import date
@@ -285,16 +286,6 @@ class TestIndex:
         idx.add(d, "todos", idx.Entry("20260101-a", "active", "A", "./todos/a.md"))
         assert idx.index_path(d, "todos").exists()
 
-    def test_a_description_round_trips(self, tmp_path):
-        """Only artifacts carry one, and the line is its only home."""
-        d = _v2_thread(tmp_path)
-        idx.add(d, "artifacts", idx.Entry(
-            "20260316-notes", "current", "20260316-notes",
-            "./artifacts/20260316-notes.md", "What the auth flow does"))
-        line = idx.index_path(d, "artifacts").read_text().strip()
-        assert line.endswith(" -- What the auth flow does")
-        assert idx.read(d, "artifacts")[0].description == "What the auth flow does"
-
     def test_a_line_without_one_reads_as_no_description(self, tmp_path):
         d = _v2_thread(tmp_path)
         idx.add(d, "decisions", idx.Entry("20260101-a", "locked", "A", "./decisions/a.md"))
@@ -308,26 +299,167 @@ class TestIndex:
         assert [(e.id, e.state, e.title) for e in entries] == [
             ("20260101-a", "locked", "A"), ("20260102-b", "proposed", "B")]
 
-    def test_id_grep_is_exact_because_colon_terminates_it(self, tmp_path):
+    def test_the_file_is_json_with_named_fields(self, tmp_path):
         d = _v2_thread(tmp_path)
-        idx.add(d, "decisions", idx.Entry("20260101-prep", "locked", "P", "./decisions/p.md"))
-        idx.add(d, "decisions", idx.Entry("20260101-prep-ladder", "locked", "PL", "./decisions/pl.md"))
-        text = idx.index_path(d, "decisions").read_text()
-        assert text.count("- 20260101-prep:") == 1
+        idx.add(d, "artifacts", idx.Entry("20260316-notes", "current", "20260316-notes",
+                "./artifacts/20260316-notes.md", "What -- the auth flow does"))
+        p = idx.index_path(d, "artifacts")
+        assert p.name == "artifacts-index.json"
+        assert json.loads(p.read_text()) == {"entries": [{
+            "id": "20260316-notes", "state": "current", "title": "20260316-notes",
+            "link": "./artifacts/20260316-notes.md", "description": "What -- the auth flow does"}]}
 
-    def test_sessions_have_no_state(self, tmp_path):
+    def test_retired_files_are_json_too(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        assert idx.index_path(d, "todos", retired=True).name == "todos-retired.json"
+
+    def test_a_session_entry_has_no_state_key(self, tmp_path):
         d = _v2_thread(tmp_path)
         idx.add(d, "sessions", idx.Entry("20260101-s", None, "S", "./sessions/s.md"))
-        assert ":" not in idx.index_path(d, "sessions").read_text().split("[")[0]
-        entries = idx.read(d, "sessions")
-        assert entries[0].state is None
+        assert "state" not in json.loads(idx.index_path(d, "sessions").read_text())["entries"][0]
+        assert idx.read(d, "sessions")[0].state is None
+
+    @pytest.mark.parametrize("title, link, description", [
+        ("broken ] title", "./todos/a.md", ""),
+        ("T", "https://en.wikipedia.org/wiki/Merge_(SQL)", ""),
+        ("T", "./artifacts/a.md", "one -- two"),
+        ("line\nbreak", "./todos/a.md", "padded  "),
+    ])
+    def test_any_text_round_trips(self, tmp_path, title, link, description):
+        d = _v2_thread(tmp_path)
+        idx.write(d, "todos", [idx.Entry("20260101-a", "active", title, link, description)])
+        e = idx.read(d, "todos")[0]
+        assert (e.title, e.link, e.description) == (title, link, description)
+
+    def test_non_ascii_text_is_stored_as_written(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        path = idx.index_path(d, "todos")
+        idx.write(d, "todos", [idx.Entry("20260101-a", "active", "Réno 🛠", "./todos/a.md")])
+        assert "Réno 🛠" in path.read_text(encoding="utf-8")
+        assert idx.read(d, "todos")[0].title == "Réno 🛠"
+
+    def test_children_round_trip_and_an_empty_list_is_kept(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        path = idx.index_path(d, "todos")
+        child = idx.Entry("20260101-c", "started", "C", "./todos/c.md")
+        idx.write(d, "todos", [
+            idx.Entry("20260101-g", "active", "G", "./todos/g.md", children=[child]),
+            idx.Entry("20260101-e", "active", "E", "./todos/e.md", children=[])])
+        g, e = idx.read(d, "todos")
+        assert [(c.id, c.state) for c in g.children or []] == [("20260101-c", "started")]
+        assert e.children == []
+        assert json.loads(path.read_text())["entries"][1]["children"] == []
+
+    def test_star_and_parent_round_trip(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        idx.write(d, "artifacts", [idx.Entry("20260101-a", "current", "A", "./artifacts/a.md", star="the user asks")])
+        idx.write(d, "todos", [idx.Entry("20260101-c", "done", "C", "./todos/c.md", parent="20260101-g")], retired=True)
+        assert idx.read(d, "artifacts")[0].star == "the user asks"
+        assert idx.read(d, "todos", retired=True)[0].parent == "20260101-g"
+
+    def test_unknown_keys_survive_a_write(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        path = idx.index_path(d, "todos")
+        path.write_text(json.dumps({"meta": {"k": 1}, "entries": [
+            {"id": "20260101-g", "state": "active", "title": "G", "link": "./todos/g.md", "owner": "seb",
+             "children": [{"id": "20260101-c", "state": "active", "title": "C",
+                           "link": "./todos/c.md", "due": "2026-12-01"}]}]}))
+        idx.write(d, "todos", idx.read(d, "todos"))
+        doc = json.loads(path.read_text())
+        assert doc["meta"] == {"k": 1}
+        assert doc["entries"][0]["owner"] == "seb"
+        assert doc["entries"][0]["children"][0]["due"] == "2026-12-01"
+
+    def test_every_entry_and_child_sits_on_its_own_line(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        path = idx.index_path(d, "todos")
+        ids = ["20260101-g", "20260101-c1", "20260101-c2", "20260101-x"]
+        idx.write(d, "todos", [
+            idx.Entry(ids[0], "active", "G", "./g.md", children=[
+                idx.Entry(ids[1], "active", "C1", "./c1.md"), idx.Entry(ids[2], "active", "C2", "./c2.md")]),
+            idx.Entry(ids[3], "active", "X", "./x.md")])
+        lines = path.read_text().splitlines()
+        for i in ids:
+            assert sum(f'"{i}"' in line for line in lines) == 1
+        assert all(sum(f'"{i}"' in line for i in ids) <= 1 for line in lines)
+
+    def test_a_file_that_does_not_parse_raises_with_its_position(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        path = idx.index_path(d, "todos")
+        path.write_text('{"entries": [\n  {"id": "x",}\n]}\n')
+        with pytest.raises(idx.UnreadableIndex) as e:
+            idx.read(d, "todos")
+        assert e.value.file == "todos-index.json"
+        assert "line 2" in e.value.detail and "column" in e.value.detail
+        assert e.value.payload()["error"] == "UNREADABLE_INDEX"
+
+    @pytest.mark.parametrize("text", ["", "  \n"])
+    def test_an_empty_file_is_unreadable_not_empty(self, tmp_path, text):
+        d = _v2_thread(tmp_path)
+        idx.index_path(d, "todos").write_text(text)
+        with pytest.raises(idx.UnreadableIndex):
+            idx.read(d, "todos")
+
+    @pytest.mark.parametrize("text", [
+        "[]", '{"entries": null}', '{"entries": ["x"]}',
+        '{"entries": [{"title": "T", "link": "./x.md"}]}',
+        '{"entries": [{"id": "a", "title": "T", "link": "./x.md", "children": {}}]}'])
+    def test_a_document_of_the_wrong_shape_is_unreadable(self, tmp_path, text):
+        d = _v2_thread(tmp_path)
+        idx.index_path(d, "todos").write_text(text)
+        with pytest.raises(idx.UnreadableIndex) as e:
+            idx.read(d, "todos")
+        assert e.value.detail
+
+    def test_a_write_never_overwrites_a_file_that_does_not_parse(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        path = idx.index_path(d, "todos")
+        path.write_text("{broken")
+        with pytest.raises(idx.UnreadableIndex):
+            idx.write(d, "todos", [])
+        assert path.read_text() == "{broken"
+
+    def test_writes_are_atomic(self, tmp_path, monkeypatch):
+        d = _v2_thread(tmp_path)
+        path = idx.index_path(d, "todos")
+        calls, real = [], os.replace
+        monkeypatch.setattr(idx.os, "replace", lambda s, t: (calls.append((Path(s), Path(t))), real(s, t))[1])
+        idx.write(d, "todos", [])
+        [(src, dst)] = calls
+        assert dst == path and src.parent == dst.parent and src != dst
+
+    def test_a_failed_write_leaves_the_old_file_and_no_temp(self, tmp_path, monkeypatch):
+        d = _v2_thread(tmp_path)
+        path = idx.index_path(d, "todos")
+        idx.write(d, "todos", [idx.Entry("20260101-a", "active", "A", "./a.md")])
+        before, names = path.read_bytes(), set(os.listdir(d))
+
+        def boom(*_):
+            raise OSError("disk full")
+        monkeypatch.setattr(idx.os, "replace", boom)
+        with pytest.raises(OSError):
+            idx.write(d, "todos", [])
+        assert path.read_bytes() == before and set(os.listdir(d)) == names
+
+    def test_render_collapses_line_breaks(self):
+        e = idx.Entry("20260101-a", "active", "one\ntwo", "./a.md", "x\r\ny")
+        assert e.render() == "- 20260101-a:active [one two](./a.md) -- x y"
+
+    def test_render_can_show_another_state(self):
+        e = idx.Entry("20260101-g", "active", "G", "./g.md")
+        assert e.render(state="started") == "- 20260101-g:started [G](./g.md)"
+
+    def test_the_line_format_is_gone(self):
+        assert not hasattr(idx, "unrepresentable") and not hasattr(idx, "_LINE_RE")
 
     def test_a_newer_entry_goes_on_the_end(self, tmp_path):
         d = _v2_thread(tmp_path)
         idx.add(d, "decisions", idx.Entry("20260101-a", "locked", "A", "./decisions/a.md"))
-        first = idx.index_path(d, "decisions").read_text()
+        first = idx.index_path(d, "decisions").read_text().splitlines()[1]
         idx.add(d, "decisions", idx.Entry("20260102-b", "locked", "B", "./decisions/b.md"))
-        assert idx.index_path(d, "decisions").read_text().startswith(first)
+        lines = idx.index_path(d, "decisions").read_text().splitlines()
+        assert lines[1].rstrip(",") == first.rstrip(",")
+        assert '"20260102-b"' in lines[2]
 
     def test_a_retired_todo_goes_where_its_date_puts_it(self, tmp_path):
         """The live list is written whole, by the tool that knows the order.
@@ -348,87 +480,6 @@ class TestIndex:
         entries = idx.read(d, "sessions")
         assert [e.id for e in entries] == [
             "20260103-s", "20260104-late", "20260105-s"]
-
-    def test_a_legacy_window_becomes_the_order_it_stood_for(self, tmp_path):
-        """Indexes written before the list carried its own order open with a
-        `windows:` block naming the todos Next steps showed. That is a priority
-        the user set, so it survives as line order rather than being dropped."""
-        d = _v2_thread(tmp_path)
-        _todos(d, ("a", "active"), ("b", "active"), ("c", "active"))
-        path = idx.index_path(d, "todos")
-        path.write_text(
-            "---\nwindows:\n  next_steps: [20260101-c, 20260101-a]\n---\n"
-            + path.read_text())
-        assert [e.id for e in idx.read(d, "todos")] == [
-            "20260101-c", "20260101-a", "20260101-b"]
-
-    def test_a_legacy_window_naming_one_id_twice_yields_one_entry(self, tmp_path):
-        """`set_window` checked that every id was known and never that they
-        were distinct, so a stored block can name one twice. Read as written
-        that put the same entry in the list twice, and because an index is
-        rendered whole rather than edited, the next write made the duplicate
-        permanent and retiring one left the other."""
-        d = _v2_thread(tmp_path)
-        _todos(d, ("a", "active"), ("b", "active"))
-        path = idx.index_path(d, "todos")
-        path.write_text(
-            "---\nwindows:\n  next_steps: [20260101-b, 20260101-b, 20260101-a]\n---\n"
-            + path.read_text())
-        assert [e.id for e in idx.read(d, "todos")] == ["20260101-b", "20260101-a"]
-
-    def test_a_legacy_window_survives_a_tab_no_parser_accepts(self, tmp_path):
-        """One real thread's block is indented with a tab, which is why this is
-        read with a pattern rather than a YAML parser."""
-        d = _v2_thread(tmp_path)
-        _todos(d, ("a", "active"), ("b", "active"))
-        path = idx.index_path(d, "todos")
-        path.write_text("---\nwindows:\n\tnext_steps: [20260101-b]\n---\n"
-                        + path.read_text())
-        assert [e.id for e in idx.read(d, "todos")] == ["20260101-b", "20260101-a"]
-
-    def test_the_next_write_leaves_the_block_behind(self, tmp_path):
-        d = _v2_thread(tmp_path)
-        _todos(d, ("a", "active"))
-        path = idx.index_path(d, "todos")
-        path.write_text("---\nwindows:\n  next_steps: [20260101-a]\n---\n"
-                        + path.read_text())
-        idx.write(d, "todos", idx.read(d, "todos"))
-        assert "windows" not in path.read_text()
-
-    def test_only_a_live_todo_index_is_reordered_by_a_block(self, tmp_path):
-        """Nothing ever wrote one anywhere else, and a retired index is a
-        chronology, so reordering it would be wrong wherever it came from."""
-        d = _v2_thread(tmp_path)
-        idx.write(d, "todos", [
-            idx.Entry("20260101-a", "done", "A", "./todos/a.md"),
-            idx.Entry("20260102-b", "done", "B", "./todos/b.md"),
-        ], retired=True)
-        path = idx.index_path(d, "todos", retired=True)
-        path.write_text("---\nwindows:\n  next_steps: [20260102-b]\n---\n"
-                        + path.read_text())
-        assert [e.id for e in idx.read(d, "todos", retired=True)] == [
-            "20260101-a", "20260102-b"]
-
-    def test_only_an_ordered_kind_is_reordered_by_a_block(self, tmp_path):
-        d = _v2_thread(tmp_path)
-        idx.write(d, "decisions", [
-            idx.Entry("20260101-a", "locked", "A", "./decisions/a.md"),
-            idx.Entry("20260102-b", "locked", "B", "./decisions/b.md"),
-        ])
-        path = idx.index_path(d, "decisions")
-        path.write_text("---\nwindows:\n  next_steps: [20260102-b]\n---\n"
-                        + path.read_text())
-        assert [e.id for e in idx.read(d, "decisions")] == [
-            "20260101-a", "20260102-b"]
-
-    def test_a_window_naming_a_todo_that_is_gone_is_skipped(self, tmp_path):
-        d = _v2_thread(tmp_path)
-        _todos(d, ("a", "active"))
-        path = idx.index_path(d, "todos")
-        path.write_text(
-            "---\nwindows:\n  next_steps: [20260101-retired, 20260101-a]\n---\n"
-            + path.read_text())
-        assert [e.id for e in idx.read(d, "todos")] == ["20260101-a"]
 
     def test_retire_moves_the_line_and_sets_state(self, tmp_path):
         d = _v2_thread(tmp_path)
@@ -532,7 +583,7 @@ class TestRender:
         render.render(d)
         body = (d / "README.md").read_text()
         assert "- None" in body
-        assert "7 parked in [todos](./todos-index.md)." in body
+        assert "7 parked in [todos](./todos-index.json)." in body
 
     def test_nothing_is_said_when_everything_is_shown(self, tmp_path):
         d = _v2_thread(tmp_path)
@@ -569,7 +620,9 @@ class TestRender:
         d = _v2_thread(tmp_path)
         render.render(d)
         render.render(d)
-        assert (d / "README.md").read_text().count("**Indexes**:") == 1
+        text = (d / "README.md").read_text()
+        assert text.count("**Indexes**:") == 1
+        assert "(./todos-index.json)" in text and "-index.md" not in text
 
 
 class TestSessionFile:

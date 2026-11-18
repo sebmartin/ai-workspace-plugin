@@ -53,9 +53,9 @@ def _find(text: str) -> tuple[re.Pattern[str] | None, str | None]:
 def _links_line(thread_dir: Path) -> str:
     parts = []
     for kind in idx.TYPES:
-        entry = f"[{kind}](./{kind}-index.md)"
+        entry = f"[{kind}](./{kind}-index.json)"
         if kind in idx.RETIRED_TYPES:
-            entry += f" ([retired](./{kind}-retired.md))"
+            entry += f" ([retired](./{kind}-retired.json))"
         parts.append(entry)
     return "**Indexes**: " + " · ".join(parts)
 
@@ -80,7 +80,7 @@ def todos_body(thread_dir: Path) -> str:
     if parked := len(todos_mod.parked(entries)):
         notes.append(f"{parked} parked")
     if notes:
-        lines.append(f"\n{' and '.join(notes)} in [todos](./todos-index.md).")
+        lines.append(f"\n{' and '.join(notes)} in [todos](./todos-index.json).")
     return "\n".join(lines) + "\n"
 
 
