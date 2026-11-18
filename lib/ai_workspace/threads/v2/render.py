@@ -68,16 +68,15 @@ def todos_body(thread_dir: Path) -> str:
     worse for the person reading it than one that points at the index.
     """
     entries = idx.read(thread_dir, "todos")
-    active = todos_mod.next_up(entries)
-    shown = todos_mod.window(entries)
-    lines = [e.render() for e in shown] or ["- None"]
+    shown = todos_mod.shown_lines(entries)
+    lines = shown or ["- None"]
     # Both, when both are true. Either one alone leaves the other hidden in
     # silence, and with nothing active `- None` on its own reads as a thread
     # with nothing left to do, where everything was set aside on purpose.
     notes = []
-    if hidden := len(active) - len(shown):
+    if hidden := todos_mod.active_count(entries) - len(shown):
         notes.append(f"{hidden} more")
-    if parked := len(todos_mod.parked(entries)):
+    if parked := todos_mod.parked_count(entries):
         notes.append(f"{parked} parked")
     if notes:
         lines.append(f"\n{' and '.join(notes)} in [todos](./todos-index.json).")

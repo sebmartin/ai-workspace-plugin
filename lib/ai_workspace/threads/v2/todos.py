@@ -58,20 +58,81 @@ def next_up(entries: list[Entry]) -> list[Entry]:
     return [e for e in entries if e.state != PARKED]
 
 
-def parked(entries: list[Entry]) -> list[Entry]:
-    return [e for e in entries if e.state == PARKED]
+def shown_state(entry: Entry) -> str | None:
+    """The state to show for a todo. A goal whose own state is active shows
+    started when a child is, so work under it is visible from the top level
+    without storing a second copy of the fact."""
+    if entry.state == ACTIVE and any(c.state == STARTED for c in entry.children or []):
+        return STARTED
+    return entry.state
+
+
+def lines(entry: Entry) -> list[str]:
+    """A todo's display lines: itself, then each child that is not parked,
+    indented. A parked child is listed under Parked instead."""
+    out = [entry.render(shown_state(entry))]
+    out.extend("  " + c.render() for c in entry.children or [] if c.state != PARKED)
+    return out
 
 
 def window(entries: list[Entry]) -> list[Entry]:
     """What the Todos section shows: the top of the list, bounded.
 
-    A slice rather than a stored subset. There is nothing to drift from the
-    list it is drawn from, nothing to refill when a todo is retired, since the
-    sixth moves up by itself, and the README keeps its size as the thread runs
-    for months. Changing what is shown is changing the order, which is one
-    gesture rather than two.
+    Whole goals are taken in order until `COMFORTABLE` lines or more are out,
+    so a goal is never split and one larger than the window shows in full. A
+    slice rather than a stored subset: nothing drifts from the list it is drawn
+    from, nothing refills when a todo is retired, and the README keeps its size
+    as the thread runs for months. Changing what is shown is changing the
+    order, which is one gesture rather than two.
     """
-    return next_up(entries)[:COMFORTABLE]
+    out: list[Entry] = []
+    count = 0
+    for entry in next_up(entries):
+        if count >= COMFORTABLE:
+            break
+        out.append(entry)
+        count += len(lines(entry))
+    return out
+
+
+def shown_lines(entries: list[Entry]) -> list[str]:
+    return [line for entry in window(entries) for line in lines(entry)]
+
+
+def active_count(entries: list[Entry]) -> int:
+    """Every todo that is not parked, children included. The children of a
+    parked goal are parked with it."""
+    total = 0
+    for e in entries:
+        if e.state != PARKED:
+            total += 1 + sum(1 for c in e.children or [] if c.state != PARKED)
+    return total
+
+
+def parked_count(entries: list[Entry]) -> int:
+    """Every todo that is parked, or whose goal is."""
+    total = 0
+    for e in entries:
+        if e.state == PARKED:
+            total += 1 + len(e.children or [])
+        else:
+            total += sum(1 for c in e.children or [] if c.state == PARKED)
+    return total
+
+
+def parked_lines(entries: list[Entry]) -> list[str]:
+    """The Parked section, in file order. A parked goal is listed whole. A
+    parked child of a goal that is not parked names its goal, since nothing
+    above it says whose it is."""
+    out: list[str] = []
+    for e in entries:
+        if e.state == PARKED:
+            out.append(e.render())
+            out.extend("  " + c.render() for c in e.children or [])
+        else:
+            goal = " ".join(e.title.split())
+            out.extend(f"{c.render()} ({goal})" for c in e.children or [] if c.state == PARKED)
+    return out
 
 
 def crowded(entries: list[Entry]) -> int:
@@ -79,7 +140,7 @@ def crowded(entries: list[Entry]) -> int:
 
     Presence is the signal, so a comfortable list costs its caller nothing.
     """
-    waiting = len(next_up(entries))
+    waiting = active_count(entries)
     return waiting if waiting > COMFORTABLE else 0
 
 

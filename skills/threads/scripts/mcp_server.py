@@ -50,8 +50,11 @@ def resume_thread(workspace_dir: str, thread_name: str) -> str:
     `memory.md` in full if there is one (a line on its size follows it when it
     has grown large), then starred artifacts in artifact index order, each with
     its description and when to read it, then the header, About, Status, the
-    Todos window (top five of the todo list in priority order, its heading
-    counting shown, active and parked), any parked todos, every in-force
+    Todos window (goals shown whole with their children indented, taken in
+    priority order until at least five lines are out, so a goal is never split;
+    a goal shows started when a child is; the heading counts lines shown, active
+    and parked todos, and the counts include children), any parked todos
+    (a parked child of a goal that is not parked names its goal), every in-force
     decision with its `summary:`, the artifacts index (starred artifacts are left
     out of it), and the recent sessions:
     the full log of the newest ones, as many as fit a fixed allowance and

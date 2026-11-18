@@ -170,17 +170,17 @@ def compose(thread_dir: Path, thread_name: str) -> str:
     out.append("\n## Status\n\n" + (status or "(empty)"))
 
     todos = idx.read(thread_dir, "todos")
-    active, parked = todos_mod.next_up(todos), todos_mod.parked(todos)
-    shown = todos_mod.window(todos)
+    shown = todos_mod.shown_lines(todos)
+    parked = todos_mod.parked_lines(todos)
     # Every count, because the section is bounded and each number answers a
     # different question: what is on screen, how much is waiting behind it, and
     # how much was set aside. Without the last two an empty list cannot be told
     # from a thread that is finished with.
     out.append(
-        f"\n## Todos ({len(shown)} of {len(active)} active, "
-        f"{len(parked)} parked)\n"
+        f"\n## Todos ({len(shown)} of {todos_mod.active_count(todos)} active, "
+        f"{todos_mod.parked_count(todos)} parked)\n"
     )
-    out.extend(e.render() for e in shown)
+    out.extend(shown)
     if not shown:
         out.append("- None")
 
@@ -189,7 +189,7 @@ def compose(thread_dir: Path, thread_name: str) -> str:
     # already said are not next.
     if parked:
         out.append("\n## Parked\n")
-        out.extend(e.render() for e in parked)
+        out.extend(parked)
 
     decisions = idx.read(thread_dir, "decisions")
     out.append(f"\n## Decisions in force ({len(decisions)})\n")

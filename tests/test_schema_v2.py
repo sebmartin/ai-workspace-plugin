@@ -1049,3 +1049,65 @@ class TestNesting:
         d = _v2_thread(tmp_path)
         idx.write(d, "todos", [_e("g", children=[_e("c")])])
         assert "20260101-c" in idx.taken_ids(d, "todos")
+
+
+class TestNestedDisplay:
+    def test_children_are_indented_under_their_goal(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        idx.write(d, "todos", [_e("g", children=[_e("c1"), _e("c2")]), _e("x")])
+        block = ("- 20260101-g:active [G](./todos/g.md)\n"
+                 "  - 20260101-c1:active [C1](./todos/c1.md)\n"
+                 "  - 20260101-c2:active [C2](./todos/c2.md)\n"
+                 "- 20260101-x:active [X](./todos/x.md)\n")
+        assert render.todos_body(d).startswith(block)
+        assert block in v2.compose(d, "t")
+
+    def test_a_goal_shows_started_when_a_child_is(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        idx.write(d, "todos", [_e("g", children=[_e("c", "started")])])
+        assert "- 20260101-g:started [G](./todos/g.md)" in render.todos_body(d)
+        assert idx.read(d, "todos")[0].state == "active"
+
+    def test_the_window_never_splits_a_goal(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        idx.write(d, "todos", [_e("a"), _e("b"), _e("c"),
+                               _e("g", children=[_e("g1"), _e("g2"), _e("g3")]), _e("z")])
+        out = v2.compose(d, "t")
+        assert "20260101-g3" in out.split("## Decisions")[0].split("## Todos")[1]
+        assert "20260101-z" not in out
+        assert "## Todos (7 of 8 active, 0 parked)" in out
+
+    def test_a_goal_larger_than_the_window_shows_whole(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        idx.write(d, "todos", [_e("g", children=[_e(f"c{n}") for n in range(8)]), _e("z")])
+        body = render.todos_body(d)
+        assert all(f"20260101-c{n}" in body for n in range(8))
+        assert "20260101-z" not in body and "1 more" in body
+
+    def test_the_window_stops_once_five_lines_are_out(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        idx.write(d, "todos", [_e("g", children=[_e(f"c{n}") for n in range(4)]), _e("z")])
+        assert "20260101-z" not in render.todos_body(d)
+
+    def test_counts_include_children(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        idx.write(d, "todos", [_e("g", children=[_e("c1"), _e("c2", "parked")]), _e("p", "parked")])
+        assert "## Todos (2 of 2 active, 2 parked)" in v2.compose(d, "t")
+
+    def test_a_parked_child_of_an_active_goal_is_listed_under_parked_with_its_goal(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        idx.write(d, "todos", [_e("g", children=[_e("c1"), _e("c2", "parked")])])
+        out = v2.compose(d, "t")
+        assert "## Parked\n\n- 20260101-c2:parked [C2](./todos/c2.md) (G)" in out
+        assert "  - 20260101-c2" not in out
+
+    def test_a_parked_goal_is_listed_whole_under_parked(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        idx.write(d, "todos", [_e("g", "parked", children=[_e("c", "parked")])])
+        assert ("## Parked\n\n- 20260101-g:parked [G](./todos/g.md)\n"
+                "  - 20260101-c:parked [C](./todos/c.md)") in v2.compose(d, "t")
+
+    def test_an_empty_goal_shows_as_a_plain_line(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        idx.write(d, "todos", [_e("g", children=[])])
+        assert render.todos_body(d).startswith("- 20260101-g:active [G](./todos/g.md)\n")
