@@ -245,9 +245,11 @@ def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
             is not mounted at the same place on every machine that resumes the
             thread, so an absolute path, a `~` and a bare relative path all
             resolve to nothing on the next one.
-        state: `active`, `started` once work on it has begun, which puts
-            it at the top and leaves any other started todo as it is, or
-            `parked` for deliberately not now.
+        state: `active`, `started` once work on it has begun, which matters
+            more than todos not yet started and puts it at the top. It stays
+            until the todo is retired, parked or set back to `active` by hand,
+            and leaves any other started todo as it is. `parked` is for
+            deliberately not now.
         place: Where it goes. `top` for something to do next, such as a piece
             of the task in hand. `before:<todo id>` or `after:<todo id>` for
             something that belongs beside a particular todo. `end`, or leave it
