@@ -101,7 +101,7 @@ description is the only thing not read off the file and has no other home. Run
 subdirectory is one artifact either way.
 
 **Shorten those descriptions to one sentence as you carry them.** A v1 README
-holds them in a list nobody loads on resume; a schema 2 index line is read
+holds them in a list nobody loads on resume; a schema 2 index entry is read
 every single time. One migration carried sixteen across at an average of 255
 characters and they became 30% of the thread's resume. Say what the artifact
 is, not what is in it. Anything past 200 characters is refused, so rewrite it
@@ -137,7 +137,7 @@ filesystem timestamp, which records when bytes moved rather than when something
 was written.
 
 **Do not rename any file.** The id is derived; the file keeps its name and the
-index line links to it. Renaming would break links from session logs into
+index entry links to it. Renaming would break links from session logs into
 decisions, from decision bodies into artifacts, from the README and from other
 threads, none of which anything rewrites and none of which error when dangling.
 
@@ -211,7 +211,7 @@ loaded before you can act?
 
 | | you have to be holding it | you have to know when to read it | you only have to know it exists |
 |---|---|---|---|
-| **for you** | `memory.md` | a starred artifact (`star_artifact`) | a decision or an artifact: its index line loads, its body does not |
+| **for you** | `memory.md` | a starred artifact (`star_artifact`) | a decision or an artifact: its index entry loads, its body does not |
 | **for the user** | Status, About and the Todos section | a starred artifact | a session log, an artifact |
 
 The middle column is the default for a long custom section that matters but does
