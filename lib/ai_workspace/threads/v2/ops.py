@@ -542,7 +542,7 @@ def set_parent(thread, todo_ids: list[str], parent: str | None) -> str:
     a fixed order so the same mistake always gets the same code.
     """
     if not todo_ids:
-        return json.dumps({"error": "IDS_REQUIRED"})
+        return json.dumps({"error": "IDS_REQUIRED", "detail": "todo_ids is empty"})
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
     entries = idx.read(thread.dir, "todos")
