@@ -197,7 +197,8 @@ def list_archived_threads(workspace_dir: str) -> str:
 
 @mcp.tool()
 def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
-             state: str = "active", place: str = "") -> str:
+             state: str = "active", place: str = "",
+             parent: str | None = None) -> str:
     """Add a todo to the thread's Todos list.
 
     Every todo is read on every resume and commits the user to something, so
@@ -232,7 +233,9 @@ def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
     neither a `./` path under the thread nor an `http(s)` URL,
     `MISSING` for a `./` path with no file behind it, whose `detail` is the
     link: write the file first,
-    and `NO_SUCH_ENTRY` naming an anchor that is not in the list.
+    `NO_SUCH_ENTRY` naming an anchor that is not in the list, or a `parent`
+    that is not a todo, and `PARENT_IS_CHILD` when `parent` is itself a child,
+    since a goal holds one level of children.
 
     Args:
         workspace_dir: The tracked workspace path from session context.
@@ -255,9 +258,15 @@ def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
             something that belongs beside a particular todo. `end`, or leave it
             out, for everything else. `top` and `end` are read off the list as
             it is now, so they are right even if you have not looked at it,
-            where an id you believe is first may have been overtaken.
+            where an id you believe is first may have been overtaken. With
+            `parent`, it resolves within that goal's children, so an anchor
+            must be one of them.
+        parent: The id of a top-level todo to put this one under. It becomes
+            a goal if it was a plain todo. Leave it out for a top-level todo,
+            which is the usual case. A started child also moves its goal to
+            the top of the list. A parked goal is allowed.
     """
-    return _threads.add_todo(workspace_dir, thread_name, title, link, state, place)
+    return _threads.add_todo(workspace_dir, thread_name, title, link, state, place, parent)
 
 
 @mcp.tool()

@@ -1822,3 +1822,91 @@ class TestUnreadableIndex:
         (d / "todos-index.json").write_text('{"entries": null}')
         r = _reply(add_todo(str(tmp_path), "t", "A", "./s.md"))
         assert r["error"] == "UNREADABLE_INDEX"
+
+
+class TestNesting:
+    def _setup(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+
+        def add(title, **kw):
+            return _reply(add_todo(ws, "t", title, "./s.md", **kw))["id"]
+
+        return d, ws, add
+
+    def test_adding_under_a_plain_todo_makes_it_a_goal(self, tmp_path):
+        d, _ws, add = self._setup(tmp_path)
+        a = add("A")
+        c = add("C", parent=a)
+        top = idx.read(d, "todos")
+        assert [e.id for e in top] == [a] and [x.id for x in top[0].children or []] == [c]
+
+    def test_a_child_goes_last_among_its_siblings_by_default(self, tmp_path):
+        d, _ws, add = self._setup(tmp_path)
+        a = add("A")
+        c1 = add("C1", parent=a)
+        c2 = add("C2", parent=a)
+        assert [x.id for x in idx.read(d, "todos")[0].children or []] == [c1, c2]
+
+    def test_place_resolves_within_the_goal_s_children(self, tmp_path):
+        d, _ws, add = self._setup(tmp_path)
+        a = add("A")
+        c1 = add("C1", parent=a)
+        c2 = add("C2", parent=a)
+        c3 = add("C3", parent=a, place="top")
+        c4 = add("C4", parent=a, place=f"after:{c1}")
+        assert [x.id for x in idx.read(d, "todos")[0].children or []] == [c3, c1, c4, c2]
+
+    def test_a_top_level_anchor_is_not_in_a_goal_s_list(self, tmp_path):
+        _d, ws, add = self._setup(tmp_path)
+        x = add("X")
+        a = add("A")
+        out = _reply(add_todo(ws, "t", "C", "./s.md", parent=a, place=f"before:{x}"))
+        assert out == {"error": "NO_SUCH_ENTRY", "detail": x}
+
+    def test_a_started_child_sends_its_goal_to_the_top(self, tmp_path):
+        d, _ws, add = self._setup(tmp_path)
+        x = add("X")
+        a = add("A")
+        assert [e.id for e in idx.read(d, "todos")] == [x, a]
+        c1 = add("C1", parent=a)
+        c2 = add("C2", parent=a, state="started")
+        top = idx.read(d, "todos")
+        assert [e.id for e in top] == [a, x]
+        assert [e.id for e in top[0].children or []] == [c2, c1]
+
+    def test_a_started_child_with_a_place_still_sends_its_goal_to_the_top(self, tmp_path):
+        d, _ws, add = self._setup(tmp_path)
+        x = add("X")
+        a = add("A")
+        c1 = add("C1", parent=a)
+        c2 = add("C2", parent=a, state="started", place="end")
+        top = idx.read(d, "todos")
+        assert [e.id for e in top] == [a, x]
+        assert [e.id for e in top[0].children or []] == [c1, c2]
+
+    def test_a_started_child_brings_a_parked_goal_back(self, tmp_path):
+        d, _ws, add = self._setup(tmp_path)
+        a = add("A", state="parked")
+        add("C", parent=a, state="started")
+        assert idx.read(d, "todos")[0].state == "active"
+
+    def test_an_unknown_parent_is_refused_and_writes_nothing(self, tmp_path):
+        d, ws, add = self._setup(tmp_path)
+        add("A")
+        before = _snapshot(d)
+        out = _reply(add_todo(ws, "t", "C", "./s.md", parent="20260101-nope"))
+        assert out == {"error": "NO_SUCH_ENTRY", "detail": "20260101-nope"}
+        assert _snapshot(d) == before
+
+    def test_a_child_cannot_be_a_parent(self, tmp_path):
+        d, ws, add = self._setup(tmp_path)
+        a = add("A")
+        c = add("C", parent=a)
+        before = _snapshot(d)
+        out = _reply(add_todo(ws, "t", "G", "./s.md", parent=c))
+        assert out == {"error": "PARENT_IS_CHILD", "detail": c}
+        assert _snapshot(d) == before
+
+    def test_parent_is_optional_on_add_todo(self):
+        assert inspect.signature(add_todo).parameters["parent"].default is None

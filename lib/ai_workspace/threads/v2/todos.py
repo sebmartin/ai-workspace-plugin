@@ -216,9 +216,14 @@ def start(entries: list[Entry], todo_id: str) -> list[Entry]:
     if found is None:
         return []
     found.siblings.insert(0, found.siblings.pop(found.at))
-    goal = found.goal
-    if goal is None:
+    if found.goal is None:
         return []
+    return raise_goal(entries, found.goal)
+
+
+def raise_goal(entries: list[Entry], goal: Entry) -> list[Entry]:
+    """Send a goal whose child has been started to the top of `entries`, and
+    make it active if it was parked. Returns [goal] when its state changed."""
     entries.insert(0, entries.pop(entries.index(goal)))
     if goal.state == PARKED:
         goal.state = ACTIVE

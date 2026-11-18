@@ -257,12 +257,13 @@ def create(workspace_dir: str, thread_name: str, about: str = "") -> str:
 
 
 def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
-             state: str = "active", place: str = "") -> str:
-    """Add a todo at a chosen place in the thread's list."""
+             state: str = "active", place: str = "",
+             parent: str | None = None) -> str:
+    """Add a todo at a chosen place in the thread's list, or under a goal."""
     call = _for(workspace_dir, thread_name, "add_todo")
     if isinstance(call, str):
         return call
-    return call.fn(call.thread, title, link, state, place)
+    return call.fn(call.thread, title, link, state, place, parent)
 
 
 def retire_todo(workspace_dir: str, thread_name: str, todo_id: str, state: str) -> str:

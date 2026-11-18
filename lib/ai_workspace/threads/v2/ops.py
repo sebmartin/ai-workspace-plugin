@@ -342,14 +342,19 @@ def _unplaceable(where) -> str:
 
 @idx.refuses_unreadable
 def add_todo(thread, title: str, link: str, state: str = "active",
-             place: str = "") -> str:
-    """Add a todo at a chosen place in the list.
+             place: str = "", parent: str | None = None) -> str:
+    """Add a todo at a chosen place in the list, or under a goal.
 
     The caller places it because only the caller knows what the todo is for:
     a piece of the current task goes above it, something that has to follow
     another goes below that one, and anything else goes at the end. One thing
     places itself: `started` means work on it has begun, so it goes to the top
     unless a place was named. Other started todos keep their state.
+
+    With `parent` the todo is a child of that todo, which becomes a goal if it
+    was a plain todo. `place` and the default position then resolve within the
+    goal's children. A started child also sends its goal to the top of the
+    list, whether or not a place was named. A child cannot be a parent.
     """
     if state not in idx.IN_FORCE["todos"]:
         allowed = list(idx.IN_FORCE["todos"])
@@ -373,19 +378,36 @@ def add_todo(thread, title: str, link: str, state: str = "active",
         return unwritable
 
     entries = idx.read(thread.dir, "todos")
+    goal = None
+    target = entries
+    if parent is not None:
+        found = todos_mod.locate(entries, parent)
+        if found is None:
+            return json.dumps({"error": "NO_SUCH_ENTRY", "detail": parent})
+        if found.goal is not None:
+            return json.dumps({"error": "PARENT_IS_CHILD", "detail": parent})
+        goal = found.entry
+        target = goal.children if goal.children is not None else []
     # A place that was asked for wins over the one the state implies.
-    at = 0 if state == todos_mod.STARTED else len(entries)
+    at = 0 if state == todos_mod.STARTED else len(target)
     if place := place.strip():
-        where = todos_mod.spot(entries, place)
+        where = todos_mod.spot(target, place)
         if where.at is None:
             return _unplaceable(where)
         at = where.at
 
     todo_id = _new_id(thread.dir, "todos", title)
     entry = idx.Entry(todo_id, state, title.strip(), link)
-    was = list(entries)
-    entries.insert(at, entry)
+    was = copy.deepcopy(entries)
+    target.insert(at, entry)
+    moved: list = []
+    if goal is not None:
+        goal.children = target
+        if state == todos_mod.STARTED:
+            moved = todos_mod.raise_goal(entries, goal)
     idx.write(thread.dir, "todos", entries)
+    for changed in moved:
+        _sync_file_state(thread.dir, changed, changed.state)
     render.render(thread.dir)
     reply: dict = {"id": todo_id}
     if waiting := todos_mod.just_crowded(was, entries):
