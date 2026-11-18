@@ -8,6 +8,7 @@ None of these carries a large payload, so none of them can be defeated by the
 model's per-response output cap.
 """
 
+import copy
 import json
 from datetime import date
 from pathlib import Path, PurePosixPath
@@ -347,8 +348,8 @@ def add_todo(thread, title: str, link: str, state: str = "active",
     The caller places it because only the caller knows what the todo is for:
     a piece of the current task goes above it, something that has to follow
     another goes below that one, and anything else goes at the end. One thing
-    places itself: `started` means this is what is being worked on, so it goes
-    to the top unless a place was named.
+    places itself: `started` means work on it has begun, so it goes to the top
+    unless a place was named. Other started todos keep their state.
     """
     if state not in idx.IN_FORCE["todos"]:
         allowed = list(idx.IN_FORCE["todos"])
@@ -384,9 +385,6 @@ def add_todo(thread, title: str, link: str, state: str = "active",
     entry = idx.Entry(todo_id, state, title.strip(), link)
     was = list(entries)
     entries.insert(at, entry)
-    if state == todos_mod.STARTED:
-        # The label, not the placement: `at` above already honoured `place`.
-        todos_mod.only_started(entries, todo_id)
     idx.write(thread.dir, "todos", entries)
     render.render(thread.dir)
     reply: dict = {"id": todo_id}
@@ -435,9 +433,11 @@ def set_state(thread, kind: str, entry_id: str, state: str) -> str:
     """Move an entry between in-force states, e.g. parking or starting a todo.
 
     Two of the todo states carry a position as well as a name, and both are
-    applied here rather than left to a second call: `started` means this is
-    what is being worked on, and `active` after `parked` means it is wanted
-    again but behind whatever became current while it was away.
+    applied here rather than left to a second call: `started` means work on it
+    has begun, and puts it at the top of its list (and a child's goal at the
+    top of the list, made active if it was parked). `active` after `parked`
+    means it is wanted again but behind whatever became current while it was
+    away. Starting one todo leaves every other started todo as it is.
     """
     if state not in idx.IN_FORCE[kind]:
         return json.dumps({"error": "STATE_UNKNOWN", "detail": state,
@@ -445,20 +445,31 @@ def set_state(thread, kind: str, entry_id: str, state: str) -> str:
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
     entries = idx.read(thread.dir, kind)
-    entry = idx.find(entries, entry_id)
+    goal = None
+    if kind == "todos":
+        located = todos_mod.locate(entries, entry_id)
+        entry = located.entry if located else None
+        goal = located.goal if located else None
+    else:
+        entry = idx.find(entries, entry_id)
     if entry is None:
         return json.dumps({"error": "NO_SUCH_ENTRY", "detail": entry_id})
-    before = [idx.Entry(e.id, e.state, e.title, e.link, e.description) for e in entries]
+    before = copy.deepcopy(entries)
     was, entry.state = entry.state, state
+    moved: list = []
     if kind == "todos":
         if state == todos_mod.STARTED:
-            todos_mod.start(entries, entry_id)
+            moved = todos_mod.start(entries, entry_id)
         elif state == todos_mod.ACTIVE and was == todos_mod.PARKED:
             todos_mod.to_end(entries, entry_id)
     idx.write(thread.dir, kind, entries)
     stale = _sync_file_state(thread.dir, entry, state)
+    for changed in moved:
+        _sync_file_state(thread.dir, changed, changed.state)
     render.render(thread.dir)
     reply: dict = {"id": entry_id}
+    if goal is not None:
+        reply["goal"] = goal.id
     if stale:
         reply["file_unchanged"] = stale
     if kind == "todos" and (waiting := todos_mod.just_crowded(before, entries)):

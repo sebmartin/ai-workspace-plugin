@@ -567,3 +567,9 @@ def test_every_v2_operation_turns_an_unreadable_index_into_a_refusal():
         if getattr(fn, "__module__", "") == ops.__name__:
             assert hasattr(fn, "__wrapped__"), (
                 f"{name} is not wrapped in idx.refuses_unreadable")
+
+
+def test_no_tool_says_starting_a_todo_clears_another():
+    text = SERVER.read_text()
+    for phrase in ("clears the label", "being worked on now", "the one thing being worked on"):
+        assert phrase not in text, phrase

@@ -203,40 +203,34 @@ def spot(entries: list[Entry], place: str) -> Spot:
     return Spot(found if sense == "before" else found + 1)
 
 
-def only_started(entries: list[Entry], entry_id: str) -> None:
-    """Take the started label off every other todo, leaving places alone.
+def start(entries: list[Entry], todo_id: str) -> list[Entry]:
+    """Put a todo that has been started at the top of its own list.
 
-    Exactly one, because the state names what is being worked on now. A second
-    one leaves the label meaning nothing once a few sessions have each marked
-    something. The others keep their place and lose only the label.
+    Several todos can be started at once, so nothing is taken off any other.
+    For a child the goal goes to the top of `entries` as well, so the work is
+    first at both levels, and a parked goal is made active, since work under it
+    has begun. Returns the entries other than the todo whose state this
+    changed: the goal, or nothing.
     """
-    for entry in entries:
-        if entry.id != entry_id and entry.state == STARTED:
-            entry.state = ACTIVE
-
-
-def start(entries: list[Entry], entry_id: str) -> None:
-    """Make this the started todo, and the only one, and put it on top."""
-    only_started(entries, entry_id)
-    to_top(entries, entry_id)
-
-
-def to_top(entries: list[Entry], entry_id: str) -> None:
-    """Move one todo to the front of the list."""
-    _move(entries, entry_id, top=True)
-
-
-def to_end(entries: list[Entry], entry_id: str) -> None:
-    _move(entries, entry_id, top=False)
-
-
-def _move(entries: list[Entry], entry_id: str, top: bool) -> None:
-    """Take the todo out and put it back at one end. Unknown ids do nothing."""
-    found = index_of(entries, entry_id)
+    found = locate(entries, todo_id)
     if found is None:
-        return
-    entry = entries.pop(found)
-    entries.insert(0 if top else len(entries), entry)
+        return []
+    found.siblings.insert(0, found.siblings.pop(found.at))
+    goal = found.goal
+    if goal is None:
+        return []
+    entries.insert(0, entries.pop(entries.index(goal)))
+    if goal.state == PARKED:
+        goal.state = ACTIVE
+        return [goal]
+    return []
+
+
+def to_end(entries: list[Entry], todo_id: str) -> None:
+    """Move a todo to the end of its own list. An unknown id does nothing."""
+    found = locate(entries, todo_id)
+    if found is not None:
+        found.siblings.append(found.siblings.pop(found.at))
 
 
 def staying(entries: list[Entry], ids: list[str]) -> list[Entry]:

@@ -47,6 +47,12 @@ def _four_todos(ws):
     return ids
 
 
+def _e(name, state="active", children=None):
+    """A todo entry whose id is 20260101-<name>."""
+    return idx.Entry(f"20260101-{name}", state, name.upper(), f"./todos/{name}.md",
+                     children=children)
+
+
 def _reply(out):
     """Tool replies are JSON now; tests read the field they care about."""
     return json.loads(out)
@@ -145,25 +151,20 @@ class TestTodos:
         assert _reply(add_todo(str(tmp_path), "t", "A", link))["error"] == "OUTSIDE_THREAD"
         assert idx.read(d, "todos") == []
 
-    def test_two_adds_as_started_leave_one_started(self, tmp_path):
-        """`started` names the one thing being worked on, so a second one
-        leaves the label meaning nothing. `set_todo_state` enforced that and
-        `add_todo` implemented only the placement half of it."""
+    def test_adding_a_started_todo_leaves_the_others_started(self, tmp_path):
         d = _thread(tmp_path)
         add_todo(str(tmp_path), "t", "First", "./todos/a.md", state="started")
         add_todo(str(tmp_path), "t", "Second", "./todos/b.md", state="started")
         states = [(e.title, e.state) for e in idx.read(d, "todos")]
-        assert states == [("Second", "started"), ("First", "active")]
+        assert states == [("Second", "started"), ("First", "started")]
 
-    def test_starting_on_add_takes_the_label_without_taking_the_place(self, tmp_path):
-        """A place that was asked for wins over the one the state implies, so
-        clearing the label cannot be done by moving the new todo to the top."""
+    def test_a_started_add_with_a_place_keeps_the_place_and_the_others(self, tmp_path):
         d = _thread(tmp_path)
         add_todo(str(tmp_path), "t", "First", "./todos/a.md", state="started")
         add_todo(str(tmp_path), "t", "Second", "./todos/b.md", state="started",
                  place="end")
         states = [(e.title, e.state) for e in idx.read(d, "todos")]
-        assert states == [("First", "active"), ("Second", "started")]
+        assert states == [("First", "started"), ("Second", "started")]
 
     def test_an_external_url_is_a_valid_todo_link(self, tmp_path):
         """A todo tracked in an external system links its item there.
@@ -236,17 +237,40 @@ class TestTodos:
         assert idx.read(d, "todos")[0].title == "one\ntwo"
         assert "[one two](./s.md)" in (d / "README.md").read_text()
 
-    def test_only_one_todo_is_started_at_a_time(self, tmp_path):
-        """Every description of the state is singular, and a list where
-        everything ever touched is marked started says nothing."""
+    def test_two_todos_can_be_started_at_once(self, tmp_path):
         d = _thread(tmp_path)
         ws = str(tmp_path)
-        ids = {t: json.loads(add_todo(ws, "t", t, "./s.md"))["id"] for t in "ABCD"}
-        set_todo_state(ws, "t", ids["B"], "started")
+        ids = _four_todos(ws)
+        set_todo_state(ws, "t", ids["A"], "started")
         set_todo_state(ws, "t", ids["C"], "started")
         entries = idx.read(d, "todos")
-        assert [(e.title, e.state) for e in entries] == [
-            ("C", "started"), ("B", "active"), ("A", "active"), ("D", "active")]
+        assert [e.id for e in entries][:2] == [ids["C"], ids["A"]]
+        assert {e.id: e.state for e in entries}[ids["A"]] == "started"
+        assert {e.id: e.state for e in entries}[ids["C"]] == "started"
+
+    def test_starting_a_child_puts_it_first_and_its_goal_first(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        idx.write(d, "todos", [_e("x"), _e("g", children=[_e("c1"), _e("c2")])])
+        assert _reply(set_todo_state(ws, "t", "20260101-c2", "started")) == {
+            "id": "20260101-c2", "goal": "20260101-g"}
+        top = idx.read(d, "todos")
+        assert [e.id for e in top] == ["20260101-g", "20260101-x"]
+        assert [c.id for c in top[0].children or []] == ["20260101-c2", "20260101-c1"]
+        assert top[0].state == "active"
+        assert "- 20260101-g:started [G](./todos/g.md)" in (d / "README.md").read_text()
+
+    def test_starting_a_child_of_a_parked_goal_brings_the_goal_back(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        idx.write(d, "todos", [_e("x"), _e("g", "parked", children=[_e("c", "parked")])])
+        set_todo_state(ws, "t", "20260101-c", "started")
+        top = idx.read(d, "todos")
+        assert top[0].state == "active"
+        assert [e.id for e in top] == ["20260101-g", "20260101-x"]
+        text = (d / "README.md").read_text()
+        todos = text.split("## Todos")[1].split("\n## ")[0]
+        assert "20260101-g" in todos and "20260101-c" in todos
 
     def test_retiring_takes_it_out_of_todos(self, tmp_path):
         d = _thread(tmp_path)

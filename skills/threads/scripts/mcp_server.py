@@ -245,8 +245,9 @@ def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
             is not mounted at the same place on every machine that resumes the
             thread, so an absolute path, a `~` and a bare relative path all
             resolve to nothing on the next one.
-        state: `active`, `started` for what is being worked on now, which
-            puts it at the top, or `parked` for deliberately not now.
+        state: `active`, `started` once work on it has begun, which puts
+            it at the top and leaves any other started todo as it is, or
+            `parked` for deliberately not now.
         place: Where it goes. `top` for something to do next, such as a piece
             of the task in hand. `before:<todo id>` or `after:<todo id>` for
             something that belongs beside a particular todo. `end`, or leave it
@@ -286,16 +287,20 @@ def retire_todo(workspace_dir: str, thread_name: str, todo_id: str, state: str) 
 def set_todo_state(workspace_dir: str, thread_name: str, todo_id: str, state: str) -> str:
     """Start, park or unpark a todo without retiring it.
 
-    Two of the states move the todo as well as labelling it. `started` sends it
-    to the top of the list and clears the label from whatever held it before,
-    since it names the one thing being worked on; call it when the user asks to
-    start or resume a todo. Unparking sends it to the end, because parked meant
-    for later.
+    Two of the states move the todo as well as labelling it. `started` means work
+    on the todo has begun, so it matters more than todos not yet started. It
+    stays until the todo is retired, parked or set back to `active` by hand, and
+    several todos can be started at once. Starting moves the todo to the top of
+    its list; for a child, its goal also goes to the top of the list, and a
+    parked goal becomes active. Call it when the user asks to start or resume a
+    todo. Unparking sends it to the end of its list, because parked meant for
+    later.
 
     When the todo's link names a file, its `state:` line is rewritten to
     match, so a parked todo found by grep does not still read `state: active`.
 
-    Returns `{"id": ...}`, with `active` carrying the count when unparking is
+    Returns `{"id": ...}`, with `goal` carrying the goal's id when the todo is
+    a child, `active` carrying the count when unparking is
     what takes the list past five, and `file_unchanged` naming the todo's file
     when its `state:` line could not be found. The index and the file then
     disagree, and the file is the copy a reader finds by grep. Nothing else
@@ -309,7 +314,7 @@ def set_todo_state(workspace_dir: str, thread_name: str, todo_id: str, state: st
         workspace_dir: The tracked workspace path from session context.
         thread_name: Name of the thread (kebab-case).
         todo_id: The id from the index line.
-        state: `started` for what is being worked on now, `parked` for
+        state: `started` once work on it has begun, `parked` for
             deliberately not now, `active` for anything else.
     """
     return _threads.set_todo_state(workspace_dir, thread_name, todo_id, state)
