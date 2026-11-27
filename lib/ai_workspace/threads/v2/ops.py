@@ -394,15 +394,16 @@ def add_todo(thread, title: str, link: str, state: str = "backlog",
     idx.write(thread.dir, "todos", entries)
     render.render(thread.dir)
     reply: dict = {"id": todo_id}
-    if waiting := todos_mod.just_crowded(was, entries):
-        reply["active"] = waiting
+    reply.update(todos_mod.signals(was, entries))
     return json.dumps(reply)
 
 
 def retire_todo(thread, todo_id: str, state: str) -> str:
     if (unwritable := render.blocked(thread.dir)) is not None:
         return unwritable
-    entry = idx.find(idx.read(thread.dir, "todos"), todo_id)
+    entries = idx.read(thread.dir, "todos")
+    entry = idx.find(entries, todo_id)
+    before = [idx.Entry(e.id, e.state, e.title, e.link, e.description) for e in entries]
     if error := idx.retire(thread.dir, "todos", todo_id, state):
         return json.dumps(error)
     stale = _sync_file_state(thread.dir, entry, state) if entry else ""
@@ -410,6 +411,7 @@ def retire_todo(thread, todo_id: str, state: str) -> str:
     reply: dict = {"id": todo_id}
     if stale:
         reply["file_unchanged"] = stale
+    reply.update(todos_mod.signals(before, idx.read(thread.dir, "todos")))
     return json.dumps(reply)
 
 
@@ -461,8 +463,8 @@ def set_state(thread, kind: str, entry_id: str, state: str) -> str:
     reply: dict = {"id": entry_id}
     if stale:
         reply["file_unchanged"] = stale
-    if kind == "todos" and (waiting := todos_mod.just_crowded(before, entries)):
-        reply["active"] = waiting
+    if kind == "todos":
+        reply.update(todos_mod.signals(before, entries))
     return json.dumps(reply)
 
 
@@ -508,8 +510,7 @@ def order_todos(thread, todo_ids: list[str], place: str = "") -> str:
     reply: dict = {"ordered": len(todo_ids)}
     if stale:
         reply["file_unchanged"] = stale
-    if waiting := todos_mod.just_crowded(before, entries):
-        reply["active"] = waiting
+    reply.update(todos_mod.signals(before, entries))
     return json.dumps(reply)
 
 

@@ -219,9 +219,10 @@ def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
     `tier`. Say where you put it, so the user can move it.
 
     Returns `{"id": ...}`, the minted todo id, which `order_todos` and the
-    retire tools take. `active` is present only on the add that takes the list
-    past five, carrying the count: tell the user and ask which to park. Later
-    adds are quiet, and the resume heading keeps the count.
+    retire tools take. `next` carries the count on the change that takes `next`
+    past five: read the thread and propose specific todos to send back, per the
+    skill. `next_empty` is `true` on the change that empties `next`: ask what is
+    next and offer to groom the backlog.
 
     A refusal returns `{"error": CODE, ...}` and writes nothing:
     `STATE_UNKNOWN` or `PLACE_UNKNOWN` with the `allowed` values,
@@ -269,7 +270,10 @@ def retire_todo(workspace_dir: str, thread_name: str, todo_id: str, state: str) 
     Returns `{"id": ...}`, plus `file_unchanged` naming that file when its
     `state:` line could not be found. The index and the file then disagree,
     and the file is the copy a reader finds by grep. Nothing else reports it,
-    so say so and name the file.
+    so say so and name the file. `next` carries the count on the change that takes `next`
+    past five: read the thread and propose specific todos to send back, per the
+    skill. `next_empty` is `true` on the change that empties `next`: ask what is
+    next and offer to groom the backlog.
 
     A refusal returns `{"error": CODE, ...}` and writes nothing:
     `STATE_UNKNOWN` with the `allowed` states, or `NO_SUCH_ENTRY`.
@@ -294,11 +298,13 @@ def set_todo_state(workspace_dir: str, thread_name: str, todo_id: str, state: st
     When the todo's link names a file, its `state:` line is rewritten to
     match, so a parked todo found by grep does not still read its old state.
 
-    Returns `{"id": ...}`, with `active` carrying the count when unparking is
-    what takes the list past five, and `file_unchanged` naming the todo's file
+    Returns `{"id": ...}`, plus `file_unchanged` naming the todo's file
     when its `state:` line could not be found. The index and the file then
     disagree, and the file is the copy a reader finds by grep. Nothing else
-    reports it, so say so and name the file.
+    reports it, so say so and name the file. `next` carries the count on the change that takes `next`
+    past five: read the thread and propose specific todos to send back, per the
+    skill. `next_empty` is `true` on the change that empties `next`: ask what is
+    next and offer to groom the backlog.
 
     A refusal returns
     `{"error": "STATE_UNKNOWN", "allowed": [...]}` or
@@ -331,8 +337,10 @@ def order_todos(workspace_dir: str, thread_name: str, todo_ids: list[str],
 
     Returns `{"ordered": <how many were named>}`, plus `"file_unchanged":
     [<link>, ...]` naming each moved todo whose file `state:` line could not
-    be updated, so the index and that file now disagree, and `active` carrying
-    the count when the move takes the list past the window. A refusal returns
+    be updated, so the index and that file now disagree. `next` carries the count on the change that takes `next`
+    past five: read the thread and propose specific todos to send back, per the
+    skill. `next_empty` is `true` on the change that empties `next`: ask what is
+    next and offer to groom the backlog. A refusal returns
     `{"error": CODE, "detail": ...}` and writes nothing: `NO_SUCH_ENTRY`
     naming the ids that are not in the list, including the anchor;
     `PLACE_UNKNOWN` with the `allowed` forms; `DUPLICATE_ID` naming one given

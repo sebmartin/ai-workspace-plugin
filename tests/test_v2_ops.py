@@ -459,32 +459,6 @@ class TestTodos:
         a = _only_id(d, "todos")
         assert _reply(order_todos(ws, "t", [a, a]))["error"] == "DUPLICATE_ID"
 
-    def test_the_add_that_crosses_the_line_says_so(self, tmp_path):
-        """Deterministic, so it does not rely on the skill being remembered."""
-        _thread(tmp_path)
-        ws = str(tmp_path)
-        for n in range(5):
-            assert "active" not in _reply(add_todo(ws, "t", f"T{n}", "./s.md"))
-        assert _reply(add_todo(ws, "t", "T5", "./s.md"))["active"] == 6
-
-    def test_the_adds_after_it_do_not_say_so_again(self, tmp_path):
-        """The bound is what keeps the README cheap, so this instructs once
-        rather than on every add from six to twenty. The resume heading is
-        what keeps reporting."""
-        _thread(tmp_path)
-        ws = str(tmp_path)
-        for n in range(6):
-            add_todo(ws, "t", f"T{n}", "./s.md")
-        assert "active" not in _reply(add_todo(ws, "t", "T6", "./s.md"))
-        assert "active" not in _reply(add_todo(ws, "t", "T7", "./s.md"))
-
-    def test_a_parked_todo_does_not_count_towards_crowding(self, tmp_path):
-        _thread(tmp_path)
-        ws = str(tmp_path)
-        for n in range(6):
-            add_todo(ws, "t", f"T{n}", "./s.md", state="parked")
-        assert "active" not in _reply(add_todo(ws, "t", "T6", "./s.md"))
-
     def test_place_is_not_case_sensitive(self, tmp_path):
         """A model produces a capital as readily as the space the parser
         already forgives."""
@@ -501,28 +475,6 @@ class TestTodos:
         add_todo(ws, "t", "A", "./s.md")
         add_todo(ws, "t", "B", "./s.md", place="   ")
         assert [e.title for e in idx.read(d, "todos")] == ["B", "A"]
-
-    def test_the_unpark_that_crosses_the_line_says_so(self, tmp_path):
-        """The other way the list crosses the line, and the only one that was
-        silent about it."""
-        _thread(tmp_path)
-        ws = str(tmp_path)
-        ids = [json.loads(add_todo(ws, "t", f"T{n}", "./s.md"))["id"] for n in range(6)]
-        set_todo_state(ws, "t", ids[0], "parked")
-        assert _reply(set_todo_state(ws, "t", ids[0], "backlog"))["active"] == 6
-
-    def test_an_unpark_that_does_not_cross_it_is_quiet(self, tmp_path):
-        _thread(tmp_path)
-        ws = str(tmp_path)
-        ids = [json.loads(add_todo(ws, "t", f"T{n}", "./s.md"))["id"] for n in range(8)]
-        set_todo_state(ws, "t", ids[0], "parked")
-        assert "active" not in _reply(set_todo_state(ws, "t", ids[0], "backlog"))
-
-    def test_a_comfortable_list_says_nothing_on_a_state_change(self, tmp_path):
-        _thread(tmp_path)
-        ws = str(tmp_path)
-        a = json.loads(add_todo(ws, "t", "A", "./s.md"))["id"]
-        assert "active" not in _reply(set_todo_state(ws, "t", a, "parked"))
 
     def test_retiring_refuses_with_a_code_like_every_other_todo_tool(self, tmp_path):
         """A caller parsing the documented contract throws on a bare sentence."""
@@ -830,6 +782,71 @@ class TestTiers:
         assert split_frontmatter((d / "todos" / "a.md").read_text())[0]["state"] == "next"
 
 
+class TestNextSignals:
+    def test_the_add_that_takes_next_past_five_carries_the_count(self, tmp_path):
+        _thread(tmp_path)
+        ws = str(tmp_path)
+        for n in range(5):
+            assert "next" not in _reply(add_todo(ws, "t", f"T{n}", "./s.md", state="next"))
+        assert _reply(add_todo(ws, "t", "T5", "./s.md", state="next"))["next"] == 6
+
+    def test_changes_past_it_are_quiet(self, tmp_path):
+        _thread(tmp_path)
+        ws = str(tmp_path)
+        for n in range(6):
+            add_todo(ws, "t", f"T{n}", "./s.md", state="next")
+        assert "next" not in _reply(add_todo(ws, "t", "T6", "./s.md", state="next"))
+
+    def test_backlog_and_parked_never_count(self, tmp_path):
+        _thread(tmp_path)
+        ws = str(tmp_path)
+        for state in ("backlog", "parked"):
+            for n in range(6):
+                out = _reply(add_todo(ws, "t", f"{state}{n}", "./s.md", state=state))
+                assert "next" not in out
+
+    def test_a_promotion_that_crosses_says_so(self, tmp_path):
+        _thread(tmp_path)
+        ws = str(tmp_path)
+        for n in range(5):
+            _add(ws, f"N{n}", state="next")
+        x = _add(ws, "X")
+        assert _reply(set_todo_state(ws, "t", x, "next"))["next"] == 6
+
+    def test_an_anchored_order_that_crosses_says_so(self, tmp_path):
+        _thread(tmp_path)
+        ws = str(tmp_path)
+        n = [_add(ws, f"N{i}", state="next") for i in range(5)]
+        x = _add(ws, "X")
+        assert _reply(order_todos(ws, "t", [x], f"after:{n[-1]}"))["next"] == 6
+
+    def test_emptying_next_says_so(self, tmp_path):
+        _thread(tmp_path)
+        ws = str(tmp_path)
+        b = _add(ws, "B")
+        n = _add(ws, "N", state="next")
+        assert _reply(retire_todo(ws, "t", n, "done"))["next_empty"] is True
+        n = _add(ws, "N2", state="next")
+        assert _reply(set_todo_state(ws, "t", n, "backlog"))["next_empty"] is True
+        n = _add(ws, "N3", state="next")
+        assert _reply(order_todos(ws, "t", [n], f"before:{b}"))["next_empty"] is True
+
+    def test_a_change_with_next_already_empty_is_quiet(self, tmp_path):
+        _thread(tmp_path)
+        ws = str(tmp_path)
+        a = _add(ws, "A")
+        b = _add(ws, "B")
+        assert "next_empty" not in _reply(set_todo_state(ws, "t", a, "parked"))
+        assert "next_empty" not in _reply(retire_todo(ws, "t", b, "done"))
+
+    def test_a_no_op_state_change_is_quiet(self, tmp_path):
+        _thread(tmp_path)
+        ws = str(tmp_path)
+        n = [_add(ws, f"N{i}", state="next") for i in range(6)]
+        out = _reply(set_todo_state(ws, "t", n[0], "next"))
+        assert "next" not in out and "next_empty" not in out
+
+
 class TestOrderAcrossTiers:
     def _setup(self, tmp_path):
         return _thread(tmp_path), str(tmp_path)
@@ -901,16 +918,6 @@ class TestOrderAcrossTiers:
         out = _reply(order_todos(ws, "t", [x], f"after:{n1}"))
         assert out["ordered"] == 1
         assert out["file_unchanged"] == ["./todos/x.md"]
-
-    def test_a_move_past_the_window_says_so_once(self, tmp_path):
-        ws = self._setup(tmp_path)[1]
-        n = [_add(ws, f"N{i}", state="next") for i in range(4)]
-        p = _add(ws, "P", state="parked")
-        b = _add(ws, "B")
-        assert _reply(order_todos(ws, "t", [p], f"before:{b}"))["active"] == 6
-        # Already past the window, so a further move stays quiet.
-        assert "active" not in _reply(order_todos(ws, "t", [n[0]], f"after:{b}"))
-
 
 class TestDecisions:
     def test_file_and_index_entry_are_written(self, tmp_path):

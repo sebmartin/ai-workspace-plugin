@@ -47,23 +47,25 @@ def window(entries: list[Entry]) -> list[Entry]:
 
 
 def crowded(entries: list[Entry]) -> int:
-    """How many todos are active, once that is more than five. Otherwise 0.
-
-    Presence is the signal, so a comfortable list costs its caller nothing.
-    """
-    waiting = len(next_up(entries))
+    """How many todos are in `next`, once that is more than five. Otherwise 0."""
+    waiting = sum(1 for e in entries if e.state == NEXT)
     return waiting if waiting > COMFORTABLE else 0
 
 
-def just_crowded(before: list[Entry], after: list[Entry]) -> int:
-    """The count, but only on the change that takes the list past the window.
+def signals(before: list[Entry], after: list[Entry]) -> dict:
+    """What a write says about `next`, only on the change that causes it.
 
-    Reported on every change past it, this would instruct on each of the adds
-    from six to twenty and be ignored by the twentieth. The bound is what keeps
-    the README cheap, so one instruction is enough and the resume heading is
-    what goes on reporting.
+    `next` carries the count on the change that takes `next` past five, and
+    `next_empty` is true on the change that leaves it with nothing. Reported on
+    every change past the line, the count would be ignored by the twentieth
+    call, so one report is enough. Either, both or neither key.
     """
-    return 0 if crowded(before) else crowded(after)
+    out: dict = {}
+    if not crowded(before) and (count := crowded(after)):
+        out["next"] = count
+    if any(e.state == NEXT for e in before) and not any(e.state == NEXT for e in after):
+        out["next_empty"] = True
+    return out
 
 
 def index_of(entries: list[Entry], entry_id: str) -> int | None:
