@@ -51,8 +51,9 @@ def resume_thread(workspace_dir: str, thread_name: str) -> str:
     has grown large), then starred artifacts, each with its
     description and when to read it (an id whose artifact is no longer in force
     shows `(not found)`), then the header, About, Status, the
-    Todos window (top five of the todo list in priority order, its heading
-    counting shown, active and parked), any parked todos, every in-force
+    Todos (every started and next todo, its heading counting all four tiers,
+    then a line when `next` is empty while the backlog is not, or holds more
+    than five), every in-force
     decision with its `summary:`, the artifacts index (starred artifacts are left
     out of it), and the recent sessions:
     the full log of the newest ones, as many as fit a fixed allowance and

@@ -176,19 +176,9 @@ class TestTodos:
         """The window needed a second call nothing told the agent to make, so a
         todo the user asked for never showed up."""
         d = _thread(tmp_path)
-        add_todo(str(tmp_path), "t", "Prep the coding round", "./sessions/20260101-s.md")
+        add_todo(str(tmp_path), "t", "Prep the coding round", "./sessions/20260101-s.md",
+                 state="next")
         assert "Prep the coding round" in (d / "README.md").read_text()
-
-    def test_the_window_refills_itself(self, tmp_path):
-        """Nothing promotes the next todo, because nothing has to: the sixth is
-        sixth in the list and becomes fifth when something above it goes."""
-        d = _thread(tmp_path)
-        ws = str(tmp_path)
-        ids = [json.loads(add_todo(ws, "t", f"T{n}", "./s.md", place="end"))["id"]
-               for n in range(6)]
-        assert "T5" not in (d / "README.md").read_text()
-        retire_todo(ws, "t", ids[0], "done")
-        assert "T5" in (d / "README.md").read_text()
 
     def test_a_title_that_cannot_be_read_back_is_refused(self, tmp_path):
         """A `]` ends the title field, so the line written is one the index
@@ -230,7 +220,7 @@ class TestTodos:
     def test_retiring_takes_it_out_of_todos(self, tmp_path):
         d = _thread(tmp_path)
         ws = str(tmp_path)
-        add_todo(ws, "t", "Chase the permit", "./s.md")
+        add_todo(ws, "t", "Chase the permit", "./s.md", state="next")
         todo_id = _only_id(d, "todos")
         assert "Chase the permit" in (d / "README.md").read_text()
         retire_todo(ws, "t", todo_id, "done")
@@ -248,12 +238,12 @@ class TestTodos:
     def test_parking_takes_it_out_of_todos(self, tmp_path):
         d = _thread(tmp_path)
         ws = str(tmp_path)
-        add_todo(ws, "t", "Call the surveyor", "./s.md")
+        add_todo(ws, "t", "Call the surveyor", "./s.md", state="next")
         todo_id = _only_id(d, "todos")
         assert "Call the surveyor" in (d / "README.md").read_text()
         set_todo_state(ws, "t", todo_id, "parked")
         assert "Call the surveyor" not in (d / "README.md").read_text()
-        set_todo_state(ws, "t", todo_id, "backlog")
+        set_todo_state(ws, "t", todo_id, "next")
         assert "Call the surveyor" in (d / "README.md").read_text()
 
     def test_place_top_names_no_todo(self, tmp_path):
@@ -1358,7 +1348,8 @@ class TestRenderedText:
         and split the entry in half, which is the quiet one.
         """
         d = _thread(tmp_path)
-        assert "error" not in _reply(add_todo(str(tmp_path), "t", title, "./todos/x.md"))
+        assert "error" not in _reply(add_todo(str(tmp_path), "t", title, "./todos/x.md",
+                                          state="next"))
         assert idx.read(d, "todos")[0].title == title
         first = (d / "README.md").read_text().split("## Todos\n\n")[1].split("\n")[0]
         assert title in first
@@ -1375,21 +1366,6 @@ class TestRenderedText:
 
 
 class TestReadmeShape:
-    def test_the_section_names_what_is_hidden_and_what_is_parked(self, tmp_path):
-        """The parked note was an `elif` on nothing being shown, so it could
-        only fire for a thread with no active todos at all. A thread with six
-        active and ten parked mentioned neither the one below the window nor
-        the ten set aside, which is the silence the function's own docstring
-        argues against.
-        """
-        d = _thread(tmp_path)
-        for i in range(6):
-            add_todo(str(tmp_path), "t", f"A{i}", "./s.md")
-        for i in range(10):
-            add_todo(str(tmp_path), "t", f"P{i}", "./s.md", state="parked")
-        from ai_workspace.threads.v2 import render
-        assert "1 more and 10 parked in [todos](./todos-index.md)." in render.todos_body(d)
-
     def test_a_v1_readme_is_refused_rather_than_appended_to(self, tmp_path):
         """The Frankenstein case: a real migration hit this and was told it worked.
 
@@ -1466,19 +1442,20 @@ class TestReadmeShape:
 
 
 class TestInvariant:
-    @pytest.mark.parametrize("active,parked", [(2, 0), (6, 0), (0, 3), (6, 3)])
-    def test_readme_always_equals_the_projection(self, tmp_path, active, parked):
+    @pytest.mark.parametrize("started,next_,backlog,parked", [
+        (1, 2, 0, 0), (0, 7, 3, 0), (0, 0, 2, 3), (2, 6, 4, 1)])
+    def test_readme_always_equals_the_projection(self, tmp_path, started, next_,
+                                                 backlog, parked):
         """Sliced to the next heading rather than the next blank line, and run
-        over enough todos to produce a tail. The hidden and parked notes are a
-        second paragraph, so the two-todo case this used to be had no tail and
-        the comparison could not fail however far the two drifted.
+        over every tier, so the counts line is a second paragraph the
+        comparison has to cover.
         """
         d = _thread(tmp_path)
         ws = str(tmp_path)
-        for i in range(active):
-            add_todo(ws, "t", f"A{i}", "./s.md")
-        for i in range(parked):
-            add_todo(ws, "t", f"P{i}", "./s.md", state="parked")
+        for state, count in (("started", started), ("next", next_),
+                             ("backlog", backlog), ("parked", parked)):
+            for i in range(count):
+                add_todo(ws, "t", f"{state}{i}", "./s.md", state=state)
         from ai_workspace.threads.v2 import render
         expected = render.todos_body(d)
         after = (d / "README.md").read_text().split("## Todos\n\n")[1]

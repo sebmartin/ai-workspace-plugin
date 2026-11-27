@@ -15,7 +15,6 @@ from ai_workspace.threads import marker, schema
 from ai_workspace.threads.v2 import ids, render, session, stars
 from ai_workspace.threads.v2 import index as idx
 from ai_workspace.threads.v2 import thread as v2
-from ai_workspace.threads.v2 import todos as todos_mod
 
 
 @pytest.fixture(autouse=True)
@@ -552,7 +551,7 @@ class TestRender:
         p = d / "README.md"
         p.write_text(p.read_text().replace("## Todos", "## Next steps"))
         assert render.blocked(d) is None
-        idx.add(d, "todos", idx.Entry("20260101-a", "active", "A", "./todos/a.md"))
+        idx.add(d, "todos", idx.Entry("20260101-a", "next", "A", "./todos/a.md"))
         render.render(d)
         text = p.read_text()
         assert "## Todos\n\n- 20260101-a" in text
@@ -566,7 +565,7 @@ class TestRender:
 
     def test_only_todos_is_replaced(self, tmp_path):
         d = _v2_thread(tmp_path)
-        idx.add(d, "todos", idx.Entry("20260101-a", "active", "Do a thing", "./todos/a.md"))
+        idx.add(d, "todos", idx.Entry("20260101-a", "next", "Do a thing", "./todos/a.md"))
         render.render(d)
         text = (d / "README.md").read_text()
         assert "Do a thing" in text
@@ -591,51 +590,51 @@ class TestRender:
         render.render(d)
         assert (d / "README.md").read_text() == once
 
-    def test_todos_lists_the_active_todos(self, tmp_path):
-        """Nothing to be promoted into: being near the top of the list is what
-        puts a todo in the Todos section."""
+    def test_todos_lists_the_next_todos(self, tmp_path):
         d = _v2_thread(tmp_path)
-        _todos(d, ("a", "active"), ("b", "active"))
+        _todos(d, ("a", "next"), ("b", "next"))
         render.render(d)
         text = (d / "README.md").read_text()
         assert "20260101-a" in text and "20260101-b" in text
 
-    def test_todos_shows_at_most_a_window(self, tmp_path):
-        """The README is a landing page, so this section cannot grow with the
-        thread the way an index does."""
+    def test_todos_shows_every_started_and_next_todo(self, tmp_path):
         d = _v2_thread(tmp_path)
-        _todos(d, *((f"t{n}", "active") for n in range(8)))
+        _todos(d, *[(f"s{n}", "started") for n in range(3)],
+               *[(f"n{n}", "next") for n in range(7)],
+               *[(f"b{n}", "backlog") for n in range(2)], ("p0", "parked"))
         render.render(d)
         body = (d / "README.md").read_text()
-        shown = [n for n in range(8) if f"20260101-t{n}" in body]
-        assert shown == list(range(todos_mod.COMFORTABLE))
+        for n in range(3):
+            assert f"20260101-s{n}" in body
+        for n in range(7):
+            assert f"20260101-n{n}" in body
+        assert "20260101-b" not in body and "20260101-p0" not in body
 
-    def test_the_readme_says_how_many_it_is_not_showing(self, tmp_path):
-        """A bounded section that hides the rest silently is worse for a reader
-        than one that says there is more."""
+    def test_the_readme_counts_backlog_and_parked(self, tmp_path):
         d = _v2_thread(tmp_path)
-        _todos(d, *((f"t{n}", "active") for n in range(8)))
+        _todos(d, ("s", "started"), ("n", "next"),
+               ("b0", "backlog"), ("b1", "backlog"), ("p", "parked"))
         render.render(d)
-        assert "3 more" in (d / "README.md").read_text()
+        assert "2 backlog, 1 parked in [todos](./todos-index.md)." in (
+            d / "README.md").read_text()
 
-    def test_the_readme_says_so_when_everything_is_parked(self, tmp_path):
-        """`- None` on its own reads as a thread with nothing left to do."""
+    def test_only_backlog_reads_as_none_with_its_count(self, tmp_path):
         d = _v2_thread(tmp_path)
-        _todos(d, *((f"t{n}", "parked") for n in range(7)))
+        _todos(d, ("b0", "backlog"), ("b1", "backlog"))
         render.render(d)
-        body = (d / "README.md").read_text()
-        assert "- None" in body
-        assert "7 parked in [todos](./todos-index.md)." in body
+        assert ("## Todos\n\n- None\n\n"
+                "2 backlog, 0 parked in [todos](./todos-index.md).") in (
+            d / "README.md").read_text()
 
-    def test_nothing_is_said_when_everything_is_shown(self, tmp_path):
+    def test_no_counts_line_when_nothing_is_hidden(self, tmp_path):
         d = _v2_thread(tmp_path)
-        _todos(d, ("a", "active"))
+        _todos(d, ("s", "started"), ("n", "next"))
         render.render(d)
-        assert "more" not in (d / "README.md").read_text().split("## About")[0]
+        assert "backlog" not in (d / "README.md").read_text().split("## About")[0]
 
     def test_a_parked_todo_is_not_a_next_step(self, tmp_path):
         d = _v2_thread(tmp_path)
-        idx.add(d, "todos", idx.Entry("20260101-a", "active", "A", "./todos/a.md"))
+        idx.add(d, "todos", idx.Entry("20260101-a", "next", "A", "./todos/a.md"))
         idx.add(d, "todos", idx.Entry("20260101-b", "parked", "B", "./todos/b.md"))
         render.render(d)
         text = (d / "README.md").read_text()
@@ -646,8 +645,8 @@ class TestRender:
         """A todo added today can belong above one from last year."""
         d = _v2_thread(tmp_path)
         idx.write(d, "todos", [
-            idx.Entry("20260301-later", "active", "L", "./todos/l.md"),
-            idx.Entry("20260101-older", "active", "O", "./todos/o.md"),
+            idx.Entry("20260301-later", "next", "L", "./todos/l.md"),
+            idx.Entry("20260101-older", "next", "O", "./todos/o.md"),
         ])
         render.render(d)
         body = (d / "README.md").read_text()
@@ -769,50 +768,40 @@ class TestCompose:
         (d / "decisions" / "20260101-x.md").write_text(
             "---\ntitle: X\nstate: locked\nsummary: Chose X because it is simplest.\n---\n")
         idx.add(d, "decisions", idx.Entry("20260101-x", "locked", "X", "./decisions/20260101-x.md"))
-        idx.add(d, "todos", idx.Entry("20260101-a", "active", "A", "./todos/a.md"))
+        idx.add(d, "todos", idx.Entry("20260101-a", "next", "A", "./todos/a.md"))
         out = v2.compose(d, "t")
         for section in ("## Status", "## About", "## Todos",
                         "## Decisions in force", "## Artifacts", "## Recent sessions"):
             assert section in out
 
-    def test_the_heading_says_what_is_shown_and_what_exists(self, tmp_path):
-        """A bounded section conceals nothing if the heading does the counting."""
+    def test_the_heading_counts_every_tier(self, tmp_path):
         d = _v2_thread(tmp_path)
-        _todos(d, *([(f"t{n}", "active") for n in range(7)] + [("p", "parked")]))
-        assert "## Todos (5 of 7 active, 1 parked)" in v2.compose(d, "t")
-
-    def test_the_heading_counts_a_short_list_too(self, tmp_path):
-        d = _v2_thread(tmp_path)
-        _todos(d, ("a", "active"), ("b", "active"), ("c", "parked"))
-        assert "## Todos (2 of 2 active, 1 parked)" in v2.compose(d, "t")
-
-    def test_an_empty_list_does_not_read_as_an_empty_thread(self, tmp_path):
-        """Nothing active while three sit parked is a choice, not a lost index."""
-        d = _v2_thread(tmp_path)
-        _todos(d, ("a", "parked"), ("b", "parked"), ("c", "parked"))
-        assert "## Todos (0 of 0 active, 3 parked)\n\n- None" in v2.compose(d, "t")
-
-    def test_parked_todos_are_listed_after_the_active_ones(self, tmp_path):
-        d = _v2_thread(tmp_path)
-        _todos(d, ("a", "active"), ("b", "parked"))
+        _todos(d, ("s", "started"), ("n0", "next"), ("n1", "next"),
+               ("b0", "backlog"), ("b1", "backlog"), ("b2", "backlog"), ("p", "parked"))
         out = v2.compose(d, "t")
-        assert out.index("## Todos") < out.index("## Parked")
-        assert out.index("20260101-a") < out.index("20260101-b")
+        assert "## Todos (1 started, 2 next, 3 backlog, 1 parked)" in out
+        assert "## Parked" not in out
 
-    def test_the_heading_is_the_only_thing_that_counts(self, tmp_path):
-        """The line telling the agent to ask about parking belongs where the
-        heading is not: in a tool reply. Under a heading that already says
-        `5 of 6 active` it is the same sentence twice."""
+    def test_resume_flags_an_empty_next_with_a_backlog(self, tmp_path):
         d = _v2_thread(tmp_path)
-        _todos(d, *((f"t{n}", "active") for n in range(6)))
+        _todos(d, *((f"b{n}", "backlog") for n in range(3)))
+        assert "Next is empty while the backlog holds 3." in v2.compose(d, "t")
+        _todos(d)
+        assert "Next is empty" not in v2.compose(d, "t")
+
+    def test_resume_flags_a_crowded_next(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        _todos(d, *((f"n{n}", "next") for n in range(6)))
+        assert "Next holds 6, more than five." in v2.compose(d, "t")
+        _todos(d, *((f"n{n}", "next") for n in range(5)))
+        assert "Next holds" not in v2.compose(d, "t")
+
+    def test_an_active_todo_shows_as_backlog_on_resume(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        _todos(d, ("a", "active"))
         out = v2.compose(d, "t")
-        assert "## Todos (5 of 6 active, 0 parked)" in out
-        assert "ask the user which to park" not in out
-
-    def test_nothing_parked_means_no_parked_section(self, tmp_path):
-        d = _v2_thread(tmp_path)
-        idx.add(d, "todos", idx.Entry("20260101-a", "active", "A", "./todos/a.md"))
-        assert "## Parked" not in v2.compose(d, "t")
+        assert "## Todos (0 started, 0 next, 1 backlog, 0 parked)" in out
+        assert "Next is empty while the backlog holds 1." in out
 
     def test_a_few_attachments_are_listed(self, tmp_path):
         """Cheap enough to be worth saving the caller a directory listing."""

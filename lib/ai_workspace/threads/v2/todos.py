@@ -18,32 +18,21 @@ from ai_workspace.threads.v2.index import Entry
 STARTED, NEXT, BACKLOG, PARKED = idx.IN_FORCE["todos"]
 TIERS = idx.IN_FORCE["todos"]
 
-# How many todos the Todos section shows, and so where the list stops being something
-# a person can hold in their head. The tools report crossing it in their own
+# How many todos `next` holds before it stops being something a person can
+# hold in their head. The tools report crossing it in their own
 # output, so it does not depend on the skill being read between one call and
 # the next.
 COMFORTABLE = 5
 
 
-def next_up(entries: list[Entry]) -> list[Entry]:
-    """Every todo that is still a next step, in order."""
-    return [e for e in entries if e.state != PARKED]
+def shown(entries: list[Entry]) -> list[Entry]:
+    """What the Todos section lists: every started todo, then every next one."""
+    return [e for e in entries if e.state in (STARTED, NEXT)]
 
 
-def parked(entries: list[Entry]) -> list[Entry]:
-    return [e for e in entries if e.state == PARKED]
-
-
-def window(entries: list[Entry]) -> list[Entry]:
-    """What the Todos section shows: the top of the list, bounded.
-
-    A slice rather than a stored subset. There is nothing to drift from the
-    list it is drawn from, nothing to refill when a todo is retired, since the
-    sixth moves up by itself, and the README keeps its size as the thread runs
-    for months. Changing what is shown is changing the order, which is one
-    gesture rather than two.
-    """
-    return next_up(entries)[:COMFORTABLE]
+def counts(entries: list[Entry]) -> dict[str, int]:
+    """How many todos are in each tier, zeros included."""
+    return {tier: sum(1 for e in entries if e.state == tier) for tier in TIERS}
 
 
 def crowded(entries: list[Entry]) -> int:

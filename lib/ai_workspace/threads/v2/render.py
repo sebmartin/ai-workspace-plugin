@@ -62,26 +62,18 @@ def _links_line(thread_dir: Path) -> str:
 
 
 def todos_body(thread_dir: Path) -> str:
-    """The top of the todo list, bounded, or a placeholder.
+    """Every started and next todo, or a placeholder, then the rest as counts.
 
-    Says how much it is not showing, whether that is todos below the window or
-    todos that were parked, because a section that hides the rest in silence is
-    worse for the person reading it than one that points at the index.
+    Backlog and parked are not listed, so when either is non-zero a line says
+    how many there are and points at the index. A section that hides todos in
+    silence reads as a thread with nothing left to do.
     """
     entries = idx.read(thread_dir, "todos")
-    active = todos_mod.next_up(entries)
-    shown = todos_mod.window(entries)
-    lines = [e.render() for e in shown] or ["- None"]
-    # Both, when both are true. Either one alone leaves the other hidden in
-    # silence, and with nothing active `- None` on its own reads as a thread
-    # with nothing left to do, where everything was set aside on purpose.
-    notes = []
-    if hidden := len(active) - len(shown):
-        notes.append(f"{hidden} more")
-    if parked := len(todos_mod.parked(entries)):
-        notes.append(f"{parked} parked")
-    if notes:
-        lines.append(f"\n{' and '.join(notes)} in [todos](./todos-index.md).")
+    lines = [e.render() for e in todos_mod.shown(entries)] or ["- None"]
+    tiers = todos_mod.counts(entries)
+    backlog, parked = tiers[todos_mod.BACKLOG], tiers[todos_mod.PARKED]
+    if backlog or parked:
+        lines.append(f"\n{backlog} backlog, {parked} parked in [todos](./todos-index.md).")
     return "\n".join(lines) + "\n"
 
 
