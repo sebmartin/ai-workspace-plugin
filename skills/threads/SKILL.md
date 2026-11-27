@@ -183,7 +183,7 @@ A todo is in one of four tiers, held as its state:
 - `backlog`: unsorted. New todos land here.
 - `parked`: might come back, maybe not.
 
-The README shows `started` and `next` in full and counts `backlog` and `parked`. `list_todos` reads a tier in full. A todo moved up a tier lands at the bottom of it; moved down, at the top. `order_todos` with `place` set to `before:<id>` or `after:<id>` puts a todo in an exact spot in any tier; `top` and `end` put it at either edge.
+The README shows `started` and `next` in full and counts `backlog` and `parked`. `list_todos` reads a tier in full. A todo moved up a tier lands at the bottom of it; moved down, at the top. `order_todos` with `place` set to `before:<id>` or `after:<id>` puts a todo in an exact spot in any tier; `top` and `end` put it at either edge of its own tier, so a backlog todo moved to `top` is still out of sight.
 
 **Moving a todo into `next` is the user's call.** Propose it and apply once they agree. A new todo lands at the top of the backlog unless you pass `state`.
 
