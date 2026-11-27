@@ -128,7 +128,7 @@ The payload carries the full text of the newest sessions, then summaries of the 
 
 ### Writing
 
-**Adding to the record is the user's call.** Every index entry (a todo, a decision, an artifact, a star) and every `memory.md` entry is read on every resume from then on, so add one only when the user asked for it. The ask can be implicit: "write up your research" means write an artifact and index it, without checking first. When nobody asked and you think something belongs on the record, suggest it in your reply and add it once the user agrees.
+**Adding to the record is the user's call.** Every decision, artifact and star and every `memory.md` entry is read on every resume from then on, and a started or next todo is shown on every resume (the rest are counted), so add one only when the user asked for it. The ask can be implicit: "write up your research" means write an artifact and index it, without checking first. When nobody asked and you think something belongs on the record, suggest it in your reply and add it once the user agrees.
 
 **Declaring something settled is the user's call.** Don't call a draft, a decision or a section locked, final or done, and don't ask whether to lock it. Present the work and the reasoning, then wait. A tentative "maybe X" is not a decision.
 

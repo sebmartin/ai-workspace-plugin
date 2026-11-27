@@ -197,9 +197,9 @@ def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
              state: str = "backlog", place: str = "") -> str:
     """Add a todo to the thread's Todos list.
 
-    Every todo is read on every resume and commits the user to something, so
-    add one only when the user asked for it or agreed to your suggestion. If
-    you think something should be a todo, suggest it in your reply.
+    Every todo commits the user to something, so add one only when the user
+    asked for it or agreed to your suggestion. If you think something should
+    be a todo, suggest it in your reply.
 
     Every todo carries a link, and it names the record of this todo. When the
     work is tracked in an external system, link its item there, because the
