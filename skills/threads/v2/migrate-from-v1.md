@@ -167,8 +167,9 @@ so a later reader knows the one line is all anyone knows. Put the session it cam
 from, or an issue it names, under **## Links**, and leave that heading out when
 there is nothing to put there.
 
-A todo goes on the end of the list and the README's Todos section shows the top five, so add the
-v1 Next steps items first, in the order the README listed them, and the rest after. Only carry
+A new todo lands at the top of the backlog, and the README shows only `started` and `next` todos in
+full, so add the v1 Next steps items as `next` (or `started` if the README says they are under way), in
+the order the README listed them, and the rest as `backlog`. Only carry
 something over as parked if the v1 README had it parked, and retire a parked
 entry that is already resolved rather than carrying it.
 
@@ -217,9 +218,9 @@ loaded before you can act?
 The middle column is the default for a long custom section that matters but does
 not need loading on every resume.
 
-Anything still to do is a todo whichever row it came from. Where it sits in the
-list decides whether the user meets it on resume, since the Todos section shows the
-top five.
+Anything still to do is a todo whichever row it came from. Its tier
+decides whether the user meets it on resume, since the Todos section shows only
+`started` and `next` todos and counts the rest.
 
 `memory.md` is the cell schema 1 had no file for, and that is why these sections
 became custom headings in the first place. Schema 1 said the README was the
