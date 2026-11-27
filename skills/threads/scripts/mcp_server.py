@@ -324,17 +324,20 @@ def order_todos(workspace_dir: str, thread_name: str, todo_ids: list[str],
     leaves the rest alone. The order is the user's, so propose one and call
     this once they agree.
 
-    This is also how what the README's Todos section shows changes, because what it shows is
-    the top of the list. Nothing has to be promoted when a todo is retired:
-    the sixth becomes the fifth by itself.
+    `before:` and `after:` move the todos into the anchor's tier and change
+    their state, and their files' `state:` lines, to match. `top` and `end`
+    stay within the todos' own tier, and refuse `TIERS_DIFFER` when they come
+    from more than one.
 
-    Returns `{"ordered": <how many were named>}`. A refusal returns
+    Returns `{"ordered": <how many were named>}`, plus `"file_unchanged":
+    [<link>, ...]` naming each moved todo whose file `state:` line could not
+    be updated, so the index and that file now disagree. A refusal returns
     `{"error": CODE, "detail": ...}` and writes nothing: `NO_SUCH_ENTRY`
     naming the ids that are not in the list, including the anchor;
     `PLACE_UNKNOWN` with the `allowed` forms; `DUPLICATE_ID` naming one given
     twice; `ANCHOR_IS_MOVING` when the anchor is one of the todos being moved,
-    so its place is the thing in question; and `IDS_REQUIRED` when no ids were
-    given at all.
+    so its place is the thing in question; `TIERS_DIFFER` listing each todo's
+    state; and `IDS_REQUIRED` when no ids were given at all.
 
     Args:
         workspace_dir: The tracked workspace path from session context.

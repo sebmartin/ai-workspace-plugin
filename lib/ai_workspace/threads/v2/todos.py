@@ -172,3 +172,27 @@ def reordered(entries: list[Entry], ids: list[str], at: int) -> list[Entry]:
     by_id = {e.id: e for e in entries}
     rest = staying(entries, ids)
     return rest[:at] + [by_id[i] for i in ids] + rest[at:]
+
+
+def destination(staying: list[Entry], movers: list[Entry], place: str) -> Spot:
+    """Where `movers` go, and the tier they end up in. Blank `place` is `top`.
+
+    An anchor puts them in the anchor's own tier, which is how a todo changes
+    tier at an exact spot. `top` and `end` have no tier of their own, so they
+    stay in the one the movers share and refuse `TIERS_DIFFER` when there are
+    several, naming each mover's state in the order given.
+    """
+    place = place.strip() or "top"
+    sense, _, anchor = place.partition(":")
+    if sense.strip().lower() in ("top", "end") and not anchor.strip():
+        states = {e.state for e in movers}
+        if len(states) > 1:
+            return Spot(error="TIERS_DIFFER",
+                        detail=", ".join(f"{e.id}:{e.state}" for e in movers))
+        return spot(staying, place, movers[0].state or PARKED)
+    # Any tier will do for the first look: an anchor in another tier says
+    # which one it is, and a malformed or missing one is refused the same way.
+    probe = spot(staying, place, STARTED)
+    if probe.error == "ANCHOR_IN_OTHER_TIER":
+        return spot(staying, place, probe.tier)
+    return probe

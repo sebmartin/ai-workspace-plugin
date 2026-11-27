@@ -830,6 +830,79 @@ class TestTiers:
         assert split_frontmatter((d / "todos" / "a.md").read_text())[0]["state"] == "next"
 
 
+class TestOrderAcrossTiers:
+    def _setup(self, tmp_path):
+        return _thread(tmp_path), str(tmp_path)
+
+    def _add_linked(self, d, ws, name, state, text=None):
+        (d / "todos" / f"{name}.md").write_text(
+            text or f"---\nstate: {state}\n---\nbody\n")
+        out = _reply(add_todo(ws, "t", name.upper(), f"./todos/{name}.md", state=state))
+        return out["id"]
+
+    def test_an_anchor_promotes_todos_into_its_tier(self, tmp_path):
+        d, ws = self._setup(tmp_path)
+        n1 = _add(ws, "N1", state="next")
+        x = self._add_linked(d, ws, "x", "backlog")
+        y = self._add_linked(d, ws, "y", "backlog")
+        assert _reply(order_todos(ws, "t", [y, x], f"after:{n1}")) == {"ordered": 2}
+        assert _titles(d, "next") == ["N1", "Y", "X"]
+        assert _titles(d, "backlog") == []
+        for name in ("x", "y"):
+            text = (d / "todos" / f"{name}.md").read_text()
+            assert split_frontmatter(text)[0]["state"] == "next"
+
+    def test_an_anchor_demotes_todos_into_its_tier(self, tmp_path):
+        d, ws = self._setup(tmp_path)
+        _add(ws, "N1", state="next")
+        n2 = _add(ws, "N2", state="next")
+        x = _add(ws, "X")
+        assert _reply(order_todos(ws, "t", [n2], f"before:{x}"))["ordered"] == 1
+        assert _titles(d, "backlog") == ["N2", "X"]
+        assert _titles(d, "next") == ["N1"]
+
+    def test_an_anchor_in_the_same_tier_reorders_without_a_state_change(self, tmp_path):
+        d, ws = self._setup(tmp_path)
+        n1 = _add(ws, "N1", state="next")
+        _add(ws, "N2", state="next")
+        n3 = self._add_linked(d, ws, "n3", "next")
+        before = (d / "todos" / "n3.md").read_bytes()
+        assert _reply(order_todos(ws, "t", [n3], f"before:{n1}")) == {"ordered": 1}
+        assert _titles(d, "next") == ["N3", "N1", "N2"]
+        assert (d / "todos" / "n3.md").read_bytes() == before
+
+    def test_top_and_end_stay_within_the_tier(self, tmp_path):
+        d, ws = self._setup(tmp_path)
+        _add(ws, "N1", state="next")
+        _add(ws, "N2", state="next")
+        n3 = _add(ws, "N3", state="next")
+        _add(ws, "X")
+        order_todos(ws, "t", [n3])
+        assert _titles(d, "next") == ["N3", "N1", "N2"]
+        assert _titles(d, "backlog") == ["X"]
+        order_todos(ws, "t", [n3], "end")
+        assert _titles(d, "next") == ["N1", "N2", "N3"]
+
+    def test_top_or_end_refuses_todos_from_different_tiers(self, tmp_path):
+        d, ws = self._setup(tmp_path)
+        n1 = _add(ws, "N1", state="next")
+        x = _add(ws, "X")
+        before = idx.index_path(d, "todos").read_bytes()
+        for place in ("top", "end", ""):
+            out = _reply(order_todos(ws, "t", [n1, x], place))
+            assert out["error"] == "TIERS_DIFFER"
+            assert out["detail"] == f"{n1}:next, {x}:backlog"
+        assert idx.index_path(d, "todos").read_bytes() == before
+
+    def test_a_moved_file_the_sync_cannot_update_is_named(self, tmp_path):
+        d, ws = self._setup(tmp_path)
+        n1 = _add(ws, "N1", state="next")
+        x = self._add_linked(d, ws, "x", "backlog", text="---\ntitle: X\n---\nbody\n")
+        out = _reply(order_todos(ws, "t", [x], f"after:{n1}"))
+        assert out["ordered"] == 1
+        assert out["file_unchanged"] == ["./todos/x.md"]
+
+
 class TestDecisions:
     def test_file_and_index_entry_are_written(self, tmp_path):
         d = _thread(tmp_path)

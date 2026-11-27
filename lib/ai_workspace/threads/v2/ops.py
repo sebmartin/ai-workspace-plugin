@@ -470,8 +470,8 @@ def order_todos(thread, todo_ids: list[str], place: str = "") -> str:
     """Move the named todos together, in the order given.
 
     Everything else keeps its relative order, so moving the two items that
-    matter does not disturb the rest of the list. The default place is the
-    top, which is what reordering is usually for.
+    matter does not disturb the rest of the list. An anchor takes the todos
+    into its tier and gives them its state; `top` and `end` stay in their own.
     """
     if not todo_ids:
         return json.dumps({"error": "IDS_REQUIRED"})
@@ -489,18 +489,25 @@ def order_todos(thread, todo_ids: list[str], place: str = "") -> str:
     # Resolved against the list the movers have been taken out of, which is
     # also what makes an anchor that is itself moving impossible to resolve.
     staying = todos_mod.staying(entries, todo_ids)
-    # Until the tiers are known to this tool, the first mover's tier stands in.
-    tier = next(e.state for e in entries if e.id == todo_ids[0]) or todos_mod.BACKLOG
-    where = (todos_mod.spot(staying, place, tier) if place.strip()
-             else todos_mod.Spot(0))
+    by_id = {e.id: e for e in entries}
+    movers = [by_id[i] for i in todo_ids]
+    where = todos_mod.destination(staying, movers, place)
     if where.at is None:
         if where.error == "NO_SUCH_ENTRY" and where.detail in todo_ids:
             return json.dumps({"error": "ANCHOR_IS_MOVING", "detail": where.detail})
         return _unplaceable(where)
+    changed = [e for e in movers if e.state != where.tier]
+    for entry in changed:
+        entry.state = where.tier
     idx.write(thread.dir, "todos",
               todos_mod.reordered(entries, todo_ids, where.at))
+    stale = [link for entry in changed
+             if (link := _sync_file_state(thread.dir, entry, where.tier))]
     render.render(thread.dir)
-    return json.dumps({"ordered": len(todo_ids)})
+    reply: dict = {"ordered": len(todo_ids)}
+    if stale:
+        reply["file_unchanged"] = stale
+    return json.dumps(reply)
 
 
 def log_decision(thread, title: str, summary: str, body: str,

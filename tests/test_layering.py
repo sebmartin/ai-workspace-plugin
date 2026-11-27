@@ -430,7 +430,8 @@ def test_every_tool_that_can_return_file_unchanged_documents_it():
     assert '"file_unchanged"' in ops, (
         "ops.py no longer sets file_unchanged; drop this test with it."
     )
-    for name in ("retire_todo", "retire_decision", "set_todo_state"):
+    for name in ("retire_todo", "retire_decision", "set_todo_state",
+                 "order_todos"):
         assert name in tools, f"{name} is no longer a tool on the surface"
         assert "file_unchanged" in tools[name], (
             f"{name} can return `file_unchanged` and its docstring does not "
