@@ -196,6 +196,23 @@ def _window_first(text: str, entries: list[Entry]) -> list[Entry]:
     return first + [e for e in entries if e.id not in set(named)]
 
 
+class Unreadable(Exception):
+    """An index holds a line that is not an entry.
+
+    Raised rather than skipped: the next write rewrites the whole file from what
+    was read, so a skipped line would be deleted without anyone being told.
+    """
+
+    def __init__(self, path: Path, lines: list[tuple[int, str]]):
+        super().__init__(f"{path}: {len(lines)} line(s) are not entries")
+        self.path = path
+        self.lines = lines
+
+    def refusal(self) -> dict:
+        return {"error": "INDEX_UNREADABLE", "detail": str(self.path),
+                "lines": [{"line": n, "text": t} for n, t in self.lines]}
+
+
 def read(thread_dir: Path, kind: str, retired: bool = False) -> list[Entry]:
     """The entries, in file order. A missing index is an empty index.
 
@@ -204,26 +221,52 @@ def read(thread_dir: Path, kind: str, retired: bool = False) -> list[Entry]:
     because the shape marker is its own file — were absence of an index the
     sentinel, tolerating a missing one would be indistinguishable from schema 1.
 
-    Lines are matched rather than parsed around, so anything that is not an
-    entry is skipped. The one thing read out of what is left is a `windows:`
-    block, whose order this schema keeps as line order instead.
+    A non-blank line that is not an entry raises `Unreadable` naming every such
+    line, since skipping one would lose it on the next write. Blank lines and
+    line endings are ignored. In a live todo index a leading `---` block (the
+    legacy `windows:` block) is tolerated, and its order is kept as line order.
     """
     path = index_path(thread_dir, kind, retired)
     if not path.exists():
         return []
     text = path.read_text()
+    lines = text.splitlines()
+    skip_to = 0
+    if kind in ORDERED and not retired and lines and lines[0].strip() == "---":
+        for n, line in enumerate(lines[1:], 2):
+            if line.strip() == "---":
+                skip_to = n
+                break
     entries = []
-    for line in text.splitlines():
+    bad: list[tuple[int, str]] = []
+    for n, line in enumerate(lines, 1):
+        if n <= skip_to or not line.strip():
+            continue
         hit = _LINE_RE.match(line)
         if hit:
             entries.append(Entry(hit["id"], hit["state"], hit["title"], hit["link"],
                                  hit["description"] or ""))
+        else:
+            bad.append((n, line))
+    if bad:
+        raise Unreadable(path, bad)
     # Only where one was ever written, and only where order means anything: a
     # retired index is a chronology, so a block in one would be reordering a
     # record of what happened.
     if kind in ORDERED and not retired:
         return _window_first(text, entries)
     return entries
+
+
+def damage(thread_dir: Path) -> dict | None:
+    """The refusal for the first index that cannot be read, or None."""
+    for retired, kinds in ((False, TYPES), (True, RETIRED_TYPES)):
+        for kind in kinds:
+            try:
+                read(thread_dir, kind, retired)
+            except Unreadable as e:
+                return e.refusal()
+    return None
 
 
 def write(thread_dir: Path, kind: str, entries: list[Entry],

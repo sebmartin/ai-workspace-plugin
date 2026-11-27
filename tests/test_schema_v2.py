@@ -275,6 +275,46 @@ class TestSchemaDetection:
 
 
 class TestIndex:
+    def test_a_line_that_is_not_an_entry_is_refused_with_its_number(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        p = idx.index_path(d, "decisions")
+        p.write_text("- 20260101-a:locked [A](./decisions/a.md)\n\nnot an entry\n"
+                     "- 20260102-b:locked [B](./decisions/b.md)\n")
+        with pytest.raises(idx.Unreadable) as e:
+            idx.read(d, "decisions")
+        assert e.value.lines == [(3, "not an entry")]
+        assert e.value.refusal() == {"error": "INDEX_UNREADABLE", "detail": str(p),
+                                     "lines": [{"line": 3, "text": "not an entry"}]}
+
+    def test_a_retired_index_is_held_to_the_same_rule(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        idx.index_path(d, "todos", retired=True).write_text(
+            "- 20260101-a:done [A](./todos/a.md)\n# heading\n")
+        with pytest.raises(idx.Unreadable) as e:
+            idx.read(d, "todos", retired=True)
+        assert e.value.lines == [(2, "# heading")]
+
+    def test_crlf_and_whitespace_only_lines_are_not_unreadable(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        idx.index_path(d, "decisions").write_bytes(
+            b"- 20260101-a:locked [A](./decisions/a.md)  \r\n   \r\n")
+        assert [e.id for e in idx.read(d, "decisions")] == ["20260101-a"]
+
+    def test_the_legacy_window_block_is_not_reported(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        idx.index_path(d, "todos").write_text(
+            "---\nwindows:\n  next_steps: [20260101-a]\n---\n"
+            "- 20260101-a:active [A](./todos/a.md)\n")
+        assert len(idx.read(d, "todos")) == 1
+
+    def test_damage_names_the_first_broken_index(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        assert idx.damage(d) is None
+        idx.index_path(d, "sessions").write_text("oops\n")
+        broken = idx.damage(d)
+        assert broken is not None
+        assert broken["detail"] == str(idx.index_path(d, "sessions"))
+
     def test_missing_index_is_empty_not_an_error(self, tmp_path):
         d = _v2_thread(tmp_path)
         assert idx.read(d, "decisions") == []
@@ -397,7 +437,8 @@ class TestIndex:
 
     def test_only_a_live_todo_index_is_reordered_by_a_block(self, tmp_path):
         """Nothing ever wrote one anywhere else, and a retired index is a
-        chronology, so reordering it would be wrong wherever it came from."""
+        chronology, so reordering it would be wrong wherever it came from.
+        The block is not tolerated there, so it is refused rather than read."""
         d = _v2_thread(tmp_path)
         idx.write(d, "todos", [
             idx.Entry("20260101-a", "done", "A", "./todos/a.md"),
@@ -406,8 +447,9 @@ class TestIndex:
         path = idx.index_path(d, "todos", retired=True)
         path.write_text("---\nwindows:\n  next_steps: [20260102-b]\n---\n"
                         + path.read_text())
-        assert [e.id for e in idx.read(d, "todos", retired=True)] == [
-            "20260101-a", "20260102-b"]
+        with pytest.raises(idx.Unreadable) as e:
+            idx.read(d, "todos", retired=True)
+        assert e.value.lines[0] == (1, "---")
 
     def test_only_an_ordered_kind_is_reordered_by_a_block(self, tmp_path):
         d = _v2_thread(tmp_path)
@@ -418,8 +460,9 @@ class TestIndex:
         path = idx.index_path(d, "decisions")
         path.write_text("---\nwindows:\n  next_steps: [20260102-b]\n---\n"
                         + path.read_text())
-        assert [e.id for e in idx.read(d, "decisions")] == [
-            "20260101-a", "20260102-b"]
+        with pytest.raises(idx.Unreadable) as e:
+            idx.read(d, "decisions")
+        assert e.value.lines[0] == (1, "---")
 
     def test_a_window_naming_a_todo_that_is_gone_is_skipped(self, tmp_path):
         d = _v2_thread(tmp_path)

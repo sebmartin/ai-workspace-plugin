@@ -591,6 +591,8 @@ def star_artifact(thread, artifact_id: str, when: str) -> str:
         return json.dumps({"error": "WHEN_HAS_LINE_BREAK"})
     if len(when) > MAX_DESCRIPTION:
         return json.dumps({"error": "WHEN_TOO_LONG", "detail": str(MAX_DESCRIPTION)})
+    if (broken := idx.damage(thread.dir)) is not None:
+        return json.dumps(broken)
     live = idx.read(thread.dir, "artifacts")
     entry = idx.find(live, artifact_id)
     if entry is None or entry.state not in idx.IN_FORCE["artifacts"]:

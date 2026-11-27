@@ -1,5 +1,6 @@
 """Schema 2 thread operations: the indexes are the record, the README is a view."""
 
+import json
 import re
 from datetime import date
 from pathlib import Path
@@ -99,7 +100,10 @@ _OLD_ABOUT_PLACEHOLDER = "What this thread is about, and what it is for."
 
 def resume(thread) -> str:
     """The composed payload, built from the indexes rather than the README."""
-    return compose(thread.dir, thread.name)
+    try:
+        return compose(thread.dir, thread.name)
+    except idx.Unreadable as e:
+        return json.dumps(e.refusal())
 
 
 def about(thread) -> str:

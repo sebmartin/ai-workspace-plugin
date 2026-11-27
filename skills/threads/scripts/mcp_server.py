@@ -72,6 +72,7 @@ def resume_thread(workspace_dir: str, thread_name: str) -> str:
     "schema": <n>, "reads": [<low>, <high>]}`: `SCHEMA_TOO_NEW` (upgrade the
     plugin), `SCHEMA_RETIRED` (migrate it with a version that still reads it),
     or `UNREADABLE_SCHEMA` (its marker file is not an integer).
+    A damaged index line returns `INDEX_UNREADABLE` with the file and each bad line.
 
     Args:
         workspace_dir: Directory hint for locating the workspace; typically the

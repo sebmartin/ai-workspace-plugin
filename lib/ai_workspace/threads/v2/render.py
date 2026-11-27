@@ -10,6 +10,7 @@ README of both threads it connects. There is no tool for it: the fields are
 hand-edited, and the renderer leaves the header alone.
 """
 
+import json
 import re
 from pathlib import Path
 
@@ -96,6 +97,8 @@ def blocked(thread_dir: Path) -> str | None:
     if ambiguous:
         return ambiguous
     if pattern:
+        if (broken := idx.damage(thread_dir)) is not None:
+            return json.dumps(broken)
         return None
     return (
         f"Error: {readme} has no `## {TODOS}` heading, so it is not a "

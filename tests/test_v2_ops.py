@@ -1753,3 +1753,45 @@ class TestStars:
         assert _reply(unstar_artifact(ws, "t", "20260415-notes-old-plan"))["id"] \
             == "20260415-notes-old-plan"
         assert stars.read(d) == []
+
+
+class TestUnreadableIndex:
+    BROKEN = "this line is not an entry"
+
+    @pytest.mark.parametrize("kind", ["todos", "sessions"])
+    @pytest.mark.parametrize("call", [
+        lambda ws, i: add_todo(ws, "t", "New", "./s.md"),
+        lambda ws, i: retire_todo(ws, "t", i, "done"),
+        lambda ws, i: set_todo_state(ws, "t", i, "parked"),
+        lambda ws, i: order_todos(ws, "t", [i]),
+        lambda ws, i: log_decision(ws, "t", "D", "s", "b"),
+        lambda ws, i: index_file(ws, "t", "./artifacts/x.md"),
+        lambda ws, i: index_directory(ws, "t", "./sessions"),
+        lambda ws, i: save_session(ws, "t", "s", "s", "k", "# S\n", ["a"], []),
+        lambda ws, i: set_about(ws, "t", "x"),
+        lambda ws, i: star_artifact(ws, "t", "20260101-x", "when needed"),
+    ])
+    def test_every_write_tool_refuses_a_damaged_index_and_writes_nothing(
+            self, tmp_path, kind, call):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        i = _reply(add_todo(ws, "t", "Old", "./s.md"))["id"]
+        (d / "artifacts" / "x.md").write_text("x\n")
+        path = idx.index_path(d, kind)
+        if kind == "sessions":
+            path.write_text("- 20260101-s [S](./sessions/20260101-s.md)\n")
+        with path.open("a") as f:
+            f.write(f"{self.BROKEN}\n")
+        before = {p: p.read_bytes() for p in d.rglob("*") if p.is_file()}
+        out = _reply(call(ws, i))
+        assert out["error"] == "INDEX_UNREADABLE"
+        assert out["detail"] == str(path)
+        assert out["lines"][0]["text"] == self.BROKEN
+        assert {p: p.read_bytes() for p in d.rglob("*") if p.is_file()} == before
+
+    def test_resume_refuses_a_damaged_index(self, tmp_path):
+        from mcp_server import resume_thread
+        d = _thread(tmp_path)
+        idx.index_path(d, "todos").write_text(f"{self.BROKEN}\n")
+        out = resume_thread(str(tmp_path), "t")
+        assert "INDEX_UNREADABLE" in out and self.BROKEN in out

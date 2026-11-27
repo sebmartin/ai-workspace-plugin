@@ -112,6 +112,14 @@ def _indexed_targets(thread_dir: Path, kind: str) -> set[str]:
 
 
 def audit(original: Path, converted: Path) -> str:
+    """Compare the original tree against the converted copy, or refuse on a damaged index."""
+    try:
+        return _audit(original, converted)
+    except idx.Unreadable as e:
+        return json.dumps(e.refusal())
+
+
+def _audit(original: Path, converted: Path) -> str:
     """Compare the original tree against the converted copy.
 
     Deterministic on purpose: files present in one and not the other, entries
