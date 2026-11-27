@@ -902,6 +902,15 @@ class TestOrderAcrossTiers:
         assert out["ordered"] == 1
         assert out["file_unchanged"] == ["./todos/x.md"]
 
+    def test_a_move_past_the_window_says_so_once(self, tmp_path):
+        ws = self._setup(tmp_path)[1]
+        n = [_add(ws, f"N{i}", state="next") for i in range(4)]
+        p = _add(ws, "P", state="parked")
+        b = _add(ws, "B")
+        assert _reply(order_todos(ws, "t", [p], f"before:{b}"))["active"] == 6
+        # Already past the window, so a further move stays quiet.
+        assert "active" not in _reply(order_todos(ws, "t", [n[0]], f"after:{b}"))
+
 
 class TestDecisions:
     def test_file_and_index_entry_are_written(self, tmp_path):

@@ -496,17 +496,20 @@ def order_todos(thread, todo_ids: list[str], place: str = "") -> str:
         if where.error == "NO_SUCH_ENTRY" and where.detail in todo_ids:
             return json.dumps({"error": "ANCHOR_IS_MOVING", "detail": where.detail})
         return _unplaceable(where)
+    before = [idx.Entry(e.id, e.state, e.title, e.link, e.description) for e in entries]
     changed = [e for e in movers if e.state != where.tier]
     for entry in changed:
         entry.state = where.tier
-    idx.write(thread.dir, "todos",
-              todos_mod.reordered(entries, todo_ids, where.at))
+    entries = todos_mod.reordered(entries, todo_ids, where.at)
+    idx.write(thread.dir, "todos", entries)
     stale = [link for entry in changed
              if (link := _sync_file_state(thread.dir, entry, where.tier))]
     render.render(thread.dir)
     reply: dict = {"ordered": len(todo_ids)}
     if stale:
         reply["file_unchanged"] = stale
+    if waiting := todos_mod.just_crowded(before, entries):
+        reply["active"] = waiting
     return json.dumps(reply)
 
 

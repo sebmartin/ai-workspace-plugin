@@ -331,7 +331,8 @@ def order_todos(workspace_dir: str, thread_name: str, todo_ids: list[str],
 
     Returns `{"ordered": <how many were named>}`, plus `"file_unchanged":
     [<link>, ...]` naming each moved todo whose file `state:` line could not
-    be updated, so the index and that file now disagree. A refusal returns
+    be updated, so the index and that file now disagree, and `active` carrying
+    the count when the move takes the list past the window. A refusal returns
     `{"error": CODE, "detail": ...}` and writes nothing: `NO_SUCH_ENTRY`
     naming the ids that are not in the list, including the anchor;
     `PLACE_UNKNOWN` with the `allowed` forms; `DUPLICATE_ID` naming one given
