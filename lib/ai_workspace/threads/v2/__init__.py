@@ -20,7 +20,7 @@ from ai_workspace.threads.v2.ops import (
     star_artifact,
     unstar_artifact,
 )
-from ai_workspace.threads.v2.thread import about, create, resume
+from ai_workspace.threads.v2.thread import about, create, list_todos, resume
 
 __all__ = [
     "about",
@@ -29,6 +29,7 @@ __all__ = [
     "index_directory",
     "index_file",
     "links",
+    "list_todos",
     "log_decision",
     "order_todos",
     "resume",

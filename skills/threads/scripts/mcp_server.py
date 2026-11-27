@@ -361,6 +361,24 @@ def order_todos(workspace_dir: str, thread_name: str, todo_ids: list[str],
 
 
 @mcp.tool()
+def list_todos(workspace_dir: str, thread_name: str, states: list[str]) -> str:
+    """List the todos in the given states, for grooming `backlog` and `parked`.
+
+    Returns `{"todos": [{"id", "state", "title", "link"}, ...]}` in file order.
+    Only the four in-force states are listed; retired todos are in
+    `todos-retired.md`. A refusal returns `{"error": CODE}`: `STATES_REQUIRED`
+    for an empty list, `STATE_UNKNOWN` with the first bad state as `detail` and
+    the `allowed` ones, and `INDEX_UNREADABLE` for a damaged index.
+
+    Args:
+        workspace_dir: The tracked workspace path from session context.
+        thread_name: Name of the thread (kebab-case).
+        states: Any of `started`, `next`, `backlog`, `parked`.
+    """
+    return _threads.list_todos(workspace_dir, thread_name, states)
+
+
+@mcp.tool()
 def log_decision(workspace_dir: str, thread_name: str, title: str, summary: str,
                  body: str, state: str = "proposed",
                  supersedes: list[str] | None = None) -> str:

@@ -39,6 +39,7 @@ __all__ = [
     "create",
     "index_directory",
     "index_file",
+    "list_todos",
     "log_decision",
     "migration_safety_check",
     "names_one_directory",
@@ -284,6 +285,14 @@ def order_todos(workspace_dir: str, thread_name: str, todo_ids: list[str],
     if isinstance(call, str):
         return call
     return call.fn(call.thread, todo_ids, place)
+
+
+def list_todos(workspace_dir: str, thread_name: str, states: list[str]) -> str:
+    """List the in-force todos in the given states."""
+    call = _for(workspace_dir, thread_name, "list_todos")
+    if isinstance(call, str):
+        return call
+    return call.fn(call.thread, states)
 
 
 def log_decision(workspace_dir: str, thread_name: str, title: str, summary: str,

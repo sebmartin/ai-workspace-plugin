@@ -19,6 +19,7 @@ from mcp_server import (
     add_todo,
     index_directory,
     index_file,
+    list_todos,
     log_decision,
     order_todos,
     retire_artifact,
@@ -86,6 +87,7 @@ class TestRefusalOnSchema1:
             retire_todo(ws, "old", "i", "done"),
             set_todo_state(ws, "old", "i", "parked"),
             order_todos(ws, "old", ["i"]),
+            list_todos(ws, "old", ["next"]),
             log_decision(ws, "old", "t", "s", "b"),
             retire_decision(ws, "old", "i", "superseded"),
             index_file(ws, "old", "./artifacts/x.md"),
@@ -908,6 +910,58 @@ class TestOrderAcrossTiers:
         out = _reply(order_todos(ws, "t", [x], f"after:{n1}"))
         assert out["ordered"] == 1
         assert out["file_unchanged"] == ["./todos/x.md"]
+
+class TestListTodos:
+    FOUR = ["started", "next", "backlog", "parked"]
+
+    def _five(self, ws):
+        ids = {}
+        for title, state in (("S", "started"), ("N1", "next"), ("N2", "next"),
+                             ("B", "backlog"), ("P", "parked")):
+            ids[title] = _reply(add_todo(ws, "t", title, "./s.md", state=state))["id"]
+        return ids
+
+    def test_lists_the_requested_states_in_file_order(self, tmp_path):
+        _thread(tmp_path)
+        ws = str(tmp_path)
+        ids = self._five(ws)
+        out = _reply(list_todos(ws, "t", ["backlog", "next"]))
+        assert [t["title"] for t in out["todos"]] == ["N1", "N2", "B"]
+        assert out["todos"][0] == {"id": ids["N1"], "state": "next",
+                                   "title": "N1", "link": "./s.md"}
+
+    def test_a_retired_state_is_refused(self, tmp_path):
+        _thread(tmp_path)
+        out = _reply(list_todos(str(tmp_path), "t", ["done"]))
+        assert out == {"error": "STATE_UNKNOWN", "detail": "done",
+                       "allowed": self.FOUR}
+
+    def test_active_is_refused(self, tmp_path):
+        _thread(tmp_path)
+        out = _reply(list_todos(str(tmp_path), "t", ["next", "active"]))
+        assert out["error"] == "STATE_UNKNOWN"
+        assert out["detail"] == "active"
+
+    def test_no_states_is_refused(self, tmp_path):
+        _thread(tmp_path)
+        assert _reply(list_todos(str(tmp_path), "t", [])) == {"error": "STATES_REQUIRED"}
+
+    def test_a_damaged_index_is_refused(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        add_todo(ws, "t", "A", "./s.md", state="next")
+        with idx.index_path(d, "todos").open("a") as f:
+            f.write("junk\n")
+        assert _reply(list_todos(ws, "t", ["next"]))["error"] == "INDEX_UNREADABLE"
+
+    def test_listing_writes_nothing(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        self._five(ws)
+        before = {p: p.read_bytes() for p in d.rglob("*") if p.is_file()}
+        list_todos(ws, "t", self.FOUR)
+        assert {p: p.read_bytes() for p in d.rglob("*") if p.is_file()} == before
+
 
 class TestDecisions:
     def test_file_and_index_entry_are_written(self, tmp_path):

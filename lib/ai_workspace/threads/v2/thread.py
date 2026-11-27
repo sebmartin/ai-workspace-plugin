@@ -106,6 +106,24 @@ def resume(thread) -> str:
         return json.dumps(e.refusal())
 
 
+def list_todos(thread, states: list[str]) -> str:
+    """The in-force todos in the given states, in file order."""
+    if not states:
+        return json.dumps({"error": "STATES_REQUIRED"})
+    allowed = list(idx.IN_FORCE["todos"])
+    for state in states:
+        if state not in allowed:
+            return json.dumps({"error": "STATE_UNKNOWN", "detail": state,
+                               "allowed": allowed})
+    try:
+        entries = idx.read(thread.dir, "todos")
+    except idx.Unreadable as e:
+        return json.dumps(e.refusal())
+    return json.dumps({"todos": [
+        {"id": e.id, "state": e.state, "title": e.title, "link": e.link}
+        for e in entries if e.state in states]})
+
+
 def about(thread) -> str:
     """The README's About section, with the template's placeholder counting as none."""
     try:
