@@ -377,7 +377,7 @@ def test_the_todo_link_rule_is_stated_the_same_way_in_every_file():
     """
     RULE = "record of this todo"
     SCHEME = "todos/YYYYMMDD-slug.md"
-    states = ("active", "started", "parked", "done", "dropped")
+    states = ("started", "next", "backlog", "parked", "done", "dropped")
 
     for rel in ("skills/threads/SKILL.md",
                 "skills/threads/scripts/mcp_server.py",
@@ -412,6 +412,7 @@ def test_the_todo_link_rule_is_stated_the_same_way_in_every_file():
             f"every state a todo can hold, because a reader editing the file by "
             f"hand has only this comment to go on."
         )
+    assert "state: backlog" in template
 
 
 def test_every_tool_that_can_return_file_unchanged_documents_it():
@@ -430,7 +431,8 @@ def test_every_tool_that_can_return_file_unchanged_documents_it():
     assert '"file_unchanged"' in ops, (
         "ops.py no longer sets file_unchanged; drop this test with it."
     )
-    for name in ("retire_todo", "retire_decision", "set_todo_state"):
+    for name in ("retire_todo", "retire_decision", "set_todo_state",
+                 "order_todos"):
         assert name in tools, f"{name} is no longer a tool on the surface"
         assert "file_unchanged" in tools[name], (
             f"{name} can return `file_unchanged` and its docstring does not "
@@ -438,6 +440,16 @@ def test_every_tool_that_can_return_file_unchanged_documents_it():
             f"assistant that has not read it will drop the key and the index "
             f"and the file stay silently disagreeing."
         )
+
+
+def test_the_skill_describes_todo_tiers():
+    skill = (REPO / "skills" / "threads" / "SKILL.md").read_text()
+    for phrase in ("`started`", "`next`", "`backlog`", "`parked`", "`list_todos`",
+                   "`next_empty`", "`(started)`", "`INDEX_UNREADABLE`",
+                   "starred artifact"):
+        assert phrase in skill, phrase
+    for gone in ("top five", "bounded to five", "`active`"):
+        assert gone not in skill, gone
 
 
 def test_the_skill_describes_the_resume_this_plugin_returns():
@@ -459,13 +471,15 @@ def test_the_skill_describes_the_resume_this_plugin_returns():
     migrate =(REPO / "skills" / "threads" / "v2" / "migrate-from-v1.md").read_text()
     assert "## Todos" in migrate and "set_about" in migrate and "**Recently**" in migrate
     assert "`## Next steps`" not in migrate
+    assert "top five" not in migrate
+    assert 'state="next"' in migrate
     for phrase in ("you have to know when to read it", "`star_artifact`",
                    "not a dumping ground", "without asking"):
         assert phrase in migrate, phrase
 
     for manifest in (".claude-plugin/plugin.json", ".codex-plugin/plugin.json"):
         version = json.loads((REPO / manifest).read_text())["version"]
-        assert tuple(int(n) for n in version.split(".")) >= (3, 4, 0), version
+        assert tuple(int(n) for n in version.split(".")) >= (3, 5, 0), version
 
 
 def test_writes_to_another_thread_go_through_the_thread_writer():

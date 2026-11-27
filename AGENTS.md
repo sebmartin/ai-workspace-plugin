@@ -207,7 +207,7 @@ The API in `threads/__init__.py` is one named function per operation. Each
 resolves the thread, finds its schema's implementation, and hands off:
 
 ```python
-def add_todo(workspace_dir, thread_name, title, link, state="active"):
+def add_todo(workspace_dir, thread_name, title, link, state="backlog"):
     thread, fn, error = _for(workspace_dir, thread_name, "add_todo")
     return error or fn(thread, title, link, state)
 ```

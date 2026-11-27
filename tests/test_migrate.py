@@ -10,8 +10,10 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
 sys.path.insert(0, str(Path(__file__).parent.parent / "skills" / "threads" / "scripts"))
 
+from ai_workspace.plugin import get_template_path
 from ai_workspace.threads import marker, migrate
 from ai_workspace.threads.v2 import index as idx
+from mcp_server import add_todo, audit_migration, index_directory, list_todos, set_about
 
 
 @pytest.fixture(autouse=True)
@@ -83,6 +85,13 @@ class TestSafetyCheck:
 
 
 class TestAudit:
+    def test_the_audit_refuses_a_damaged_index(self, tmp_path):
+        v1 = _v1(tmp_path)
+        d = _converted_from(v1, tmp_path)
+        (d / "sessions-index.md").write_text("oops\n")
+        out = json.loads(migrate.audit(v1, d))
+        assert out["error"] == "INDEX_UNREADABLE"
+
     def test_a_todo_cannot_vouch_for_the_sessions_index(self, tmp_path):
         """The union across indexes passed a thread with no sessions index at all.
 
@@ -224,3 +233,66 @@ class TestAudit:
         conv = _converted_from(v1, tmp_path)
         out = migrate.audit(v1, conv)
         assert "spec.pdf" not in out
+
+
+class TestGuideEndToEnd:
+    def test_the_guide_s_calls_give_next_backlog_and_a_backup_in_next(self, tmp_path):
+        """Runs the calls skills/threads/v2/migrate-from-v1.md tells a session to make."""
+        import shutil
+        ws = tmp_path
+        t = ws / "threads" / "t"
+        (t / "sessions").mkdir(parents=True)
+        (t / "decisions").mkdir()
+        (t / "README.md").write_text(
+            "# t\n\n## Quick Resume\n\n**Next steps**:\n"
+            + "".join(f"- S{n}\n" for n in range(1, 8))
+            + "\n## Open Questions\n\n- Q1\n\n## Parked\n\n- P1\n")
+        (t / "sessions" / "20260101-first.md").write_text(
+            "---\ndate: 2026-01-01\nsummary: First.\n---\nx\n")
+        (t / "decisions" / "20260202-choice.md").write_text(
+            "---\nstate: locked\nsummary: Chose x.\n---\n")
+
+        v1 = ws / "threads" / "t-v1"
+        v2 = ws / "threads" / "t-v2"
+        t.rename(v1)
+        shutil.copytree(v1, v2)
+        marker.write(v2, 2)
+        (v2 / "README.md").write_text(
+            get_template_path("v2/thread-template.md").read_text()
+            .replace("[Thread Name]", "t").replace("[YYYY-MM-DD]", "2026-01-01"))
+        index_directory(str(ws), "t-v2", "./sessions")
+        index_directory(str(ws), "t-v2", "./decisions")
+
+        template = get_template_path("v2/todo-template.md").read_text()
+        (v2 / "todos").mkdir()
+
+        def todo(thread_dir, title, **kwargs):
+            slug = title.lower().replace(" ", "-").replace("/", "-")
+            name = f"20260101-{slug}"
+            (thread_dir / "todos" / f"{name}.md").write_text(
+                template.replace("[Todo Title]", title))
+            result = json.loads(add_todo(
+                str(ws), thread_dir.name, title, f"./todos/{name}.md", **kwargs))
+            assert "id" in result, result
+
+        for n in range(1, 6):
+            todo(v2, f"S{n}", state="next")
+        # A new backlog todo lands at the top, so add them last-first to keep README order.
+        todo(v2, "Q1")
+        todo(v2, "S7")
+        todo(v2, "S6")
+        todo(v2, "P1", state="parked")
+        set_about(str(ws), "t-v2", "short about")
+        assert json.loads(audit_migration(str(ws), "t-v1", "t-v2"))["clean"] is True
+
+        v2.rename(ws / "threads" / "t")
+        todo(ws / "threads" / "t", "Remove or archive threads/t-v1", state="next")
+
+        def titles(*states):
+            return [x["title"] for x in
+                    json.loads(list_todos(str(ws), "t", list(states)))["todos"]]
+
+        assert titles("next") == ["S1", "S2", "S3", "S4", "S5",
+                                  "Remove or archive threads/t-v1"]
+        assert titles("backlog") == ["S6", "S7", "Q1"]
+        assert titles("parked") == ["P1"]

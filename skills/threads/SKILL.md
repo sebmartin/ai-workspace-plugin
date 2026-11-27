@@ -120,7 +120,7 @@ A schema 1 thread keeps all of that inline in its README, so one read covers it.
 
 **Print About, Status and Todos**, in that order, with the counts from the Todos heading. Everything else is context you hold, not output. A list of thirty-five decisions is for you, not for the screen. Counts are not stored anywhere, so say them from what you read.
 
-**Print each todo as a markdown link on its title**, so the user can open what it points at rather than asking you for it. An external URL goes as it is. Drop the id, which is for your calls rather than the screen, and name a state only when it is not `active`.
+**Print each todo as a markdown link on its title**, so the user can open what it points at rather than asking you for it. An external URL goes as it is. Drop the id, which is for your calls rather than the screen, and name a state only for a started todo, as a suffix: `(started)`.
 
 The payload carries the full text of the newest sessions, then summaries of the few before them, and the heading says how many it is not holding. Before answering a question about earlier work from memory, search `sessions/`, whose files carry `summary:` and `keywords:` frontmatter.
 
@@ -128,13 +128,13 @@ The payload carries the full text of the newest sessions, then summaries of the 
 
 ### Writing
 
-**Adding to the record is the user's call.** Every index entry (a todo, a decision, an artifact, a star) and every `memory.md` entry is read on every resume from then on, so add one only when the user asked for it. The ask can be implicit: "write up your research" means write an artifact and index it, without checking first. When nobody asked and you think something belongs on the record, suggest it in your reply and add it once the user agrees.
+**Adding to the record is the user's call.** Every decision, artifact and star and every `memory.md` entry is read on every resume from then on, and a started or next todo is shown on every resume (the rest are counted), so add one only when the user asked for it. The ask can be implicit: "write up your research" means write an artifact and index it, without checking first. When nobody asked and you think something belongs on the record, suggest it in your reply and add it once the user agrees.
 
 **Declaring something settled is the user's call.** Don't call a draft, a decision or a section locked, final or done, and don't ask whether to lock it. Present the work and the reasoning, then wait. A tentative "maybe X" is not a decision.
 
 **Say "saved", not "archived", when you have written a file.** Archiving is a different operation in this plugin: it retires a whole thread from the active list. Calling a save an archive tells the user their work was put away.
 
-Never hand-edit an index, `artifacts-starred.md` or the README's Todos section. The indexes and the Todos section are rendered from what the tools write, and the tools are the only writers of the star file, which they rewrite whole, so a hand edit to any of them will be overwritten or lost. Status is written only by `save_session`, on every save; never edit it by hand, since the next save overwrites it, except when migrating a thread as `migrate-from-v1.md` describes. About is written by `set_about`, never by hand. The header fields and `memory.md` have no tool; edit them directly.
+Never hand-edit an index, `artifacts-starred.md` or the README's Todos section. The indexes and the Todos section are rendered from what the tools write, and the tools are the only writers of the star file, which they rewrite whole, so a hand edit to any of them will be overwritten or lost. Status is written only by `save_session`, on every save; never edit it by hand, since the next save overwrites it, except when migrating a thread as `migrate-from-v1.md` describes. The one exception for an index is an `INDEX_UNREADABLE` refusal. It names the file and each line it could not read, with its number. Repair those lines so they read, then retry; never delete or recreate the file. About is written by `set_about`, never by hand. The header fields and `memory.md` have no tool; edit them directly.
 
 A render replaces `## Todos` down to the next `##`, so never leave it as the last section of a README. Anything below it is swallowed without a word.
 
@@ -164,7 +164,7 @@ belong inside the todo file under `## Links`.
 
 Name the file `todos/YYYYMMDD-slug.md` and start it from
 `get_skill_file("templates/v2/todo-template.md")`. Write it before calling
-`add_todo`, which refuses a thread path with no file behind it.
+`add_todo`, which refuses a thread path with no file behind it. Set the file's `state:` line to the state you will pass, because `add_todo` does not touch the file and the template says `backlog`.
 
 **Linking two threads has no tool.** The three link fields in the header are
 hand-edited, and the work is judgement rather than mechanism: you have to look
@@ -174,11 +174,29 @@ can be written to at all. Fetch
 
 **A decision is a choice that was made.** Its summary loads on every resume, so do not even propose one whose rejected alternative you cannot name, or that dies with this task; that is a session log entry.
 
-**The README's Todos section is the top of the todo list, bounded to five.** Parking takes a todo off the list, so it is the top five of what is active. The rest of the list is in `todos-index.md`, and resume counts it for you. Nothing promotes anything: retire the first todo and the sixth becomes fifth by itself.
+### Todos
 
-**The order is the user's.** Propose one and apply it once they agree, and say where you put a new todo so they can move it.
+A todo is in one of four tiers, held as its state:
 
-**Starting on a todo marks it started, and nothing more.** Any request to start or resume a todo, in whatever words, first sets it to `started` with `set_todo_state`, and you tell the user you did. Then give a short summary of where it stands, propose a first or next step if one is clear, and stop until they say which step to take. Picking one from a list, naming it, and handing it to another skill to design or build all count as starting; the hand-off is the step they asked for.
+- `started`: work in progress. Several can be started at once, and one stays started until it is retired or moved.
+- `next`: groomed and ready, in the user's order.
+- `backlog`: unsorted. New todos land here.
+- `parked`: might come back, maybe not.
+
+The README shows `started` and `next` in full and counts `backlog` and `parked`. `list_todos` reads a tier in full. A todo moved up a tier lands at the bottom of it; moved down, at the top. `order_todos` with `place` set to `before:<id>` or `after:<id>` puts a todo in an exact spot in any tier; `top` and `end` put it at either edge of its own tier, so a backlog todo moved to `top` is still out of sight.
+
+**Moving a todo into `next` is the user's call.** Propose it and apply once they agree. A new todo lands at the top of the backlog unless you pass `state`.
+
+**Starting on a todo marks it started, and nothing more.** Any request to start or resume a todo, in whatever words, first sets it to `started` with `set_todo_state`, and you tell the user you did. Other started todos stay started. Then give a short summary of where it stands, propose a first or next step if one is clear, and stop until they say which step to take. Picking one from a list, naming it, and handing it to another skill to design or build all count as starting; the hand-off is the step they asked for.
+
+**Two signals ask you to talk to the user.**
+
+- A `next` count in a reply, or "Next holds N, more than five" on resume: read the thread and propose specific moves with reasons, such as "6 and 7 look stale, send them back to the backlog?", not a generic warning.
+- `next_empty` in a reply, or "Next is empty while the backlog holds N" on resume: ask what is next and offer to groom the backlog.
+
+**Grooming.** When the user names what is next, or `next` is empty, list the backlog with `list_todos` and read the titles. Open only the files that look relevant or stale. Propose what to promote to `next`, what looks stale (already done, overtaken by a decision, no longer fitting the thread), and what to park or drop. Apply nothing until the user agrees. Judge staleness against recent sessions and decisions; a todo's date is a hint, not a rule. Check `todos-retired.md` to see whether something was already done.
+
+**Work bigger than one todo.** Keep a starred artifact holding its intent and overall shape, and leave progress to todos and sessions so the two don't drift.
 
 ### Memory
 
@@ -201,7 +219,7 @@ A save writes the session log and the Status section, because todos, decisions a
 
 - At each save, look at the Recently and Up next you were shown on resume and pass what is now true as `recently` and `up_next`. Both are passed every time; passing the same items is a valid answer. Recently is the thread's recent work, newest first, not only this session: keep an earlier item that is still live. Items are plain text and nothing is looked up: to mention a todo, write it in your own words, such as "Tackle todo: <name>".
 - On the first save of a thread whose Status is still a paragraph from before, there are no lists to carry forward: turn what is still true in the paragraph into Recently and Up next.
-- When an Up next sentence was already there when you resumed and is still not done, suggest making it a todo, and add one only if the user agrees. Nothing stores past lists; what you saw on resume is the only history.
+- When an Up next sentence was already there when you resumed and is still not done, suggest making it a todo, and add one only if the user agrees; add it as `next` so it stays visible. Nothing stores past lists; what you saw on resume is the only history.
 - Look at About too, and call `set_about` if it no longer fits the thread, is still the template's placeholder, or runs past 50 words.
 
 It is also the moment to read `memory.md` through, if the thread has one, and propose dropping entries that are no longer true, entries now covered by a decision or an artifact, and entries that have grown into something better kept as an artifact, starred or not. A session that ends without a save leaves no log, and what it produced is still in the indexes.

@@ -1,5 +1,6 @@
 """Schema 2 thread operations: the indexes are the record, the README is a view."""
 
+import json
 import re
 from datetime import date
 from pathlib import Path
@@ -99,7 +100,28 @@ _OLD_ABOUT_PLACEHOLDER = "What this thread is about, and what it is for."
 
 def resume(thread) -> str:
     """The composed payload, built from the indexes rather than the README."""
-    return compose(thread.dir, thread.name)
+    try:
+        return compose(thread.dir, thread.name)
+    except idx.Unreadable as e:
+        return json.dumps(e.refusal())
+
+
+def list_todos(thread, states: list[str]) -> str:
+    """The in-force todos in the given states, in file order."""
+    if not states:
+        return json.dumps({"error": "STATES_REQUIRED"})
+    allowed = list(idx.IN_FORCE["todos"])
+    for state in states:
+        if state not in allowed:
+            return json.dumps({"error": "STATE_UNKNOWN", "detail": state,
+                               "allowed": allowed})
+    try:
+        entries = idx.read(thread.dir, "todos")
+    except idx.Unreadable as e:
+        return json.dumps(e.refusal())
+    return json.dumps({"todos": [
+        {"id": e.id, "state": e.state, "title": e.title, "link": e.link}
+        for e in entries if e.state in states]})
 
 
 def about(thread) -> str:
@@ -158,26 +180,18 @@ def compose(thread_dir: Path, thread_name: str) -> str:
     out.append("\n## Status\n\n" + (status or "(empty)"))
 
     todos = idx.read(thread_dir, "todos")
-    active, parked = todos_mod.next_up(todos), todos_mod.parked(todos)
-    shown = todos_mod.window(todos)
-    # Every count, because the section is bounded and each number answers a
-    # different question: what is on screen, how much is waiting behind it, and
-    # how much was set aside. Without the last two an empty list cannot be told
-    # from a thread that is finished with.
-    out.append(
-        f"\n## Todos ({len(shown)} of {len(active)} active, "
-        f"{len(parked)} parked)\n"
-    )
-    out.extend(e.render() for e in shown)
-    if not shown:
+    tiers = todos_mod.counts(todos)
+    started, waiting = tiers[todos_mod.STARTED], tiers[todos_mod.NEXT]
+    backlog, parked = tiers[todos_mod.BACKLOG], tiers[todos_mod.PARKED]
+    out.append(f"\n## Todos ({started} started, {waiting} next, "
+               f"{backlog} backlog, {parked} parked)\n")
+    out.extend(e.render() for e in todos_mod.shown(todos))
+    if not started and not waiting:
         out.append("- None")
-
-    # Its own section rather than a tail on the list above, because the skill
-    # has the agent print the todos and parked todos are the ones the user
-    # already said are not next.
-    if parked:
-        out.append("\n## Parked\n")
-        out.extend(e.render() for e in parked)
+    if waiting == 0 and backlog > 0:
+        out.append(f"\nNext is empty while the backlog holds {backlog}.")
+    if waiting > todos_mod.COMFORTABLE:
+        out.append(f"\nNext holds {waiting}, more than five.")
 
     decisions = idx.read(thread_dir, "decisions")
     out.append(f"\n## Decisions in force ({len(decisions)})\n")

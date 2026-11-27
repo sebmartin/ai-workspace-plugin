@@ -34,7 +34,7 @@ the pre-migration state is not recoverable if the answer is no.
    anything else names what to fix. It never checks judgement, so read the
    converted README yourself as well
 6. Rename `{name}-v2` to `{name}`
-7. Record the backup as a todo, and tell the user `{name}-v1` is theirs to
+7. Record the backup as a `next` todo, and tell the user `{name}-v1` is theirs to
    remove or archive when they are satisfied. Your report lists every star you
    created, with its trigger, so they can unstar any
 
@@ -167,10 +167,22 @@ so a later reader knows the one line is all anyone knows. Put the session it cam
 from, or an issue it names, under **## Links**, and leave that heading out when
 there is nothing to put there.
 
-A todo goes on the end of the list and the README's Todos section shows the top five, so add the
-v1 Next steps items first, in the order the README listed them, and the rest after. Only carry
-something over as parked if the v1 README had it parked, and retire a parked
-entry that is already resolved rather than carrying it.
+Before adding each todo, set `state:` in its file to the state you will pass
+(the template says `backlog`), since `add_todo` leaves the file alone and a
+reader who greps `todos/` should find the same tier the index holds.
+
+Where a todo lands decides whether the user meets it on resume: `started` and
+`next` todos are shown, `backlog` and `parked` are only counted. Add the first
+five v1 Next steps with `state="next"`, in the order the README listed them
+(each lands at the end of `next`, so that order holds). If the README says
+one is already under way, add it with `state="started"` instead and count it
+among the five. Add the rest of the Next steps and the Open Questions to the
+backlog by leaving `state` out. A backlog todo lands at the top of its tier,
+so add them last-first (the Open Questions, then the remaining Next steps from
+the last to the first) and the backlog reads in README order. Only
+carry something over as parked (`state="parked"`) if the v1 README had it
+parked, and retire a parked entry that is already resolved rather than
+carrying it.
 
 **Collapse Quick Resume into Status**: write Status by hand in the fixed layout
 `save_session` writes, taken from Current focus and Recent progress:
@@ -217,9 +229,9 @@ loaded before you can act?
 The middle column is the default for a long custom section that matters but does
 not need loading on every resume.
 
-Anything still to do is a todo whichever row it came from. Where it sits in the
-list decides whether the user meets it on resume, since the Todos section shows the
-top five.
+Anything still to do is a todo whichever row it came from. Its tier
+decides whether the user meets it on resume, since the Todos section shows only
+`started` and `next` todos and counts the rest.
 
 `memory.md` is the cell schema 1 had no file for, and that is why these sections
 became custom headings in the first place. Schema 1 said the README was the
@@ -265,13 +277,18 @@ description gets authored.
 
 **Leave the backup as a todo, not as a sentence.** A migration ends with exactly
 one outstanding commitment, deciding what happens to `{name}-v1`, and saying it
-in conversation loses it the moment the session ends. Write a `todos/` file for it and
-order it where it belongs:
+in conversation loses it the moment the session ends. Write a `todos/` file for
+it with `state: next` and add it with `state="next"`, which puts it at the end of that tier so the
+commitment stays visible on resume:
 
 ```
 Title: Remove or archive threads/{name}-v1
 Link:  ./todos/{date}-retire-the-v1-backup.md
+State: next
 ```
+
+If the reply carries a `next` count, the converted thread has more than five
+`next` todos. Mention it to the user and leave grooming to their next session.
 
 A file rather than a link to the backup itself, because a link pointing outside
 the thread is what `audit` reports as dangling. The todo is the user's decision
