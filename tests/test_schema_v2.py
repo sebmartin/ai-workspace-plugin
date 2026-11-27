@@ -275,6 +275,11 @@ class TestSchemaDetection:
 
 
 class TestIndex:
+    @pytest.mark.parametrize("sep", ["\x0b", "\x0c", "\x1c", "\x85", "\u2028", "\u2029"])
+    def test_a_break_that_read_would_split_on_is_unrepresentable(self, sep):
+        entry = idx.Entry("20260101-a", "next", f"x{sep}y", "./a.md")
+        assert idx.unrepresentable(entry) == "title contains a line break"
+
     def test_a_line_that_is_not_an_entry_is_refused_with_its_number(self, tmp_path):
         d = _v2_thread(tmp_path)
         p = idx.index_path(d, "decisions")

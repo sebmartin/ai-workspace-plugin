@@ -120,7 +120,9 @@ def unrepresentable(entry: Entry) -> str | None:
     agreement with the first.
     """
     for field, value in _parts(entry).items():
-        if value and ("\n" in value or "\r" in value):
+        # `splitlines`, because that is what `read` splits a file on: U+2028,
+        # a vertical tab or a form feed make a second line just as \n does.
+        if value and value.splitlines() != [value]:
             return f"{field} contains a line break"
     if _round_trips(entry):
         return None

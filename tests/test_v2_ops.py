@@ -1789,6 +1789,13 @@ class TestUnreadableIndex:
         assert out["lines"][0]["text"] == self.BROKEN
         assert {p: p.read_bytes() for p in d.rglob("*") if p.is_file()} == before
 
+    def test_a_title_that_read_would_split_is_refused_before_it_is_written(self, tmp_path):
+        _thread(tmp_path)
+        out = _reply(add_todo(str(tmp_path), "t", "Fix\u2028thing", "./s.md"))
+        assert "error" in out
+        assert "line break" in json.dumps(out)
+        assert idx.damage(tmp_path / "threads" / "t") is None
+
     def test_resume_refuses_a_damaged_index(self, tmp_path):
         from mcp_server import resume_thread
         d = _thread(tmp_path)
