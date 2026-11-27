@@ -1,21 +1,22 @@
-"""The todo list: which todos are next, and in what order.
+"""The todo list: four tiers, held as states, in file order.
 
-Order is the order of the lines in `todos-index.md`. Nothing names a subset, so
-every active todo is a next step and no todo can be in the list but absent from
-the order.
+A todo is `started`, `next`, `backlog` or `parked`, and `todos-index.md` is
+always grouped in that order, so a tier is a contiguous slice of the list and
+the order inside it is the order of the lines. Several todos can be started.
 
-Parked is the only thing that takes a todo out of the Todos section. It means "for
-later", so an unparked todo goes back at the end rather than to wherever it
-used to sit.
+Where a todo lands is one rule. One that moves to an earlier tier (promoted)
+goes to the bottom of it, behind what was already there. One that moves to a
+later tier (demoted) goes to the top. A new todo goes to the end of `started`
+or `next`, and to the top of `backlog` or `parked`.
 """
 
 from typing import NamedTuple
 
+from ai_workspace.threads.v2 import index as idx
 from ai_workspace.threads.v2.index import Entry
 
-ACTIVE = "active"
-STARTED = "started"
-PARKED = "parked"
+STARTED, NEXT, BACKLOG, PARKED = idx.IN_FORCE["todos"]
+TIERS = idx.IN_FORCE["todos"]
 
 # How many todos the Todos section shows, and so where the list stops being something
 # a person can hold in their head. The tools report crossing it in their own
@@ -70,6 +71,21 @@ def index_of(entries: list[Entry], entry_id: str) -> int | None:
     return next(found, None)
 
 
+def bounds(entries: list[Entry], state: str) -> tuple[int, int]:
+    """The `[start, end)` slice of a tier in a grouped list. An empty tier is
+    `start == end`, at the place it would occupy."""
+    rank = TIERS.index(state)
+    start = sum(1 for e in entries if e.state in TIERS[:rank])
+    return start, start + sum(1 for e in entries if e.state == state)
+
+
+def landing(entries: list[Entry], state: str) -> int:
+    """Where a new todo with no `place` goes: the end of `started` and `next`,
+    which are queues, and the top of `backlog` and `parked`, which are not."""
+    start, end = bounds(entries, state)
+    return end if state in (STARTED, NEXT) else start
+
+
 # The four forms of `place`. One argument rather than a flag per position, so
 # there is no combination of arguments to disagree with itself.
 PLACES = ("top", "end", "before:<id>", "after:<id>")
@@ -80,17 +96,21 @@ class Spot(NamedTuple):
 
     `top` and `end` are read off the list at the moment of the write, so a
     caller that has not looked at the list for hours still lands where it
-    meant. Only the anchored forms depend on the caller knowing an id.
+    meant. Only the anchored forms depend on the caller knowing an id. `tier`
+    is the state the placed todos end up in; on an `ANCHOR_IN_OTHER_TIER`
+    refusal it is the anchor's state instead.
     """
 
     at: int | None = None
     error: str = ""
     detail: str = ""
+    tier: str = ""
 
 
-def spot(entries: list[Entry], place: str) -> Spot:
-    """Resolve `place` against this list. A malformed form and an anchor that
-    is not in the list are different faults, so they get different codes.
+def spot(entries: list[Entry], place: str, tier: str) -> Spot:
+    """Resolve `place` inside `tier`. A malformed form, an anchor that is not
+    in the list and an anchor in another tier are different faults, so they get
+    different codes.
 
     Both halves are stripped and the position is matched without regard to
     case. A space after the colon reads as part of the anchor and would refuse
@@ -101,52 +121,37 @@ def spot(entries: list[Entry], place: str) -> Spot:
     """
     sense, _, anchor = place.partition(":")
     sense, anchor = sense.strip().lower(), anchor.strip()
-    if sense == "top" and not anchor:
-        return Spot(0)
-    if sense == "end" and not anchor:
-        return Spot(len(entries))
+    if sense in ("top", "end") and not anchor:
+        start, end = bounds(entries, tier)
+        return Spot(start if sense == "top" else end, tier=tier)
     if sense not in ("before", "after") or not anchor:
         return Spot(error="PLACE_UNKNOWN", detail=place)
     found = index_of(entries, anchor)
     if found is None:
         return Spot(error="NO_SUCH_ENTRY", detail=anchor)
-    return Spot(found if sense == "before" else found + 1)
+    if entries[found].state != tier:
+        return Spot(error="ANCHOR_IN_OTHER_TIER", detail=anchor,
+                    tier=entries[found].state or "")
+    return Spot(found if sense == "before" else found + 1, tier=tier)
 
 
-def only_started(entries: list[Entry], entry_id: str) -> None:
-    """Take the started label off every other todo, leaving places alone.
+def moved(entries: list[Entry], entry_id: str, state: str) -> list[Entry]:
+    """The list after one todo takes a new state: the boundary rule.
 
-    Exactly one, because the state names what is being worked on now. A second
-    one leaves the label meaning nothing once a few sessions have each marked
-    something. The others keep their place and lose only the label.
+    Promoted (the new tier is earlier) goes to the bottom of it, demoted to the
+    top. The same state returns the list unchanged. The entry's state is set
+    here, since which way it moved depends on the state it had.
     """
-    for entry in entries:
-        if entry.id != entry_id and entry.state == STARTED:
-            entry.state = ACTIVE
-
-
-def start(entries: list[Entry], entry_id: str) -> None:
-    """Make this the started todo, and the only one, and put it on top."""
-    only_started(entries, entry_id)
-    to_top(entries, entry_id)
-
-
-def to_top(entries: list[Entry], entry_id: str) -> None:
-    """Move one todo to the front of the list."""
-    _move(entries, entry_id, top=True)
-
-
-def to_end(entries: list[Entry], entry_id: str) -> None:
-    _move(entries, entry_id, top=False)
-
-
-def _move(entries: list[Entry], entry_id: str, top: bool) -> None:
-    """Take the todo out and put it back at one end. Unknown ids do nothing."""
     found = index_of(entries, entry_id)
-    if found is None:
-        return
-    entry = entries.pop(found)
-    entries.insert(0 if top else len(entries), entry)
+    if found is None or entries[found].state == state:
+        return entries
+    entry = entries[found]
+    promoted = TIERS.index(state) < TIERS.index(entry.state or PARKED)
+    rest = entries[:found] + entries[found + 1:]
+    entry.state = state
+    start, end = bounds(rest, state)
+    at = end if promoted else start
+    return [*rest[:at], entry, *rest[at:]]
 
 
 def staying(entries: list[Entry], ids: list[str]) -> list[Entry]:

@@ -38,7 +38,7 @@ ORDERED = ("todos",)
 
 IN_FORCE = {
     "decisions": ("proposed", "partially-locked", "locked"),
-    "todos": ("active", "started", "parked"),
+    "todos": ("started", "next", "backlog", "parked"),
     "artifacts": ("current",),
     "sessions": (),
 }
@@ -48,6 +48,10 @@ RETIRED = {
     "artifacts": ("superseded", "stale"),
     "sessions": (),
 }
+
+# A state an older index wrote, and what it means now. Read as the new name and
+# written back as it, so the file converts the first time anything saves it.
+_LEGACY_TODO_STATES = {"active": "backlog"}
 
 _LINE_RE = re.compile(
     r"^- (?P<id>[^\s:]+)(?::(?P<state>[^\s]+))? "
@@ -239,25 +243,43 @@ def read(thread_dir: Path, kind: str, retired: bool = False) -> list[Entry]:
             if line.strip() == "---":
                 skip_to = n
                 break
+    live_todos = kind in ORDERED and not retired
     entries = []
     bad: list[tuple[int, str]] = []
     for n, line in enumerate(lines, 1):
         if n <= skip_to or not line.strip():
             continue
         hit = _LINE_RE.match(line)
-        if hit:
-            entries.append(Entry(hit["id"], hit["state"], hit["title"], hit["link"],
-                                 hit["description"] or ""))
-        else:
+        if not hit:
             bad.append((n, line))
+            continue
+        state = hit["state"]
+        if live_todos:
+            state = _LEGACY_TODO_STATES.get(state, state)
+            if state not in IN_FORCE[kind]:
+                bad.append((n, line))
+                continue
+        entries.append(Entry(hit["id"], state, hit["title"], hit["link"],
+                             hit["description"] or ""))
     if bad:
         raise Unreadable(path, bad)
     # Only where one was ever written, and only where order means anything: a
     # retired index is a chronology, so a block in one would be reordering a
     # record of what happened.
-    if kind in ORDERED and not retired:
-        return _window_first(text, entries)
+    if live_todos:
+        return grouped(_window_first(text, entries))
     return entries
+
+
+def grouped(entries: list[Entry]) -> list[Entry]:
+    """The todos in tier order, each tier keeping the order it had.
+
+    A stable sort by tier, so a file that was edited by hand or written before
+    tiers existed reads the same way as one this module wrote, and nothing
+    downstream has to ask whether the list is grouped.
+    """
+    rank = {state: i for i, state in enumerate(IN_FORCE["todos"])}
+    return sorted(entries, key=lambda e: rank.get(e.state or "", len(rank)))
 
 
 def damage(thread_dir: Path) -> dict | None:
@@ -274,6 +296,10 @@ def damage(thread_dir: Path) -> dict | None:
 def write(thread_dir: Path, kind: str, entries: list[Entry],
           retired: bool = False) -> Path:
     path = index_path(thread_dir, kind, retired)
+    if kind in ORDERED and not retired:
+        for e in entries:
+            e.state = _LEGACY_TODO_STATES.get(e.state or "", e.state)
+        entries = grouped(entries)
     lines = [e.render() for e in entries]
     path.write_text("\n".join(lines) + ("\n" if lines else ""))
     return path

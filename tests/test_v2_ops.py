@@ -41,7 +41,7 @@ def _four_todos(ws):
     """A, B, C, D in the list, by title."""
     ids = {}
     for title in ("A", "B", "C", "D"):
-        ids[title] = json.loads(add_todo(ws, "t", title, "./s.md"))["id"]
+        ids[title] = json.loads(add_todo(ws, "t", title, "./s.md", place="end"))["id"]
     return ids
 
 
@@ -136,26 +136,6 @@ class TestTodos:
         assert _reply(add_todo(str(tmp_path), "t", "A", link))["error"] == "OUTSIDE_THREAD"
         assert idx.read(d, "todos") == []
 
-    def test_two_adds_as_started_leave_one_started(self, tmp_path):
-        """`started` names the one thing being worked on, so a second one
-        leaves the label meaning nothing. `set_todo_state` enforced that and
-        `add_todo` implemented only the placement half of it."""
-        d = _thread(tmp_path)
-        add_todo(str(tmp_path), "t", "First", "./todos/a.md", state="started")
-        add_todo(str(tmp_path), "t", "Second", "./todos/b.md", state="started")
-        states = [(e.title, e.state) for e in idx.read(d, "todos")]
-        assert states == [("Second", "started"), ("First", "active")]
-
-    def test_starting_on_add_takes_the_label_without_taking_the_place(self, tmp_path):
-        """A place that was asked for wins over the one the state implies, so
-        clearing the label cannot be done by moving the new todo to the top."""
-        d = _thread(tmp_path)
-        add_todo(str(tmp_path), "t", "First", "./todos/a.md", state="started")
-        add_todo(str(tmp_path), "t", "Second", "./todos/b.md", state="started",
-                 place="end")
-        states = [(e.title, e.state) for e in idx.read(d, "todos")]
-        assert states == [("First", "active"), ("Second", "started")]
-
     def test_an_external_url_is_a_valid_todo_link(self, tmp_path):
         """A todo tracked in an external system links its item there.
 
@@ -171,7 +151,7 @@ class TestTodos:
         ]
         for url in urls:
             assert "error" not in _reply(add_todo(str(tmp_path), "t", "T", url))
-        assert [e.link for e in idx.read(d, "todos")] == urls
+        assert [e.link for e in idx.read(d, "todos")] == urls[::-1]
 
     def test_a_link_is_tested_as_it_will_be_stored(self, tmp_path):
         """Surrounding space is not the difference between a link and a refusal.
@@ -204,7 +184,8 @@ class TestTodos:
         sixth in the list and becomes fifth when something above it goes."""
         d = _thread(tmp_path)
         ws = str(tmp_path)
-        ids = [json.loads(add_todo(ws, "t", f"T{n}", "./s.md"))["id"] for n in range(6)]
+        ids = [json.loads(add_todo(ws, "t", f"T{n}", "./s.md", place="end"))["id"]
+               for n in range(6)]
         assert "T5" not in (d / "README.md").read_text()
         retire_todo(ws, "t", ids[0], "done")
         assert "T5" in (d / "README.md").read_text()
@@ -246,18 +227,6 @@ class TestTodos:
         assert len(written) == len(idx.read(d, "todos")) == 1
         assert idx.read(d, "todos")[0].title == "Fix (bug) in the parser"
 
-    def test_only_one_todo_is_started_at_a_time(self, tmp_path):
-        """Every description of the state is singular, and a list where
-        everything ever touched is marked started says nothing."""
-        d = _thread(tmp_path)
-        ws = str(tmp_path)
-        ids = {t: json.loads(add_todo(ws, "t", t, "./s.md"))["id"] for t in "ABCD"}
-        set_todo_state(ws, "t", ids["B"], "started")
-        set_todo_state(ws, "t", ids["C"], "started")
-        entries = idx.read(d, "todos")
-        assert [(e.title, e.state) for e in entries] == [
-            ("C", "started"), ("B", "active"), ("A", "active"), ("D", "active")]
-
     def test_retiring_takes_it_out_of_todos(self, tmp_path):
         d = _thread(tmp_path)
         ws = str(tmp_path)
@@ -273,8 +242,8 @@ class TestTodos:
         add_todo(ws, "t", "Well driller", "./s.md"); todo_id = _only_id(d, "todos")
         set_todo_state(ws, "t", todo_id, "parked")
         assert idx.read(d, "todos")[0].state == "parked"
-        set_todo_state(ws, "t", todo_id, "active")
-        assert idx.read(d, "todos")[0].state == "active"
+        set_todo_state(ws, "t", todo_id, "backlog")
+        assert idx.read(d, "todos")[0].state == "backlog"
 
     def test_parking_takes_it_out_of_todos(self, tmp_path):
         d = _thread(tmp_path)
@@ -284,15 +253,8 @@ class TestTodos:
         assert "Call the surveyor" in (d / "README.md").read_text()
         set_todo_state(ws, "t", todo_id, "parked")
         assert "Call the surveyor" not in (d / "README.md").read_text()
-        set_todo_state(ws, "t", todo_id, "active")
+        set_todo_state(ws, "t", todo_id, "backlog")
         assert "Call the surveyor" in (d / "README.md").read_text()
-
-    def test_a_todo_goes_on_the_end_by_default(self, tmp_path):
-        d = _thread(tmp_path)
-        ws = str(tmp_path)
-        add_todo(ws, "t", "First", "./s.md")
-        add_todo(ws, "t", "Second", "./s.md")
-        assert [e.title for e in idx.read(d, "todos")] == ["First", "Second"]
 
     def test_place_top_names_no_todo(self, tmp_path):
         d = _thread(tmp_path)
@@ -311,12 +273,14 @@ class TestTodos:
         add_todo(ws, "t", "E", "./s.md", place="top")
         assert [e.title for e in idx.read(d, "todos")] == ["E", "D", "A", "B", "C"]
 
-    def test_place_end_is_the_default_said_out_loud(self, tmp_path):
+    def test_place_end_puts_it_at_the_end_of_the_backlog(self, tmp_path):
         d = _thread(tmp_path)
         ws = str(tmp_path)
         add_todo(ws, "t", "A", "./s.md")
         add_todo(ws, "t", "B", "./s.md", place="end")
         assert [e.title for e in idx.read(d, "todos")] == ["A", "B"]
+        add_todo(ws, "t", "C", "./s.md")
+        assert [e.title for e in idx.read(d, "todos")] == ["C", "A", "B"]
 
     def test_place_before_an_anchor(self, tmp_path):
         """Breaking up the current task: the new piece comes first."""
@@ -335,7 +299,7 @@ class TestTodos:
         add_todo(ws, "t", "Tag it", "./s.md")
         add_todo(ws, "t", "Announce it", "./s.md", place=f"after:{anchor}")
         assert [e.title for e in idx.read(d, "todos")] == [
-            "Ship the release", "Announce it", "Tag it"]
+            "Tag it", "Ship the release", "Announce it"]
 
     def test_spaces_around_the_colon_do_not_change_the_place(self, tmp_path):
         """A space after a colon is what anyone writes, and reading the anchor
@@ -378,33 +342,13 @@ class TestTodos:
         assert "allowed" not in out
         assert idx.read(d, "todos") == []
 
-    def test_a_todo_added_as_started_goes_to_the_top(self, tmp_path):
-        """Otherwise `started` would label the last item on a long list."""
-        d = _thread(tmp_path)
-        ws = str(tmp_path)
-        add_todo(ws, "t", "A", "./s.md")
-        add_todo(ws, "t", "B", "./s.md", state="started")
-        assert [e.title for e in idx.read(d, "todos")] == ["B", "A"]
-
-    def test_a_place_that_was_asked_for_beats_the_one_the_state_implies(self, tmp_path):
+    def test_a_place_that_was_asked_for_beats_the_default_landing(self, tmp_path):
         d = _thread(tmp_path)
         ws = str(tmp_path)
         add_todo(ws, "t", "A", "./s.md")
         a = _only_id(d, "todos")
-        add_todo(ws, "t", "B", "./s.md", state="started", place=f"after:{a}")
+        add_todo(ws, "t", "B", "./s.md", place=f"after:{a}")
         assert [e.title for e in idx.read(d, "todos")] == ["A", "B"]
-
-    def test_starting_a_todo_moves_it_to_the_top(self, tmp_path):
-        """So the bump does not depend on the agent making a second call."""
-        d = _thread(tmp_path)
-        ws = str(tmp_path)
-        add_todo(ws, "t", "A", "./s.md")
-        add_todo(ws, "t", "B", "./s.md")
-        b = _only_id(d, "todos")
-        set_todo_state(ws, "t", b, "started")
-        entries = idx.read(d, "todos")
-        assert [e.title for e in entries] == ["B", "A"]
-        assert entries[0].state == "started"
 
     def test_unparking_puts_it_at_the_end(self, tmp_path):
         """Parked means for later, so it comes back behind what is current."""
@@ -414,21 +358,8 @@ class TestTodos:
         a = _only_id(d, "todos")
         add_todo(ws, "t", "B", "./s.md")
         set_todo_state(ws, "t", a, "parked")
-        set_todo_state(ws, "t", a, "active")
+        set_todo_state(ws, "t", a, "backlog")
         assert [e.title for e in idx.read(d, "todos")] == ["B", "A"]
-
-    def test_starting_a_parked_todo_brings_it_back_to_the_top(self, tmp_path):
-        """Starting something says it is being worked on, parked or not."""
-        d = _thread(tmp_path)
-        ws = str(tmp_path)
-        add_todo(ws, "t", "A", "./s.md")
-        add_todo(ws, "t", "B", "./s.md")
-        b = _only_id(d, "todos")
-        set_todo_state(ws, "t", b, "parked")
-        set_todo_state(ws, "t", b, "started")
-        entries = idx.read(d, "todos")
-        assert [(e.title, e.state) for e in entries] == [("B", "started"), ("A", "active")]
-        assert "B" in (d / "README.md").read_text()
 
     def test_a_blank_place_means_the_default(self, tmp_path):
         """What the tool passes when the model leaves the argument out."""
@@ -436,17 +367,16 @@ class TestTodos:
         ws = str(tmp_path)
         add_todo(ws, "t", "A", "./s.md")
         add_todo(ws, "t", "B", "./s.md", place="")
-        assert [e.title for e in idx.read(d, "todos")] == ["A", "B"]
+        assert [e.title for e in idx.read(d, "todos")] == ["B", "A"]
 
     def test_order_todos_promotes_to_the_top_by_default(self, tmp_path):
         d = _thread(tmp_path)
         ws = str(tmp_path)
-        ids = []
-        for title in ("A", "B", "C", "D"):
-            add_todo(ws, "t", title, "./s.md")
-            ids.append(_only_id(d, "todos"))
+        ids = [_reply(add_todo(ws, "t", title, "./s.md"))["id"]
+               for title in ("A", "B", "C", "D")]
         assert _reply(order_todos(ws, "t", [ids[2], ids[0]]))["ordered"] == 2
-        assert [e.title for e in idx.read(d, "todos")] == ["C", "A", "B", "D"]
+        # New todos go to the top, so the list was D, C, B, A before this.
+        assert [e.title for e in idx.read(d, "todos")] == ["C", "A", "D", "B"]
 
     def test_order_todos_can_send_them_to_the_end(self, tmp_path):
         d = _thread(tmp_path)
@@ -570,7 +500,7 @@ class TestTodos:
         ws = str(tmp_path)
         add_todo(ws, "t", "A", "./s.md")
         add_todo(ws, "t", "B", "./s.md", place="   ")
-        assert [e.title for e in idx.read(d, "todos")] == ["A", "B"]
+        assert [e.title for e in idx.read(d, "todos")] == ["B", "A"]
 
     def test_the_unpark_that_crosses_the_line_says_so(self, tmp_path):
         """The other way the list crosses the line, and the only one that was
@@ -579,14 +509,14 @@ class TestTodos:
         ws = str(tmp_path)
         ids = [json.loads(add_todo(ws, "t", f"T{n}", "./s.md"))["id"] for n in range(6)]
         set_todo_state(ws, "t", ids[0], "parked")
-        assert _reply(set_todo_state(ws, "t", ids[0], "active"))["active"] == 6
+        assert _reply(set_todo_state(ws, "t", ids[0], "backlog"))["active"] == 6
 
     def test_an_unpark_that_does_not_cross_it_is_quiet(self, tmp_path):
         _thread(tmp_path)
         ws = str(tmp_path)
         ids = [json.loads(add_todo(ws, "t", f"T{n}", "./s.md"))["id"] for n in range(8)]
         set_todo_state(ws, "t", ids[0], "parked")
-        assert "active" not in _reply(set_todo_state(ws, "t", ids[0], "active"))
+        assert "active" not in _reply(set_todo_state(ws, "t", ids[0], "backlog"))
 
     def test_a_comfortable_list_says_nothing_on_a_state_change(self, tmp_path):
         _thread(tmp_path)
@@ -667,8 +597,8 @@ class TestTodos:
         todo_id = _reply(add_todo(str(tmp_path), "t", "X", "./todos/20260101-x.md"))["id"]
         set_todo_state(str(tmp_path), "t", todo_id, "parked")
         assert "state: parked" in f.read_text()
-        set_todo_state(str(tmp_path), "t", todo_id, "active")
-        assert "state: active" in f.read_text()
+        set_todo_state(str(tmp_path), "t", todo_id, "backlog")
+        assert "state: backlog" in f.read_text()
 
     def test_a_file_the_sync_cannot_update_is_named_in_the_reply(self, tmp_path):
         """A file holding no recognised `state:` line disagrees with the index
@@ -761,6 +691,143 @@ class TestTodos:
         todo_id = _reply(add_todo(str(tmp_path), "t", "X",
                                   "https://example.com/i/1"))["id"]
         assert "error" not in _reply(retire_todo(str(tmp_path), "t", todo_id, "done"))
+
+
+def _titles(d, state):
+    return [e.title for e in idx.read(d, "todos") if e.state == state]
+
+
+def _add(ws, title, **kw):
+    out = _reply(add_todo(ws, "t", title, "./s.md", **kw))
+    return out["id"]
+
+
+class TestTiers:
+    def test_a_new_todo_lands_at_the_top_of_the_backlog(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        _add(ws, "A")
+        out = _reply(add_todo(ws, "t", "B", "./s.md"))
+        assert "id" in out
+        assert _titles(d, "backlog") == ["B", "A"]
+
+    def test_a_new_next_or_started_todo_lands_at_the_end_of_its_tier(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        for t in ("N1", "N2"):
+            _add(ws, t, state="next")
+        for t in ("S1", "S2"):
+            _add(ws, t, state="started")
+        assert _titles(d, "next") == ["N1", "N2"]
+        assert _titles(d, "started") == ["S1", "S2"]
+
+    def test_a_new_parked_todo_lands_at_the_top_of_parked(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        for t in ("P1", "P2"):
+            _add(ws, t, state="parked")
+        assert _titles(d, "parked") == ["P2", "P1"]
+
+    def test_place_resolves_within_the_tier_of_state(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        n1 = _add(ws, "N1", state="next")
+        _add(ws, "N2", state="next")
+        _add(ws, "X")
+        _add(ws, "N0", state="next", place="top")
+        assert _titles(d, "next") == ["N0", "N1", "N2"]
+        assert _titles(d, "backlog") == ["X"]
+        _add(ws, "N3", state="next", place=f"after:{n1}")
+        assert _titles(d, "next") == ["N0", "N1", "N3", "N2"]
+
+    def test_an_anchor_in_another_tier_is_refused(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        x = _add(ws, "X")
+        before = idx.index_path(d, "todos").read_bytes()
+        out = _reply(add_todo(ws, "t", "N", "./s.md", state="next", place=f"after:{x}"))
+        assert out == {"error": "ANCHOR_IN_OTHER_TIER", "detail": x, "tier": "backlog"}
+        assert idx.index_path(d, "todos").read_bytes() == before
+
+    def test_several_todos_can_be_started_at_once(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        ids = {t: _add(ws, t, place="end") for t in ("A", "B", "C")}
+        set_todo_state(ws, "t", ids["B"], "started")
+        set_todo_state(ws, "t", ids["C"], "started")
+        assert _titles(d, "started") == ["B", "C"]
+        assert _titles(d, "backlog") == ["A"]
+
+    def test_promoting_lands_at_the_bottom_of_the_new_tier(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        n1 = _add(ws, "N1", state="next")
+        _add(ws, "N2", state="next")
+        x = _add(ws, "X")
+        set_todo_state(ws, "t", x, "next")
+        assert _titles(d, "next") == ["N1", "N2", "X"]
+        _add(ws, "S1", state="started")
+        set_todo_state(ws, "t", n1, "started")
+        assert _titles(d, "started") == ["S1", "N1"]
+
+    def test_demoting_lands_at_the_top_of_the_new_tier(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        _add(ws, "S1", state="started")
+        s2 = _add(ws, "S2", state="started")
+        n1 = _add(ws, "N1", state="next")
+        _add(ws, "P1", state="parked")
+        set_todo_state(ws, "t", s2, "next")
+        assert _titles(d, "next") == ["S2", "N1"]
+        assert _titles(d, "started") == ["S1"]
+        set_todo_state(ws, "t", n1, "parked")
+        assert _titles(d, "parked") == ["N1", "P1"]
+
+    def test_unparking_to_backlog_lands_last_in_backlog(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        _add(ws, "B2")
+        _add(ws, "B1")
+        p = _add(ws, "P", state="parked")
+        set_todo_state(ws, "t", p, "backlog")
+        assert _titles(d, "backlog") == ["B1", "B2", "P"]
+
+    def test_skipping_a_tier_follows_the_same_rule(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        s1 = _add(ws, "S1", state="started")
+        x = _add(ws, "X")
+        set_todo_state(ws, "t", x, "started")
+        assert _titles(d, "started") == ["S1", "X"]
+        set_todo_state(ws, "t", s1, "parked")
+        assert _titles(d, "parked")[0] == "S1"
+
+    def test_setting_the_state_it_already_has_moves_nothing(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        s1 = _add(ws, "S1", state="started")
+        _add(ws, "S2", state="started")
+        before = idx.index_path(d, "todos").read_bytes()
+        set_todo_state(ws, "t", s1, "started")
+        assert _titles(d, "started") == ["S1", "S2"]
+        assert idx.index_path(d, "todos").read_bytes() == before
+
+    def test_active_is_no_longer_a_state(self, tmp_path):
+        _thread(tmp_path)
+        ws = str(tmp_path)
+        want = {"error": "STATE_UNKNOWN", "detail": "active",
+                "allowed": ["started", "next", "backlog", "parked"]}
+        x = _add(ws, "X")
+        assert _reply(set_todo_state(ws, "t", x, "active")) == want
+        assert _reply(add_todo(ws, "t", "Y", "./s.md", state="active")) == want
+
+    def test_a_state_change_syncs_the_file_state_line(self, tmp_path):
+        d = _thread(tmp_path)
+        ws = str(tmp_path)
+        (d / "todos" / "a.md").write_text("---\nstate: backlog\n---\nbody\n")
+        out = _reply(add_todo(ws, "t", "A", "./todos/a.md"))
+        set_todo_state(ws, "t", out["id"], "next")
+        assert split_frontmatter((d / "todos" / "a.md").read_text())[0]["state"] == "next"
 
 
 class TestDecisions:

@@ -343,18 +343,18 @@ def _unplaceable(where) -> str:
     reply = {"error": where.error, "detail": where.detail}
     if where.error == "PLACE_UNKNOWN":
         reply["allowed"] = list(todos_mod.PLACES)
+    if where.error == "ANCHOR_IN_OTHER_TIER":
+        reply["tier"] = where.tier
     return json.dumps(reply)
 
 
-def add_todo(thread, title: str, link: str, state: str = "active",
+def add_todo(thread, title: str, link: str, state: str = "backlog",
              place: str = "") -> str:
-    """Add a todo at a chosen place in the list.
+    """Add a todo to the tier `state` names, at a chosen place in it.
 
-    The caller places it because only the caller knows what the todo is for:
-    a piece of the current task goes above it, something that has to follow
-    another goes below that one, and anything else goes at the end. One thing
-    places itself: `started` means this is what is being worked on, so it goes
-    to the top unless a place was named.
+    With no place it lands at the end of `started` or `next` and at the top of
+    `backlog` or `parked`. A place is resolved inside the tier, so an anchor in
+    another tier is refused rather than quietly meaning a different spot.
     """
     if state not in idx.IN_FORCE["todos"]:
         allowed = list(idx.IN_FORCE["todos"])
@@ -378,10 +378,9 @@ def add_todo(thread, title: str, link: str, state: str = "active",
         return unwritable
 
     entries = idx.read(thread.dir, "todos")
-    # A place that was asked for wins over the one the state implies.
-    at = 0 if state == todos_mod.STARTED else len(entries)
+    at = todos_mod.landing(entries, state)
     if place := place.strip():
-        where = todos_mod.spot(entries, place)
+        where = todos_mod.spot(entries, place, state)
         if where.at is None:
             return _unplaceable(where)
         at = where.at
@@ -392,9 +391,6 @@ def add_todo(thread, title: str, link: str, state: str = "active",
         return json.dumps({"error": "UNREPRESENTABLE", "detail": unreadable})
     was = list(entries)
     entries.insert(at, entry)
-    if state == todos_mod.STARTED:
-        # The label, not the placement: `at` above already honoured `place`.
-        todos_mod.only_started(entries, todo_id)
     idx.write(thread.dir, "todos", entries)
     render.render(thread.dir)
     reply: dict = {"id": todo_id}
@@ -439,10 +435,9 @@ def _sync_file_state(thread_dir: Path, entry, state: str) -> str:
 def set_state(thread, kind: str, entry_id: str, state: str) -> str:
     """Move an entry between in-force states, e.g. parking or starting a todo.
 
-    Two of the todo states carry a position as well as a name, and both are
-    applied here rather than left to a second call: `started` means this is
-    what is being worked on, and `active` after `parked` means it is wanted
-    again but behind whatever became current while it was away.
+    A todo that changes tier is placed by the boundary rule, here rather than
+    in a second call: promoted goes to the bottom of its new tier, demoted to
+    the top.
     """
     if state not in idx.IN_FORCE[kind]:
         return json.dumps({"error": "STATE_UNKNOWN", "detail": state,
@@ -454,12 +449,12 @@ def set_state(thread, kind: str, entry_id: str, state: str) -> str:
     if entry is None:
         return json.dumps({"error": "NO_SUCH_ENTRY", "detail": entry_id})
     before = [idx.Entry(e.id, e.state, e.title, e.link, e.description) for e in entries]
-    was, entry.state = entry.state, state
     if kind == "todos":
-        if state == todos_mod.STARTED:
-            todos_mod.start(entries, entry_id)
-        elif state == todos_mod.ACTIVE and was == todos_mod.PARKED:
-            todos_mod.to_end(entries, entry_id)
+        # `moved` reads the old state to tell promoted from demoted, so the
+        # state is not assigned before it.
+        entries = todos_mod.moved(entries, entry_id, state)
+    else:
+        entry.state = state
     idx.write(thread.dir, kind, entries)
     stale = _sync_file_state(thread.dir, entry, state)
     render.render(thread.dir)
@@ -494,7 +489,10 @@ def order_todos(thread, todo_ids: list[str], place: str = "") -> str:
     # Resolved against the list the movers have been taken out of, which is
     # also what makes an anchor that is itself moving impossible to resolve.
     staying = todos_mod.staying(entries, todo_ids)
-    where = todos_mod.spot(staying, place) if place.strip() else todos_mod.Spot(0)
+    # Until the tiers are known to this tool, the first mover's tier stands in.
+    tier = next(e.state for e in entries if e.id == todo_ids[0]) or todos_mod.BACKLOG
+    where = (todos_mod.spot(staying, place, tier) if place.strip()
+             else todos_mod.Spot(0))
     if where.at is None:
         if where.error == "NO_SUCH_ENTRY" and where.detail in todo_ids:
             return json.dumps({"error": "ANCHOR_IS_MOVING", "detail": where.detail})

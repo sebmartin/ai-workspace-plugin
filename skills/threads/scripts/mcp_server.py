@@ -193,7 +193,7 @@ def list_archived_threads(workspace_dir: str) -> str:
 
 @mcp.tool()
 def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
-             state: str = "active", place: str = "") -> str:
+             state: str = "backlog", place: str = "") -> str:
     """Add a todo to the thread's Todos list.
 
     Every todo is read on every resume and commits the user to something, so
@@ -212,10 +212,11 @@ def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
     Write the file before calling this. A `./` path with no file behind it is
     refused.
 
-    The list is in priority order and the new todo goes at the end unless you
-    place it. Say where you put it, so the user can move it. The README's Todos section shows
-    the top five, so a todo added at the end is in the list without being on
-    the README.
+    New todos go to the top of the backlog. `state` picks the tier (`started`,
+    `next`, `backlog`, `parked`) and `place` the spot in it. Into `next` or
+    `started` a todo goes to the end of the tier, into `parked` to the top. An
+    anchor in another tier is refused with `ANCHOR_IN_OTHER_TIER`, naming its
+    `tier`. Say where you put it, so the user can move it.
 
     Returns `{"id": ...}`, the minted todo id, which `order_todos` and the
     retire tools take. `active` is present only on the add that takes the list
@@ -244,14 +245,15 @@ def add_todo(workspace_dir: str, thread_name: str, title: str, link: str,
             is not mounted at the same place on every machine that resumes the
             thread, so an absolute path, a `~` and a bare relative path all
             resolve to nothing on the next one.
-        state: `active`, `started` for what is being worked on now, which
-            puts it at the top, or `parked` for deliberately not now.
-        place: Where it goes. `top` for something to do next, such as a piece
-            of the task in hand. `before:<todo id>` or `after:<todo id>` for
-            something that belongs beside a particular todo. `end`, or leave it
-            out, for everything else. `top` and `end` are read off the list as
-            it is now, so they are right even if you have not looked at it,
-            where an id you believe is first may have been overtaken.
+        state: `started` for what is being worked on now, `next` for what
+            follows, `backlog` for anything else, or `parked` for deliberately
+            not now.
+        place: Where it goes in the tier `state` names. `top` or `end`, or
+            `before:<todo id>` or `after:<todo id>` for something that belongs
+            beside a particular todo in that tier. Leave it out for the
+            default above. `top` and `end` are read off the list as it is
+            now, so they are right even if you have not looked at it, where an
+            id you believe is first may have been overtaken.
     """
     return _threads.add_todo(workspace_dir, thread_name, title, link, state, place)
 
@@ -262,7 +264,7 @@ def retire_todo(workspace_dir: str, thread_name: str, todo_id: str, state: str) 
 
     When the todo's link names a file, its `state:` line is rewritten to
     match, so a finished todo found by grep does not still read
-    `state: active`.
+    its old state.
 
     Returns `{"id": ...}`, plus `file_unchanged` naming that file when its
     `state:` line could not be found. The index and the file then disagree,
@@ -283,16 +285,14 @@ def retire_todo(workspace_dir: str, thread_name: str, todo_id: str, state: str) 
 
 @mcp.tool()
 def set_todo_state(workspace_dir: str, thread_name: str, todo_id: str, state: str) -> str:
-    """Start, park or unpark a todo without retiring it.
+    """Move a todo to another tier without retiring it.
 
-    Two of the states move the todo as well as labelling it. `started` sends it
-    to the top of the list and clears the label from whatever held it before,
-    since it names the one thing being worked on; call it when the user asks to
-    start or resume a todo. Unparking sends it to the end, because parked meant
-    for later.
+    Several todos can be started at once. A todo promoted to an earlier tier
+    lands at the bottom of the new tier, and one demoted to a later tier at the
+    top. Call it when the user asks to start, park or unpark a todo.
 
     When the todo's link names a file, its `state:` line is rewritten to
-    match, so a parked todo found by grep does not still read `state: active`.
+    match, so a parked todo found by grep does not still read its old state.
 
     Returns `{"id": ...}`, with `active` carrying the count when unparking is
     what takes the list past five, and `file_unchanged` naming the todo's file
@@ -308,8 +308,9 @@ def set_todo_state(workspace_dir: str, thread_name: str, todo_id: str, state: st
         workspace_dir: The tracked workspace path from session context.
         thread_name: Name of the thread (kebab-case).
         todo_id: The id from the index line.
-        state: `started` for what is being worked on now, `parked` for
-            deliberately not now, `active` for anything else.
+        state: `started` for what is being worked on now, `next` for what
+            follows, `backlog` for anything else, `parked` for deliberately
+            not now.
     """
     return _threads.set_todo_state(workspace_dir, thread_name, todo_id, state)
 

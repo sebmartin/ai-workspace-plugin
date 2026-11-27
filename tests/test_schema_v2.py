@@ -291,6 +291,51 @@ class TestIndex:
         assert e.value.refusal() == {"error": "INDEX_UNREADABLE", "detail": str(p),
                                      "lines": [{"line": 3, "text": "not an entry"}]}
 
+    def test_an_active_todo_reads_as_backlog_and_is_written_back_so(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        p = idx.index_path(d, "todos")
+        p.write_text("- 20260101-a:active [A](./todos/a.md)\n")
+        assert [e.state for e in idx.read(d, "todos")] == ["backlog"]
+        idx.write(d, "todos", idx.read(d, "todos"))
+        assert ":backlog [A]" in p.read_text() and ":active" not in p.read_text()
+
+    def test_an_ungrouped_file_reads_grouped_and_loses_nothing(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        p = idx.index_path(d, "todos")
+        order = [("b1", "backlog"), ("s1", "started"), ("p1", "parked"),
+                 ("n1", "next"), ("s2", "started"), ("b2", "backlog")]
+        p.write_text("".join(f"- 20260101-{i}:{s} [{i}](./todos/{i}.md)\n"
+                             for i, s in order))
+        want = [f"20260101-{i}" for i in ("s1", "s2", "n1", "b1", "b2", "p1")]
+        assert [e.id for e in idx.read(d, "todos")] == want
+        idx.write(d, "todos", idx.read(d, "todos"))
+        lines = p.read_text().splitlines()
+        assert len(lines) == 6
+        assert [ln.split()[1].split(":")[0] for ln in lines] == want
+
+    def test_an_unknown_todo_state_is_an_unreadable_line(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        line = "- 20260101-a:someday [A](./todos/a.md)"
+        idx.index_path(d, "todos").write_text(line + "\n")
+        with pytest.raises(idx.Unreadable) as e:
+            idx.read(d, "todos")
+        assert e.value.lines == [(1, line)]
+
+    def test_a_todo_line_with_no_state_is_unreadable(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        idx.index_path(d, "todos").write_text("- 20260101-a [A](./todos/a.md)\n")
+        with pytest.raises(idx.Unreadable):
+            idx.read(d, "todos")
+
+    def test_other_kinds_keep_their_state_handling(self, tmp_path):
+        d = _v2_thread(tmp_path)
+        idx.index_path(d, "decisions").write_text(
+            "- 20260101-a:weird [A](./decisions/a.md)\n")
+        assert idx.read(d, "decisions")[0].state == "weird"
+        idx.index_path(d, "todos", retired=True).write_text(
+            "- 20260101-a:done [A](./todos/a.md)\n")
+        assert idx.read(d, "todos", retired=True)[0].state == "done"
+
     def test_a_retired_index_is_held_to_the_same_rule(self, tmp_path):
         d = _v2_thread(tmp_path)
         idx.index_path(d, "todos", retired=True).write_text(
