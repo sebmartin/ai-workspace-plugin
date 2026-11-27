@@ -170,8 +170,12 @@ there is nothing to put there.
 Where a todo lands decides whether the user meets it on resume: `started` and
 `next` todos are shown, `backlog` and `parked` are only counted. Add the first
 five v1 Next steps with `state="next"`, in the order the README listed them
-(each lands at the end of `next`, so that order holds). Add the rest of the
-Next steps and the Open Questions to the backlog by leaving `state` out. Only
+(each lands at the end of `next`, so that order holds). If the README says
+one is already under way, add it with `state="started"` instead and count it
+among the five. Add the rest of the Next steps and the Open Questions to the
+backlog by leaving `state` out. A backlog todo lands at the top of its tier,
+so add them last-first (the Open Questions, then the remaining Next steps from
+the last to the first) and the backlog reads in README order. Only
 carry something over as parked (`state="parked"`) if the v1 README had it
 parked, and retire a parked entry that is already resolved rather than
 carrying it.

@@ -277,9 +277,10 @@ class TestGuideEndToEnd:
 
         for n in range(1, 6):
             todo(v2, f"S{n}", state="next")
-        todo(v2, "S6")
-        todo(v2, "S7")
+        # A new backlog todo lands at the top, so add them last-first to keep README order.
         todo(v2, "Q1")
+        todo(v2, "S7")
+        todo(v2, "S6")
         todo(v2, "P1", state="parked")
         set_about(str(ws), "t-v2", "short about")
         assert json.loads(audit_migration(str(ws), "t-v1", "t-v2"))["clean"] is True
@@ -293,5 +294,5 @@ class TestGuideEndToEnd:
 
         assert titles("next") == ["S1", "S2", "S3", "S4", "S5",
                                   "Remove or archive threads/t-v1"]
-        assert set(titles("backlog")) == {"S6", "S7", "Q1"}
+        assert titles("backlog") == ["S6", "S7", "Q1"]
         assert titles("parked") == ["P1"]
