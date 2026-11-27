@@ -167,6 +167,10 @@ so a later reader knows the one line is all anyone knows. Put the session it cam
 from, or an issue it names, under **## Links**, and leave that heading out when
 there is nothing to put there.
 
+Before adding each todo, set `state:` in its file to the state you will pass
+(the template says `backlog`), since `add_todo` leaves the file alone and a
+reader who greps `todos/` should find the same tier the index holds.
+
 Where a todo lands decides whether the user meets it on resume: `started` and
 `next` todos are shown, `backlog` and `parked` are only counted. Add the first
 five v1 Next steps with `state="next"`, in the order the README listed them
@@ -274,7 +278,7 @@ description gets authored.
 **Leave the backup as a todo, not as a sentence.** A migration ends with exactly
 one outstanding commitment, deciding what happens to `{name}-v1`, and saying it
 in conversation loses it the moment the session ends. Write a `todos/` file for
-it and add it with `state="next"`, which puts it at the end of that tier so the
+it with `state: next` and add it with `state="next"`, which puts it at the end of that tier so the
 commitment stays visible on resume:
 
 ```

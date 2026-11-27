@@ -164,7 +164,7 @@ belong inside the todo file under `## Links`.
 
 Name the file `todos/YYYYMMDD-slug.md` and start it from
 `get_skill_file("templates/v2/todo-template.md")`. Write it before calling
-`add_todo`, which refuses a thread path with no file behind it.
+`add_todo`, which refuses a thread path with no file behind it. Set the file's `state:` line to the state you will pass, because `add_todo` does not touch the file and the template says `backlog`.
 
 **Linking two threads has no tool.** The three link fields in the header are
 hand-edited, and the work is judgement rather than mechanism: you have to look
