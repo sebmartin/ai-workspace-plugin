@@ -912,7 +912,7 @@ class TestOrderAcrossTiers:
         assert out["file_unchanged"] == ["./todos/x.md"]
 
 class TestListTodos:
-    FOUR = ["started", "next", "backlog", "parked"]
+    FOUR = ("started", "next", "backlog", "parked")
 
     def _five(self, ws):
         ids = {}
@@ -934,7 +934,7 @@ class TestListTodos:
         _thread(tmp_path)
         out = _reply(list_todos(str(tmp_path), "t", ["done"]))
         assert out == {"error": "STATE_UNKNOWN", "detail": "done",
-                       "allowed": self.FOUR}
+                       "allowed": list(self.FOUR)}
 
     def test_active_is_refused(self, tmp_path):
         _thread(tmp_path)
@@ -959,7 +959,7 @@ class TestListTodos:
         ws = str(tmp_path)
         self._five(ws)
         before = {p: p.read_bytes() for p in d.rglob("*") if p.is_file()}
-        list_todos(ws, "t", self.FOUR)
+        list_todos(ws, "t", list(self.FOUR))
         assert {p: p.read_bytes() for p in d.rglob("*") if p.is_file()} == before
 
 
